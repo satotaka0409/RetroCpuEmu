@@ -1,0 +1,78 @@
+.hex-keyboard-root {
+  display: flex;
+  flex-direction: row;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.hex-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #222;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #0008;
+}
+
+.hex-key-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.hex-key {
+  width: 48px;
+  height: 48px;
+  font-size: 1.5rem;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px #0006;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.hex-key:active {
+  background: #f00;
+  color: #fff;
+  transform: scale(0.96);
+}
+
+
+.function-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.function-keys-grid {
+  gap: 0;
+}
+
+.function-key-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.function-key {
+  width: 115px;
+  height: 40px;
+  font-size: 1rem;
+  background: #444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px #0006;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  text-align: left;
+  padding-left: 16px;
+}
+.function-key:active {
+  background: #08f;
+  color: #fff;
+  transform: scale(0.97);
+}

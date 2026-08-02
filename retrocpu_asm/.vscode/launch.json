@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // CLI をブレイクポイント付きでデバッグ
+      // args にアセンブルするファイルを指定する (例: ["sample/sum1to10.asm"])
+      "name": "Debug: CLI (tsx)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--require", "tsx/cjs"],
+      "program": "${workspaceFolder}/src/main/cli.ts",
+      "args": ["--cpu", "mn1613", "sample/sum1to10.asm"],
+      "cwd": "${workspaceFolder}",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder}/tsconfig.json"
+      },
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      // 全テストをブレイクポイント付きでデバッグ
+      "name": "Debug: All Tests (tsx)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "tsx/cjs",
+        "--test"
+      ],
+      "program": "${workspaceFolder}/src/tests/assembler.test.ts",
+      "args": [
+        "${workspaceFolder}/src/tests/assembler.error.test.ts",
+        "${workspaceFolder}/src/tests/mn1610_instructions.test.ts",
+        "${workspaceFolder}/src/tests/mn1613_instructions.test.ts"
+      ],
+      "cwd": "${workspaceFolder}",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      // 特定のテストファイル 1 つをデバッグ (F5 実行中のファイルを対象)
+      "name": "Debug: Current Test File (tsx)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "tsx/cjs",
+        "--test"
+      ],
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
+  ]
+}

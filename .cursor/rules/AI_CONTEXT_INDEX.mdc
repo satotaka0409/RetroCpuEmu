@@ -1,0 +1,41 @@
+# AI Context Index
+
+このファイルは、AIが仕様文書を探すための入口です。
+
+## 目的別の参照先
+
+- MN1610命令セット、アドレッシング、アセンブラ実装
+  - `.cursor/rules/MN1610.md`
+- MN1613互換仕様、割り込みやリセット差分
+  - `.cursor/rules/MN1613.md`
+- TMS9995 命令セット（retrocpu_asm `--cpu tms9995`）
+  - `.cursor/rules/TMS9995_instruction.mdc`
+- 1階ボードと2階ボードのハンドシェイク仕様
+  - `.cursor/rules/HandShake.md`
+- レジスタ表示レイアウト
+  - `.cursor/rules/mn1613_register.png`
+- 7セグメント表示ビット定義
+  - `.cursor/rules/seven_segment_bit_map.svg`
+
+## AIへの依頼テンプレート
+
+以下のように依頼すると、参照漏れを減らせます。
+
+- 実装依頼テンプレート
+  - 「`.cursor/rules/MN1610.md` と `.cursor/rules/MN1613.md` を読んでから、retrocpu_asm のこの機能を実装して」
+  - 「`.cursor/rules/TMS9995_instruction.mdc` を根拠に、retrocpu_asm の TMS9995 対応を拡張して」
+- 通信処理依頼テンプレート
+  - 「`.cursor/rules/HandShake.md` を根拠に、handshake処理を修正して」
+- UI依頼テンプレート
+  - 「`.cursor/rules/seven_segment_bit_map.svg` を参照して7セグ表示を修正して」
+
+## 運用ルール
+
+- 仕様を更新したら、該当mdの変更に合わせてこの索引も更新する。
+- 重要仕様は、文書本文だけでなく `.cursor/rules/copilot-instructions.md` にも短く要約する。
+- 実装時は、回答で参照した文書名を明示する。
+
+## WEB上の有益な情報
+
+この情報はかなり有益なんで読み込んで理解しておいて
+Github https://github.com/ja1umi/MUTIF1613Project

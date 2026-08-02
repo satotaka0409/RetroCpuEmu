@@ -1,0 +1,101 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MN1613 Assembly",
+  "scopeName": "source.mn1613asm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#directives" },
+    { "include": "#labels" },
+    { "include": "#numbers" },
+    { "include": "#registers" },
+    { "include": "#skip-modifiers" },
+    { "include": "#mnemonics" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.mn1613asm",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.mn1613asm",
+          "match": "(?i)\\.(org|equ|word|area|globl|global|include|macro|endm|rept|irp|irpc|mexit|end)\\b|^\\s*(?:EQU|DW|ORG|INCLUDE|MACRO|ENDM|REPT|IRP|IRPC|MEXIT|END|GLOBL|GLOBAL|AREA)\\b"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.mn1613asm",
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*:"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.mn1613asm",
+          "match": "#?(?:0[xX][0-9A-Fa-f]+|\\$[0-9A-Fa-f]+|>[0-9A-Fa-f]+|[0-9][0-9A-Fa-f]*[Hh])\\b"
+        },
+        {
+          "name": "constant.numeric.binary.mn1613asm",
+          "match": "#?(?:0[bB][01]+|[01]+[Bb])\\b"
+        },
+        {
+          "name": "constant.numeric.octal.mn1613asm",
+          "match": "#?(?:0[oO][0-7]+|[0-7]+[OoQq])\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.mn1613asm",
+          "match": "#?[0-9]+[Dd]?\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.other.register.mn1613asm",
+          "match": "(?i)\\b(R(?:[0-9]|1[0-5])|SP|STR|X0|X1|CSBR|SSBR|TSR0|TSR1|OSR[0-3]|SBRB|ICB|NPP|TCR|TIR|TSR|SCR|SSR|SOR|IISR)\\b"
+        }
+      ]
+    },
+    "skip-modifiers": {
+      "patterns": [
+        {
+          "name": "keyword.other.modifier.mn1613asm",
+          "match": "(?i)\\b(SKP|M|PZ|Z|E|NZ|NE|MZ|P|EZ|ENZ|OZ|ONZ|LMZ|LP|LPZ|LM|RE|SE|CE)\\b"
+        }
+      ]
+    },
+    "mnemonics": {
+      "patterns": [
+        {
+          "name": "keyword.control.instruction.mn1613asm",
+          "match": "(?i)\\b(L|ST|B|BAL|IMS|DMS|A|S|C|CB|MV|MVB|BSWP|DSWP|LAD|AND|OR|EOR|SR|SL|SBIT|RBIT|TBIT|AI|SI|LPSW|H|PUSH|POP|RET|RD|WT|MVI|LD|STD|LR|STR|MVWR|MVWI|MVBR|BSWR|DSWR|PSHM|POPM|AWR|AWI|SWR|SWI|CWR|CWI|CBR|CBI|NEG|AD|SD|M|D|DAA|DAS|LADR|LADI|ANDR|ANDI|ORR|ORI|EORR|EORI|FA|FS|FM|FD|FIX|FLT|BD|BL|BR|BALD|BALL|BALR|RETL|TSET|TRST|SRBT|DEBP|BLK|RDR|WTR|LB|LS|STB|STS|CPYB|CPYS|CPYH|SETB|SETS|SETH|MOV|MOVB|AB|SB|SOC|SOCB|SZC|SZCB|JMP|JLT|JLE|JEQ|JHE|JGT|JNE|JNC|JOC|JNO|JL|JH|JOP|BLWP|CLR|INV|INC|INCT|DEC|DECT|SWPB|SETO|ABS|LI|CI|LWPI|LIMI|STWP|STST|LST|LWP|RTWP|RT|IDLE|RSET)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "punctuation.section.brackets.mn1613asm",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.separator.mn1613asm",
+          "match": "[,]"
+        },
+        {
+          "name": "keyword.operator.indirect.mn1613asm",
+          "match": "\\*"
+        }
+      ]
+    }
+  }
+}

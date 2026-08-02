@@ -1,0 +1,13 @@
+.seven-segment {
+    box-sizing: border-box;
+}
+.segment {
+    box-sizing: border-box;
+    /* 影や光沢をつけたい場合はここに追加 */
+}
+
+.segment-dot {
+    /* 小数点用: 円形 */
+    box-sizing: border-box;
+    border-radius: 50%;
+}

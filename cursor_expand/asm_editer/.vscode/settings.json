@@ -1,0 +1,23 @@
+{
+  "editor.tabSize": 8,
+  "editor.insertSpaces": false,
+  "editor.detectIndentation": false,
+  "editor.indentSize": "tabSize",
+  "files.associations": {
+    "*.asm": "mn1613asm",
+    "*.s": "mn1613asm",
+    "*.mn1613": "mn1613asm",
+    "*.mn1610": "mn1613asm",
+    "*.tms9995": "mn1613asm",
+    "*.inc": "mn1613asm"
+  },
+  "[mn1613asm]": {
+    "editor.tabSize": 8,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize",
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": "retroemu.retro-asm-editor",
+    "files.trimTrailingWhitespace": false
+  }
+}
