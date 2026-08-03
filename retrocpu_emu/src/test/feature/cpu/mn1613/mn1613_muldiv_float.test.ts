@@ -23,7 +23,7 @@ import {
   clearBreakpoints,
   STR_E,
   STR_OVF,
-} from "../../../main/feature/cpu/mn1613";
+} from "../../../../main/feature/cpu/mn1613/mn1613";
 
 function loadWords(words: number[]): void {
   const buf = new ArrayBuffer(0x20000);
@@ -232,14 +232,7 @@ describe("FLT / FIX", () => {
 
   it("FIX: 範囲外 → V=1", async () => {
     const [h, l] = ibmHex(100000);
-    const words: number[] = [
-      0x7807,
-      h,
-      0x7907,
-      l,
-      0x1f04,
-      0x2000,
-    ];
+    const words: number[] = [0x7807, h, 0x7907, l, 0x1f04, 0x2000];
     const s = await runHalt(words);
     expect(s.STR & STR_OVF).toBe(STR_OVF);
   });

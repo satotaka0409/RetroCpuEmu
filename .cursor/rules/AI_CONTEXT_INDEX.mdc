@@ -10,6 +10,8 @@
   - `.cursor/rules/MN1613.md`
 - TMS9995 命令セット（retrocpu_asm `--cpu tms9995`）
   - `.cursor/rules/TMS9995_instruction.mdc`
+- TMS9995 ハードウェア（ピン・バス・CRU）
+  - `.cursor/rules/TMS9995_hardware.mdc`
 - 1階ボードと2階ボードのハンドシェイク仕様
   - `.cursor/rules/HandShake.md`
 - レジスタ表示レイアウト

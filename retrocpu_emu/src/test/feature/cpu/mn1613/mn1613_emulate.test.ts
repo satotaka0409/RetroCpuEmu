@@ -65,7 +65,7 @@ import {
   setIoWriteCallback,
   STR_E,
   STR_OVF,
-} from "../../../main/feature/cpu/mn1613";
+} from "../../../../main/feature/cpu/mn1613/mn1613";
 
 // ─────────────────────────────────────────────
 // テストユーティリティ

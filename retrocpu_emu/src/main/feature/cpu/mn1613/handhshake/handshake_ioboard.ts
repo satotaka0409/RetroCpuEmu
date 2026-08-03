@@ -25,7 +25,7 @@
  *  10. HSHK_DENA=0 セット、HSHK_ACK=0 待機（完了）
  */
 
-import type { CpuIoSignals } from "../cpu/mn1613ioport";
+import type { CpuIoSignals } from "../mn1613ioport";
 import {
   DEFAULT_TIMEOUT_MS,
   INT_CAUSE_CODE,

@@ -27,12 +27,12 @@ import {
   type TimerParams,
   reg16,
   reg24,
-} from "../../../main/feature/handhshake/command_cpu_to_io";
+} from "../../../../../main/feature/cpu/mn1613/handhshake/command_cpu_to_io";
 import {
   CMD_CPU_TO_IO,
   MODE,
   RESPONSE_CODE,
-} from "../../../main/feature/handhshake/handshake_type";
+} from "../../../../../main/feature/cpu/mn1613/handhshake/handshake_type";
 
 // ─────────────────────────────────────────────
 // テスト用フィクスチャ

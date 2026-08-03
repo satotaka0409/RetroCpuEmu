@@ -16,13 +16,13 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { RetroCpuHandshake } from "../../../main/feature/handhshake/handshake_retrocpu";
-import { IoControlHandshake } from "../../../main/feature/handhshake/handshake_ioboard";
-import type { CpuIoSignals } from "../../../main/feature/cpu/mn1613ioport";
+import { RetroCpuHandshake } from "../../../../../main/feature/cpu/mn1613/handhshake/handshake_retrocpu";
+import { IoControlHandshake } from "../../../../../main/feature/cpu/mn1613/handhshake/handshake_ioboard";
+import type { CpuIoSignals } from "../../../../../main/feature/cpu/mn1613/mn1613ioport";
 import {
   createHandshakeBus,
   INT_CAUSE_CODE,
-} from "../../../main/feature/handhshake/handshake_type";
+} from "../../../../../main/feature/cpu/mn1613/handhshake/handshake_type";
 
 // ─────────────────────────────────────────────
 // テストユーティリティ

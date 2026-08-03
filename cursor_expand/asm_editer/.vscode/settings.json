@@ -17,7 +17,7 @@
     "editor.detectIndentation": false,
     "editor.indentSize": "tabSize",
     "editor.formatOnSave": false,
-    "editor.defaultFormatter": "retroemu.retro-asm-editor",
+    "editor.defaultFormatter": "retrocpuemu.retro-asm-editor",
     "files.trimTrailingWhitespace": false
   }
 }

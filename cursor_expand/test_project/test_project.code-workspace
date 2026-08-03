@@ -834,7 +834,6 @@
     "recommendations": [
       "MS-CEINTL.vscode-language-pack-ja",
       "ms-vscode-remote.vscode-remote-extensionpack",
-      // "retroemu.retro-asm-editor",
     ],
   },
 }

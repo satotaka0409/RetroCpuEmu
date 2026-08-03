@@ -29,7 +29,7 @@ import {
   fromReg24,
   reg16,
   reg24,
-} from "../cpu/mn1613registers";
+} from "../mn1613registers";
 export type { CpuRegisters };
 export { reg16, reg24, fromReg16, fromReg24 };
 import { CMD_CPU_TO_IO, MODE, RESPONSE_CODE } from "./handshake_type";

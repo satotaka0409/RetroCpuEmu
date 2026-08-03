@@ -5,7 +5,7 @@
  * 信号線状態・割り込み制御・コマンド定数を定義する。
  */
 
-import type { CpuIoSignals } from "../cpu/mn1613ioport";
+import type { CpuIoSignals } from "../mn1613ioport";
 
 /** CpuIoSignals の初期値を生成する */
 export function createHandshakeBus(): CpuIoSignals {
