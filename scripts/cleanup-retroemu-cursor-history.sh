@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Cursor が古い ~/RetroEmu パスを触ってディレクトリを作り直すのを止める掃除スクリプト。
+# Cursor / Windows が古い ~/RetroEmu パスを触ってディレクトリを作り直すのを止める。
+#
 # 使い方:
-#   1. Cursor を完全終了する（トレイアイコンも含む）
-#   2. WSL で: bash ~/RetroCpuEmu/scripts/cleanup-retroemu-cursor-history.sh
-#   3. Cursor を起動し、File > Open Recent から RetroEmu が消えていることを確認
+#   1. Cursor を完全終了（トレイアイコンも含む）
+#   2. bash ~/RetroCpuEmu/scripts/cleanup-retroemu-cursor-history.sh
+#   3. Cursor を起動し、タスクバー右クリック / Open Recent に RetroEmu が無いことを確認
 set -euo pipefail
 
 STAMP=$(date +%Y%m%d%H%M%S)
@@ -15,13 +16,14 @@ STATE_DB="/mnt/c/Users/satot/AppData/Roaming/Cursor/User/globalStorage/state.vsc
 IDE_STATE="${HOME}/.cursor/ide_state.json"
 WS_ROOT="/mnt/c/Users/satot/AppData/Roaming/Cursor/User/workspaceStorage"
 CC_ROOT="/mnt/c/Users/satot/AppData/Roaming/Cursor/CachedConfigurations/workspaces"
+AD_ROOT="/mnt/c/Users/satot/AppData/Roaming/Microsoft/Windows/Recent/AutomaticDestinations"
+CD_ROOT="/mnt/c/Users/satot/AppData/Roaming/Microsoft/Windows/Recent/CustomDestinations"
 
 if [ ! -f "${STORAGE}" ] || [ ! -f "${STATE_DB}" ]; then
   echo "Cursor User データが見つかりません: ${STORAGE}"
   exit 1
 fi
 
-# Cursor が開いていると state.vscdb 書き込みが失敗しやすい
 if pgrep -ai '[Cc]ursor' >/dev/null 2>&1; then
   echo "警告: Cursor プロセスが動いているようです。完全終了してから再実行してください。"
   echo "続行すると state.vscdb の更新に失敗することがあります。"
@@ -39,13 +41,40 @@ cp -a "${STATE_DB}-wal" "${BACKUP_DIR}/" 2>/dev/null || true
 cp -a "${IDE_STATE}" "${BACKUP_DIR}/ide_state.json" 2>/dev/null || true
 echo "バックアップ: ${BACKUP_DIR}"
 
+# --- Windows Jump Lists（これが起動時に WSL パスを触って mkdir する主因） ---
+python3 - "${BACKUP_DIR}" "${AD_ROOT}" "${CD_ROOT}" <<'PY'
+from pathlib import Path
+import shutil, sys
+backup, ad, cd = map(Path, sys.argv[1:4])
+removed = 0
+for root in (ad, cd):
+    if not root.is_dir():
+        continue
+    dest = backup / root.name
+    dest.mkdir(parents=True, exist_ok=True)
+    for p in root.iterdir():
+        if not p.is_file():
+            continue
+        try:
+            data = p.read_bytes()
+        except OSError as e:
+            print(f"skip {p}: {e}")
+            continue
+        if b"RetroEmu" not in data:
+            continue
+        shutil.copy2(p, dest / p.name)
+        p.unlink()
+        removed += 1
+        print(f"removed jump-list {p.name} (hits={data.count(b'RetroEmu')})")
+print(f"jump-list files removed: {removed}")
+PY
+
 python3 - "${STORAGE}" "${STATE_DB}" "${IDE_STATE}" <<'PY'
 import json, sqlite3, sys
 from pathlib import Path
 
 storage_path, db_path, ide_path = map(Path, sys.argv[1:4])
 
-# storage.json — profileAssociations
 data = json.loads(storage_path.read_text(encoding="utf-8"))
 pa = data.setdefault("profileAssociations", {})
 ws = pa.get("workspaces", {})
@@ -55,7 +84,6 @@ if isinstance(ws, dict):
     print(f"profileAssociations.workspaces: {before} -> {len(pa['workspaces'])}")
 storage_path.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
 
-# ide_state.json
 if ide_path.exists():
     ide = json.loads(ide_path.read_text(encoding="utf-8"))
     rv = ide.get("recentlyViewedFiles")
@@ -81,6 +109,7 @@ def drop_retroemu(obj):
 
 con = sqlite3.connect(str(db_path))
 cur = con.cursor()
+# LIKE は誤ヒットしやすいので instr を使う
 cur.execute("SELECT key, value FROM ItemTable WHERE instr(value, 'RetroEmu') > 0")
 rows = cur.fetchall()
 print(f"state.vscdb RetroEmu keys: {len(rows)}")
@@ -97,7 +126,6 @@ for key, raw in rows:
 con.commit()
 con.close()
 
-# verify (instr: 大小文字区別。LIKE は retroemu リポジトリ名にも誤ヒットする)
 con = sqlite3.connect(str(db_path))
 cur = con.cursor()
 cur.execute("SELECT key FROM ItemTable WHERE instr(value, 'RetroEmu') > 0")
@@ -106,7 +134,6 @@ con.close()
 print("remaining keys:", left)
 PY
 
-# workspaceStorage / CachedConfigurations
 for root in "${WS_ROOT}" "${CC_ROOT}"; do
   [ -d "${root}" ] || continue
   for d in "${root}"/*; do
@@ -118,20 +145,28 @@ for root in "${WS_ROOT}" "${CC_ROOT}"; do
   done
 done
 
-# Cursor project metadata
 rm -rf "${HOME}/.cursor/projects/home-satotaka-RetroEmu-"* 2>/dev/null || true
 rm -rf /mnt/c/Users/satot/.cursor/projects/wsl-localhost-Ubuntu-24-04-home-satotaka-RetroEmu-* 2>/dev/null || true
 
-# 空の/スタブの RetroEmu ディレクトリを削除（中身がほぼ無い場合）
+# ディレクトリなら空なら削除。ファイルプレースホルダで再 mkdir を阻止する
+PLACEHOLDER_MSG=$'このパスは旧プロジェクト名です。実体は ~/RetroCpuEmu を使ってください。\n（ディレクトリ再作成防止用のプレースホルダファイル。削除しないでください）\n'
 if [ -d "${HOME}/RetroEmu" ]; then
-  if [ -z "$(find "${HOME}/RetroEmu" -mindepth 1 -maxdepth 2 2>/dev/null | head -5)" ]; then
-    echo "空の ${HOME}/RetroEmu を削除します"
+  if [ -z "$(find "${HOME}/RetroEmu" -type f 2>/dev/null | head -3)" ]; then
+    echo "空の ${HOME}/RetroEmu ディレクトリを削除します"
     rm -rf "${HOME}/RetroEmu"
   else
-    echo "注意: ${HOME}/RetroEmu にファイルがあります。手動確認のうえ削除してください。"
+    echo "注意: ${HOME}/RetroEmu にファイルがあります。手動で確認・削除してください。"
     ls -la "${HOME}/RetroEmu" | head
   fi
 fi
+if [ ! -e "${HOME}/RetroEmu" ]; then
+  printf '%s' "${PLACEHOLDER_MSG}" > "${HOME}/RetroEmu"
+  chmod 444 "${HOME}/RetroEmu"
+  echo "プレースホルダファイルを作成: ${HOME}/RetroEmu"
+elif [ -f "${HOME}/RetroEmu" ]; then
+  echo "プレースホルダファイルは既にあります: ${HOME}/RetroEmu"
+fi
 
-echo "完了。Cursor を起動し、Open Recent に RetroEmu が無いことを確認してください。"
+echo "完了。"
 echo "バックアップ: ${BACKUP_DIR}"
+echo "Cursor を起動し、タスクバー右クリックに RetroEmu が無いことを確認してください。"

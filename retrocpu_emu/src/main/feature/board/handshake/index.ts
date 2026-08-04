@@ -2,7 +2,7 @@
  * 制御・I/O ボード側ハンドシェイク（TypeScript）
  * 根拠: HandShake.mdc
  *
- * CPU ボード側は MN1613 アセンブラ（emulator/asm/mn1613/handshake/）
+ * CPU ボード側は MN1613 アセンブラ（cursor_expand/monitor/mn1613/src/handshake/）
  */
 
 export { IoControlHandshake } from "../../cpu/mn1613/handhshake/handshake_ioboard";

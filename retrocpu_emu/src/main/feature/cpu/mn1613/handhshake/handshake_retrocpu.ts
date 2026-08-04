@@ -2,7 +2,7 @@
  * レトロCPUボード側ハンドシェイク（HandShake.mdc 新信号）の TypeScript 参照実装。
  *
  * 製品パスの CPU 側は MN1613 アセンブラ:
- *   src/main/emulator/asm/mn1613/handshake/handshake_common.asm
+ *   cursor_expand/monitor/mn1613/src/handshake/handshake_common.asm
  * 本クラスはプロトコル単体テスト用に残す。
  *
  * HSHK_ENA / HSHK_IN_DATA / HSHK_OUT_DATA

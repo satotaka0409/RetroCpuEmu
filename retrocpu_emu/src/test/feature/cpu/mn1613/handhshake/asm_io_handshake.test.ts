@@ -43,7 +43,7 @@ const { assemble } = require(path.join(asmRoot, "dist/main/assembler.js")) as {
 
 const handshakeAsmDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../../../main/emulator/asm/mn1613/handshake",
+  "../../../../../../../cursor_expand/monitor/mn1613/src/handshake",
 );
 
 type AsmImage = {
