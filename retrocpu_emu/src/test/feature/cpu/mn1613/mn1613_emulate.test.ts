@@ -61,6 +61,7 @@ import {
   triggerInterrupt,
   setPins,
   getPins,
+  getPendingIrq,
   setIoReadCallback,
   setIoWriteCallback,
   STR_E,
@@ -96,6 +97,15 @@ async function runHalt(
 // beforeEach: 毎テストで CPU をリセット
 // ─────────────────────────────────────────────
 beforeEach(() => {
+  setPins({
+    HLT: false,
+    RST: false,
+    IRQ0: false,
+    IRQ1: false,
+    IRQ2: false,
+    BSAV: false,
+    STRT: false,
+  });
   reset();
   clearBreakpoints();
   setIoReadCallback((_p) => 0x00);
@@ -345,6 +355,26 @@ describe("BAL / RET", () => {
     ]);
     expect(s.R[0]).toBe(0xcafe);
     expect(s.IC).toBe(4); // H (addr 3) の次
+  });
+
+  it("BALD で絶対アドレス呼び出しして RET で戻る", async () => {
+    // addr 0,1: MVWI SP, 0x00FF
+    // addr 2,3: BALD 0x0005
+    // addr 4:   H
+    // addr 5,6: MVWI R0, 0xBEEF
+    // addr 7:   RET
+    const s = await runHalt([
+      0x7d07,
+      0x00ff, // MVWI SP, 0x00FF
+      0x2617,
+      0x0005, // BALD 0x0005
+      0x2000, // H
+      0x7807,
+      0xbeef, // MVWI R0, 0xBEEF
+      0x2003, // RET
+    ]);
+    expect(s.R[0]).toBe(0xbeef);
+    expect(s.IC).toBe(5); // H (addr 4) の次
   });
 });
 
@@ -878,8 +908,10 @@ describe("setPins / getPins", () => {
   it("setPins({ IRQ1: true }) でペンディング IRQ がセットされる", () => {
     setPins({ IRQ1: true });
     expect(getPins().IRQ1).toBe(true);
-    setPins({ IRQ1: false }); // IRQ は clearしない（ペンディングのまま）
-    expect(getPins().IRQ1).toBe(true); // _pendingIRQ はクリアされないことを確認
+    expect(getPendingIrq() & 2).toBe(2);
+    setPins({ IRQ1: false }); // ピンは下がる
+    expect(getPins().IRQ1).toBe(false);
+    expect(getPendingIrq() & 2).toBe(2); // pending は残る
   });
 });
 

@@ -36,8 +36,11 @@ alwaysApply: true
 | 0000     | - 　     | RESET_VECTOR   | リセット時のIC開始アドレスを読み込む 0200 をセットしておく |
 | 0020     | Bit0　   | INTERRUPT_BUSY | 割り込み処理中フラグ                                       |
 | 0021     | Bit0-2　 | INT_CAUSE      | 割り込み要因                                               |
-| 0022     | Bit0　   | HSHK_ACK       | ハンドシェイクACK/ハンドシェイクBUSY                       |
+| 0022     | Bit0　   | HSHK_ENA       | ハンドシェイク処理中／依頼受理                             |
 | 0022     | Bit1　   | HSHK_DENA      | ハンドシェイクデータが有効であることを示す                 |
 | 0022     | Bit2　   | HSHK_DACK      | ハンドシェイクデータを受け取ったことを示す                 |
-| 0023     | Bit0-7　 | HSHK_DATA      | 送受信データ                                               |
+| 0022     | Bit3　   | HSHK_REQ_0     | CPU→IO ハンドシェイク要求（CPU出力）                       |
+| 0022     | Bit4　   | HSHK_REQ_1     | IO→CPU ハンドシェイク要求（CPU入力／ポーリング）           |
+| 0023     | Bit0-7　 | HSHK_IN_DATA   | レトロCPU → 制御・I/O データ                               |
+| 0024     | Bit0-7　 | HSHK_OUT_DATA  | レトロCPU ← 制御・I/O データ                               |
 |          |          |                |                                                            |

@@ -12,12 +12,14 @@ export function createHandshakeBus(): CpuIoSignals {
   return {
     INTERRUPT_BUSY: 0,
     INT_CAUSE: 0,
-    HSHK_ACK: 0,
+    HSHK_ENA: 0,
     HSHK_DENA: 0,
     HSHK_DACK: 0,
-    HSHK_DATA: new Uint8Array(1),
+    HSHK_IN_DATA: 0,
+    HSHK_OUT_DATA: 0,
     HSHK_REQ_0: 0,
     HSHK_REQ_1: 0,
+    CLK: 0,
   };
 }
 
@@ -26,8 +28,12 @@ export function createHandshakeBus(): CpuIoSignals {
 // ─────────────────────────────────────────────
 
 export const INT_CAUSE_CODE = {
+  /** タイマー */
+  TIMER: 0,
   /** ハンドシェイクによる割り込み */
   HANDSHAKE: 2,
+  /** アドレスブレイク */
+  ADDR_BREAK: 4,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -173,21 +179,24 @@ export function delayAck0RandomUs(): Promise<void> {
 }
 
 /**
- * HSHK_ACK==0 になるまで、50us～100us（ランダム）待機を最大 maxRetry 回繰り返す。
- * @param isAck0 - ACK が 0 なら true を返す
+ * HSHK_ENA==0 になるまで、50us～100us（ランダム）待機を最大 maxRetry 回繰り返す。
+ * @param isEna0 - ENA が 0 なら true を返す
  * @param maxRetry - 最大リトライ回数
  * @throws 超過時 Error
  */
-export async function waitAck0Check(
-  isAck0: () => boolean,
+export async function waitEna0Check(
+  isEna0: () => boolean,
   maxRetry: number = ACK0_RETRY_MAX,
 ): Promise<void> {
   for (let i = 0; i < maxRetry; i += 1) {
     await delayAck0RandomUs();
-    if (isAck0()) return;
+    if (isEna0()) return;
   }
-  throw new Error("handshake ACK0 check failed");
+  throw new Error("handshake ENA0 check failed");
 }
+
+/** @deprecated 別名: waitEna0Check */
+export const waitAck0Check = waitEna0Check;
 
 /**
  * condition が true を返すまでポーリングで待機する。

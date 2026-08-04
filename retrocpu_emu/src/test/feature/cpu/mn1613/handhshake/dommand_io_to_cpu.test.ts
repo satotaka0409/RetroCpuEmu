@@ -140,7 +140,7 @@ describe("IO→CPU データ転送（HandShake.md IO→CPU シーケンス）", 
 // 3. バス信号シーケンス検証
 // ─────────────────────────────────────────────
 describe("バス信号シーケンス検証", () => {
-  it("CPU→IO: HSHK_REQ_0=1 の後に HSHK_ACK=1 が来てから HSHK_REQ_0=0 になる", async () => {
+  it("CPU→IO: HSHK_REQ_0=1 の後に HSHK_ENA=1 が来てから HSHK_REQ_0=0 になる", async () => {
     const { bus, log } = createSpyBus();
     const cpu = new RetroCpuHandshake(bus, 200);
     const io = new IoControlHandshake(bus, 200);
@@ -148,7 +148,7 @@ describe("バス信号シーケンス検証", () => {
     await Promise.all([cpu.send(new Uint8Array([0x01])), io.receive(1)]);
 
     const req0Rise = log.indexOf("HSHK_REQ_0: 0→1");
-    const ackRise = log.indexOf("HSHK_ACK: 0→1");
+    const ackRise = log.indexOf("HSHK_ENA: 0→1");
     const req0Fall = log.indexOf("HSHK_REQ_0: 1→0");
     expect(req0Rise).toBeGreaterThanOrEqual(0);
     expect(ackRise).toBeGreaterThan(req0Rise);
@@ -166,7 +166,7 @@ describe("バス信号シーケンス検証", () => {
     expect(log).toContain("HSHK_DENA: 1→0");
   });
 
-  it("IO→CPU: HSHK_REQ_1=1 の後に HSHK_ACK=1 が来てから HSHK_REQ_1=0 になる", async () => {
+  it("IO→CPU: HSHK_REQ_1=1 の後に HSHK_ENA=1 が来てから HSHK_REQ_1=0 になる", async () => {
     const { bus, log } = createSpyBus();
     const cpu = new RetroCpuHandshake(bus, 200);
     const io = new IoControlHandshake(bus, 200);
@@ -174,7 +174,7 @@ describe("バス信号シーケンス検証", () => {
     await Promise.all([io.send(new Uint8Array([0x02])), cpu.receive(1)]);
 
     const req1Rise = log.indexOf("HSHK_REQ_1: 0→1");
-    const ackRise = log.indexOf("HSHK_ACK: 0→1");
+    const ackRise = log.indexOf("HSHK_ENA: 0→1");
     const req1Fall = log.indexOf("HSHK_REQ_1: 1→0");
     expect(req1Rise).toBeGreaterThanOrEqual(0);
     expect(ackRise).toBeGreaterThan(req1Rise);
@@ -214,7 +214,7 @@ describe("バス信号シーケンス検証", () => {
 
     await Promise.all([cpu.send(new Uint8Array([0xaa, 0xbb])), io.receive(2)]);
 
-    expect(bus.HSHK_ACK).toBe(0);
+    expect(bus.HSHK_ENA).toBe(0);
     expect(bus.HSHK_DENA).toBe(0);
     expect(bus.HSHK_REQ_0).toBe(0);
   });
@@ -226,7 +226,7 @@ describe("バス信号シーケンス検証", () => {
 
     await Promise.all([io.send(new Uint8Array([0xcc, 0xdd])), cpu.receive(2)]);
 
-    expect(bus.HSHK_ACK).toBe(0);
+    expect(bus.HSHK_ENA).toBe(0);
     expect(bus.HSHK_DENA).toBe(0);
     expect(bus.HSHK_REQ_1).toBe(0);
   });
@@ -267,12 +267,12 @@ describe("エラーハンドリング", () => {
     const bus = createHandshakeBus();
     const io = new IoControlHandshake(bus, 200);
 
-    // HSHK_ACK=1 を残した状態でセッション開始を試みる
-    bus.HSHK_ACK = 1;
+    // HSHK_ENA=1 を残した状態でセッション開始を試みる
+    bus.HSHK_ENA = 1;
 
     // ACK=0 チェック（50us～100us × 最大10回）が失敗する
     await expect(io.send(new Uint8Array([0x01]))).rejects.toThrow(
-      "handshake ACK0 check failed",
+      "handshake ENA0 check failed",
     );
   });
 });

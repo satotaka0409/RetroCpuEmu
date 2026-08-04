@@ -26,25 +26,27 @@ alwaysApply: true
 - オーディオステレオ入力: RP2354B 内蔵ADC使用(PIO:2本)<br>
 - SDカードスロット(ハイスピード対応)(PIO:7本)<br>
 - キャラクタLCD: I2Cインターフェース PCF8574 LCD1602 使用(PIO:2本-MAX6955と共通)<br>
-- USB Type-A カメラ入力用 / SDR USB受信機入力用(PIO:?本)<br>
+- USB Type-A カメラ入力用 / SDR USB受信機入力用(PIO:0本 PC接続用 USBと兼用)<br>
+- USB HUB ICを使ってHUB内蔵ボードとする<br>
 
 ### 2階ボードとの接続
 
 - リセット信号 PIO:1本<br>
-- 2階->1階 割り込みリクエスト PIO:1本<br>
-- 1階->2階 割り込みリクエスト PIO:1本<br>
+- 2階->1階 割り込みリクエスト HSHK_REQ_0 PIO:1本<br>
+- 1階->2階 割り込みリクエスト HSHK_REQ_1 PIO:1本<br>
 - 割り込み要因 PIO:3本<br>
 - 割り込み処理中 PIO:1本<br>
 - クロック切り替え PIO:2本<br>
+- 同期 CLK PIO:1本<br>
 
 ### ハンドシェイク用
 
-- HSHK_ACK PIO:1本
+- HSHK_ENA PIO:1本
 - HSHK_DENA PIO:1本
 - HSHK_DACK PIO:1本
-- HSHK_DIREC PIO:1本
-- CLK PIO:1本(シリアル-パラレル変換用だが、DMAと兼用)<br>
-- DATA 双方向 PIO:1本(8Bit シリアル転送)<br>
+- CLK PIO:1本((2階ボードとの接続で記載)<br>
+- IN DATA レトロCPUボード -> 制御・I/Oボード PIO:1本(8Bit シリアル転送)<br>
+- OUT DATA レトロCPUボード <- 制御・I/Oボード PIO:1本(8Bit シリアル転送)<br>
 - HSHK_DENAでパラレル->シリアル変換が始まる 8Clockで変換完了
 - 2階->1階 割り込みリクエスト PIO:1本(2階ボードとの接続で記載)<br>
 - 割り込み要因 PIO:3本(2階ボードとの接続で記載)<br>
@@ -52,12 +54,13 @@ alwaysApply: true
 
 ### DMA転送用
 
-> 2階から1階にデータを直接RAMに書いたり読んだりする
+> 2階から1階にデータを直接RAMに書いたり読んだりする<br>
+> DMAは HALT 確定後のみ。A_ENABLE/D_ENABLE はそれ以外無視<br>
 
 - DATA PIO:8本<br>
 - A_ENABLE PIO:1本<br>
 - D_ENABLE PIO:1本<br>
-- CLK PIO:1本<br>
+- CLK PIO:1本((2階ボードとの接続で記載)<br>
 - HALT PIO:1本<br>
 - RUN PIO:1本<br>
 - DMA_ENA PIO:1本<br>

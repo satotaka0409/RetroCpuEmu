@@ -1,4 +1,16 @@
 import type { CpuPins } from "./mn1613pin";
+import {
+  clearDeferred,
+  commitSample,
+  createInputPin,
+  createOutputPin,
+  risingEdge,
+  setInputLevel,
+  setOutputLevel,
+  takeDeferred,
+  type InputPin,
+  type OutputPin,
+} from "../../common/pin_signal";
 
 /**
  * Panasonic MN1610 / MN1613 CPU Emulator Core
@@ -127,14 +139,29 @@ let _ioWrite: IoWriteCallback = (_p, _v) => {
 };
 
 // ─────────────────────────────────────────────
-// ピン状態（入力）
+// ピン状態（retrocpu_emu.mdc: 入力 boolean[3] / 出力 boolean[2]）
 // ─────────────────────────────────────────────
-/** HLT ピン入力状態（true = アサート済み → CPU 停止要求） */
-let _pinHLT = false;
-/** RST ピンの直前サイクル状態（立ち上がりエッジ検出用） */
-let _pinRST_prev = false;
-/** IOP 出力フラグ（I/O 命令実行中 true） */
-let _pinIOP = false;
+const _pinRST: InputPin = createInputPin(false);
+const _pinHLT: InputPin = createInputPin(false);
+const _pinIRQ0: InputPin = createInputPin(false);
+const _pinIRQ1: InputPin = createInputPin(false);
+const _pinIRQ2: InputPin = createInputPin(false);
+const _pinBSAV: InputPin = createInputPin(false);
+const _pinSTRT: InputPin = createInputPin(false);
+const _pinIOP: OutputPin = createOutputPin(false);
+const _pinBSRQ: OutputPin = createOutputPin(false);
+const _pinWRT: OutputPin = createOutputPin(false);
+
+const _inputPins: InputPin[] = [
+  _pinRST,
+  _pinHLT,
+  _pinIRQ0,
+  _pinIRQ1,
+  _pinIRQ2,
+  _pinBSAV,
+  _pinSTRT,
+];
+const _outputPins: OutputPin[] = [_pinIOP, _pinBSRQ, _pinWRT];
 
 // ─────────────────────────────────────────────
 // 公開 API
@@ -160,52 +187,119 @@ export function reset(): void {
   _execStatus = "idle";
   _stepMode = false;
   _pendingIRQ = 0;
-  _pinHLT = false;
-  _pinIOP = false;
+  // 入力 [0] は外部駆動のまま残し、エッジ再発火を防ぐため [1] を同期
+  for (const p of _inputPins) {
+    clearDeferred(p);
+    p[1] = p[0];
+  }
+  for (const p of _outputPins) {
+    setOutputLevel(p, false);
+    p[1] = false;
+  }
 }
 
 /**
- * 入力ピン状態を一括設定する。
- * - RST: 立ち上がりエッジ（false→true）で reset() を実行
- * - HLT: true の間は命令実行ループを停止（解除は HLT=false で再開可）
- * - IRQ0〜2: true に変化したときに割り込み要求を発行
+ * 入力ピンの現在値 [0] だけを設定する（外部から触れるのはここだけ）。
+ * エッジ処理・保留処理は processInputPins() / tickCpu() 側。
  */
 export function setPins(pins: Partial<CpuPins>): void {
-  // RST: 立ち上がりエッジ検出
-  if (pins.RST !== undefined) {
-    const rising = !_pinRST_prev && pins.RST;
-    _pinRST_prev = pins.RST;
-    if (rising) reset();
+  if (pins.RST !== undefined) setInputLevel(_pinRST, pins.RST);
+  if (pins.HLT !== undefined) setInputLevel(_pinHLT, pins.HLT);
+  if (pins.IRQ0 !== undefined) setInputLevel(_pinIRQ0, pins.IRQ0);
+  if (pins.IRQ1 !== undefined) setInputLevel(_pinIRQ1, pins.IRQ1);
+  if (pins.IRQ2 !== undefined) setInputLevel(_pinIRQ2, pins.IRQ2);
+  if (pins.BSAV !== undefined) setInputLevel(_pinBSAV, pins.BSAV);
+  if (pins.STRT !== undefined) setInputLevel(_pinSTRT, pins.STRT);
+  // 互換: 設定直後にサンプル処理（単体テスト・UIパルス用）
+  processInputPins();
+}
+
+/**
+ * 入力ピンを1サンプル処理する（仕様ループ 1-1〜1-3）。
+ * - RST 立ち上がり / 保留 → reset()
+ * - HLT アサート → halted
+ * - IRQ 立ち上がり / 保留 → pending（マスクは _handleIRQ 側）
+ */
+export function processInputPins(): void {
+  if (risingEdge(_pinRST) || takeDeferred(_pinRST)) {
+    reset();
   }
-  // HLT
-  if (pins.HLT !== undefined) {
-    _pinHLT = pins.HLT;
-    if (_pinHLT && _execStatus === "running") {
+
+  if (_pinHLT[0] || takeDeferred(_pinHLT)) {
+    if (_execStatus === "running") {
       _execStatus = "halted";
       _onStop?.("halted", getState());
     }
   }
-  // IRQ0〜2
-  if (pins.IRQ0) _pendingIRQ |= 1;
-  if (pins.IRQ1) _pendingIRQ |= 2;
-  if (pins.IRQ2) _pendingIRQ |= 4;
+
+  const irqPins = [_pinIRQ0, _pinIRQ1, _pinIRQ2] as const;
+  for (let lv = 0; lv < 3; lv++) {
+    const pin = irqPins[lv]!;
+    if (risingEdge(pin) || takeDeferred(pin)) {
+      _pendingIRQ |= 1 << lv;
+    }
+  }
+
+  for (const p of _inputPins) {
+    commitSample(p);
+  }
+  for (const p of _outputPins) {
+    commitSample(p);
+  }
 }
 
 /**
  * 現在のピン状態スナップショットを返す。
- * - RUN: CPU が実行中のとき true（*RUN ピンは Low アクティブなので論理は逆）
- * - IOP: 直前の命令が I/O アクセスだったとき true
+ * 入力は [0]、RUN は実行状態から生成。
  */
 export function getPins(): CpuPins {
   return {
-    HLT: _pinHLT,
+    HLT: _pinHLT[0],
     RUN: _execStatus === "running",
-    IRQ0: (_pendingIRQ & 1) !== 0,
-    IRQ1: (_pendingIRQ & 2) !== 0,
-    IRQ2: (_pendingIRQ & 4) !== 0,
-    RST: _pinRST_prev,
-    IOP: _pinIOP,
+    IRQ0: _pinIRQ0[0],
+    IRQ1: _pinIRQ1[0],
+    IRQ2: _pinIRQ2[0],
+    RST: _pinRST[0],
+    BSAV: _pinBSAV[0],
+    STRT: _pinSTRT[0],
+    IOP: _pinIOP[0],
+    BSRQ: _pinBSRQ[0],
+    WRT: _pinWRT[0],
   };
+}
+
+/** メインループ用: ピン監視 → 実行中なら1命令 */
+export function tickCpu(): void {
+  processInputPins();
+  if (_pinHLT[0] || _execStatus === "halted" || _execStatus === "idle") {
+    return;
+  }
+  if (_execStatus === "break" || _execStatus === "step") {
+    return;
+  }
+  if (_breakpoints.has(cpuRegister.IC)) {
+    _execStatus = "break";
+    _onStop?.("break", getState());
+    return;
+  }
+  setOutputLevel(_pinIOP, false);
+  setOutputLevel(_pinWRT, false);
+  _executeOne();
+}
+
+/** UI の RUN: 現在 IC から連続実行モードへ */
+export function startRun(): void {
+  if (_pinHLT[0]) return;
+  _stepMode = false;
+  _execStatus = "running";
+}
+
+/** UI の HALT 要求（ピンではなく実行状態） */
+export function requestHalt(): void {
+  if (_execStatus === "running") {
+    _execStatus = "halted";
+    _onStop?.("halted", getState());
+  }
 }
 
 /** CPU 状態スナップショットを返す */
@@ -246,6 +340,11 @@ export function setIoWriteCallback(cb: IoWriteCallback): void {
   _ioWrite = cb;
 }
 
+/** 割り込みペンディングマスク（デバッグ／テスト用） */
+export function getPendingIrq(): number {
+  return _pendingIRQ;
+}
+
 /** 割り込み要求（level 0〜2）。対応する Mx ビットが有効な場合のみ受け付ける */
 export function triggerInterrupt(level: 0 | 1 | 2): void {
   _pendingIRQ |= 1 << level;
@@ -253,10 +352,11 @@ export function triggerInterrupt(level: 0 | 1 | 2): void {
 
 /** 1命令実行して CPU 状態を返す */
 export function step(): CPURegister {
-  if (_execStatus === "halted" || _pinHLT) return getState();
+  if (_execStatus === "halted" || _pinHLT[0]) return getState();
   _stepMode = false;
   _execStatus = "running" as ExecStatus;
-  _pinIOP = false;
+  setOutputLevel(_pinIOP, false);
+  setOutputLevel(_pinWRT, false);
   _executeOne();
   if ((_execStatus as ExecStatus) !== "halted") {
     _execStatus = "step";
@@ -286,7 +386,7 @@ export async function run(
     function tick(): void {
       for (let i = 0; i < BATCH; i++) {
         // HLT ピンによる停止チェック
-        if (_pinHLT) {
+        if (_pinHLT[0]) {
           _execStatus = "halted";
           _onStop?.(_execStatus, getState());
           resolve(_execStatus);
@@ -304,7 +404,8 @@ export async function run(
           resolve(_execStatus);
           return;
         }
-        _pinIOP = false;
+        setOutputLevel(_pinIOP, false);
+        setOutputLevel(_pinWRT, false);
         _executeOne();
         if (_execStatus === "halted") {
           _onStop?.(_execStatus, getState());
@@ -333,11 +434,13 @@ export function halt(): void {
 // I/O アクセスラッパー（IOP フラグを自動セット）
 // ─────────────────────────────────────────────
 function _doIoRead(port: number): number {
-  _pinIOP = true;
+  setOutputLevel(_pinIOP, true);
+  setOutputLevel(_pinWRT, false);
   return _ioRead(port);
 }
 function _doIoWrite(port: number, val: number): void {
-  _pinIOP = true;
+  setOutputLevel(_pinIOP, true);
+  setOutputLevel(_pinWRT, true);
   _ioWrite(port, val);
 }
 
@@ -1475,8 +1578,10 @@ function _exec04(rrr: number, lo: number): void {
       return;
     } // BD addr16
     if (lo === 0x17) {
+      // 2語命令: 先にリンク先をフェッチしてから戻り先（次命令）を push
+      const dest = _fetch();
       _push(cpuRegister.IC);
-      cpuRegister.IC = _fetch();
+      cpuRegister.IC = dest;
       return;
     } // BALD addr16
   }

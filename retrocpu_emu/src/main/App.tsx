@@ -1,11 +1,22 @@
+import { useEffect, useMemo, useState } from "react";
 import { HexKeyboard } from "./components/HexKeyboard";
 import { Led, type LedColor } from "./components/DisplayView/Led/Led";
 import { SevenSegment } from "./components/DisplayView/SevenSegmentLed/SevenSegment";
-
-const pcDigits = ["0", "1", "A", "0"];
-const dataDigits = ["2", "3", "4", "5"];
-const debugBlueLeds = new Array(8).fill(true);
-const debugRedLeds = new Array(8).fill(true);
+import {
+  getSnapshot,
+  startEmuLoop,
+  stopEmuLoop,
+  subscribeEmu,
+  type EmuSnapshot,
+} from "./feature/board/emu_loop";
+import {
+  reset,
+  setPins,
+  startRun,
+  step,
+  requestHalt,
+  getExecStatus,
+} from "./feature/cpu/mn1613/mn1613";
 
 type CpuStatusItem = {
   label: string;
@@ -13,44 +24,119 @@ type CpuStatusItem = {
   color: LedColor;
 };
 
-const cpuStatus: CpuStatusItem[] = [
-  { label: "HALT", active: true, color: "red" },
-  { label: "RESET", active: false, color: "blue" },
-  { label: "UNDEF", active: false, color: "white" },
-  { label: "EXT", active: true, color: "orange" },
-  { label: "SVC", active: false, color: "yellow" },
-  { label: "ALU", active: false, color: "red" },
-  { label: "BUS", active: false, color: "blue" },
-];
+function hex4(n: number): string {
+  return (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+}
 
-const cpuRegisters = [
-  { name: "STR", value: "0x00" },
-  { name: "GR0", value: "0x1234" },
-  { name: "GR1", value: "0x0000" },
-  { name: "GR2", value: "0x00AF" },
-  { name: "GR3", value: "0x0042" },
-  { name: "IC/PC", value: "0x0200" },
-  { name: "SP", value: "0x07F0" },
-  { name: "FR", value: "NZVC=0010" },
-];
-
-const memoryRows = [
-  { addr: "0200", hex: "12 34 56 78 9A BC DE F0", ascii: ".4Vx...." },
-  { addr: "0208", hex: "00 11 22 33 44 55 66 77", ascii: '.."3DUfw' },
-  { addr: "0210", hex: "4D 4E 31 36 31 30 00 FF", ascii: "MN1610.." },
-  { addr: "0218", hex: "A0 A1 A2 A3 10 20 30 40", ascii: "..... 0@" },
-];
+function toDigits(hex: string, width: number): string[] {
+  const s = hex.toUpperCase().padStart(width, "0").slice(-width);
+  return s.split("");
+}
 
 function App() {
+  const [snap, setSnap] = useState<EmuSnapshot>(() => getSnapshot());
+  const [log, setLog] = useState<string[]>([
+    "[boot] emulator loop ready",
+  ]);
+
+  useEffect(() => {
+    startEmuLoop({ cpuStepsPerFrame: 32, uiEveryFrames: 1 });
+    const unsub = subscribeEmu(setSnap);
+    return () => {
+      unsub();
+      stopEmuLoop();
+    };
+  }, []);
+
+  const pushLog = (msg: string) => {
+    const t = new Date().toISOString().slice(11, 23);
+    setLog((prev) => [`[${t}] ${msg}`, ...prev].slice(0, 40));
+  };
+
+  const icDigits = useMemo(
+    () => toDigits(hex4(snap.regs.IC), 4),
+    [snap.regs.IC],
+  );
+  const dataDigits = useMemo(
+    () => toDigits(hex4(snap.regs.R[0] ?? 0), 4),
+    [snap.regs.R],
+  );
+
+  const cpuStatus: CpuStatusItem[] = [
+    { label: "HALT", active: snap.pins.HLT || snap.status === "halted", color: "red" },
+    { label: "RESET", active: snap.pins.RST, color: "blue" },
+    { label: "RUN", active: snap.pins.RUN, color: "orange" },
+    { label: "IOP", active: snap.pins.IOP, color: "yellow" },
+    { label: "WRT", active: snap.pins.WRT, color: "red" },
+    { label: "IRQ0", active: snap.pins.IRQ0, color: "blue" },
+    { label: "IRQ1", active: snap.pins.IRQ1, color: "blue" },
+  ];
+
+  const cpuRegisters = [
+    { name: "STR", value: `0x${hex4(snap.regs.STR)}` },
+    { name: "R0", value: `0x${hex4(snap.regs.R[0] ?? 0)}` },
+    { name: "R1", value: `0x${hex4(snap.regs.R[1] ?? 0)}` },
+    { name: "R2", value: `0x${hex4(snap.regs.R[2] ?? 0)}` },
+    { name: "R3", value: `0x${hex4(snap.regs.R[3] ?? 0)}` },
+    { name: "R4", value: `0x${hex4(snap.regs.R[4] ?? 0)}` },
+    { name: "IC/PC", value: `0x${hex4(snap.regs.IC)}` },
+    { name: "SP", value: `0x${hex4(snap.regs.SP)}` },
+    { name: "STATUS", value: snap.status },
+  ];
+
+  const debugBlueLeds = Array.from({ length: 8 }, (_, i) =>
+    ((snap.regs.STR >> i) & 1) !== 0,
+  );
+  const debugRedLeds = Array.from({ length: 8 }, (_, i) =>
+    ((snap.regs.R[0] >> i) & 1) !== 0,
+  );
+
+  const onReset = () => {
+    setPins({ RST: true });
+    setPins({ RST: false });
+    reset();
+    pushLog("RESET pulsed");
+    setSnap(getSnapshot());
+  };
+
+  const onRun = () => {
+    setPins({ HLT: false });
+    startRun();
+    pushLog(`RUN status=${getExecStatus()}`);
+    setSnap(getSnapshot());
+  };
+
+  const onStep = () => {
+    setPins({ HLT: false });
+    step();
+    pushLog(`STEP IC=0x${hex4(getSnapshot().regs.IC)}`);
+    setSnap(getSnapshot());
+  };
+
+  const onHalt = () => {
+    requestHalt();
+    setPins({ HLT: true });
+    pushLog("HALT");
+    setSnap(getSnapshot());
+  };
+
   return (
     <div className="emu-shell">
       <header className="emu-header panel">
-        <h1>MN1610 Emulator Control</h1>
+        <h1>MN1613 Emulator Control</h1>
         <div className="header-controls">
-          <button className="control-pill">POWER SW</button>
-          <button className="control-pill">RUN</button>
-          <button className="control-pill">STEP</button>
-          <button className="control-pill danger">RESET</button>
+          <button className="control-pill" type="button" onClick={onHalt}>
+            HALT
+          </button>
+          <button className="control-pill" type="button" onClick={onRun}>
+            RUN
+          </button>
+          <button className="control-pill" type="button" onClick={onStep}>
+            STEP
+          </button>
+          <button className="control-pill danger" type="button" onClick={onReset}>
+            RESET
+          </button>
         </div>
       </header>
 
@@ -63,7 +149,7 @@ function App() {
               <div className="led-bank-split">
                 <div className="led-group">
                   <div className="led-bank">
-                    {pcDigits.map((digit, idx) => (
+                    {icDigits.map((digit, idx) => (
                       <SevenSegment
                         key={`pc-${digit}-${idx}`}
                         value={digit}
@@ -75,7 +161,7 @@ function App() {
                       />
                     ))}
                   </div>
-                  <span className="led-caption">PC</span>
+                  <span className="led-caption">IC</span>
                 </div>
                 <div className="led-group">
                   <div className="led-bank">
@@ -91,7 +177,7 @@ function App() {
                       />
                     ))}
                   </div>
-                  <span className="led-caption">DATA</span>
+                  <span className="led-caption">R0</span>
                 </div>
               </div>
             </section>
@@ -100,7 +186,7 @@ function App() {
               <h3>16 Debug LEDs</h3>
               <div className="debug-leds-wrap">
                 <div className="debug-led-group">
-                  <span className="debug-label">BLUE</span>
+                  <span className="debug-label">STR.lo</span>
                   <div className="debug-led-row">
                     {debugBlueLeds.map((on, idx) => (
                       <Led key={`blue-${idx}`} on={on} color="blue" size={12} />
@@ -108,7 +194,7 @@ function App() {
                   </div>
                 </div>
                 <div className="debug-led-group">
-                  <span className="debug-label">RED</span>
+                  <span className="debug-label">R0.lo</span>
                   <div className="debug-led-row">
                     {debugRedLeds.map((on, idx) => (
                       <Led key={`red-${idx}`} on={on} color="red" size={12} />
@@ -153,16 +239,16 @@ function App() {
 
           <section className="panel memory-panel">
             <div className="memory-header">
-              <h2>Memory / VRAM Viewer</h2>
-              <span className="memory-range">0x0200 - 0x021F</span>
+              <h2>Memory Viewer</h2>
+              <span className="memory-range">near IC</span>
             </div>
             <div className="memory-table">
               <div className="memory-head-row">
                 <span>ADDR</span>
-                <span>HEX</span>
+                <span>HEX (words)</span>
                 <span>ASCII</span>
               </div>
-              {memoryRows.map((row) => (
+              {snap.memRows.map((row) => (
                 <div className="memory-row" key={row.addr}>
                   <span>{row.addr}</span>
                   <span>{row.hex}</span>
@@ -177,10 +263,9 @@ function App() {
       <footer className="emu-footer panel">
         <h2>System Log / Debug Console</h2>
         <div className="log-window">
-          <p>[00:00:00.001] POWER ON</p>
-          <p>[00:00:00.110] ROM loaded: MONITOR.BIN</p>
-          <p>[00:00:00.240] CPU halted at 0x0200</p>
-          <p>[00:00:01.012] Ready.</p>
+          {log.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </div>
       </footer>
     </div>
