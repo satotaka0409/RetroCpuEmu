@@ -6,28 +6,41 @@ alwaysApply: true
 
 ## 給電の仕組み
 
-- 12V ACアダプタ
-- USB Type-C 12V-PDを使用
+- 12V ACアダプタ<br>
+- USB Type-C 12V-PDを使用<br>
+- （PC接続用のUSB Type-Cとは別系統）
+- 上記を併用できる構造とする<br>
 
 ## SoCとして RP2354B を使用
 
-- PCとの接続用にUSB Type-Cを使用
+- PCとの接続用にUSB Type-Cを使用<br>
 
-### キーボード、LED制御用としてMAX6955 を2個使用
+### 表示装置
 
 - MAX6955 データシート:https://www.analog.com/media/en/technical-documentation/data-sheets/MAX6955.pdf<br>
-- PIO:2本<br>
-- キーボード: 横6 x 縦4 = 24キー　内16進で16個使用<br>
+- I2Cで通信 PIO:2本<br>
 - 7セグLED: アドレス部8桁 データ部4桁 = 12桁<br>
 - 砲弾LED: 16個<br>
-
-### オーディオ出力DACとして PCM5102A使用<br>
-
-- オーディオステレオ入力: RP2354B 内蔵ADC使用(PIO:2本)<br>
-- SDカードスロット(ハイスピード対応)(PIO:7本)<br>
 - キャラクタLCD: I2Cインターフェース PCF8574 LCD1602 使用(PIO:2本-MAX6955と共通)<br>
+
+### 入力装置
+
+- MAX6955を使用（表示装置と同じ）<br>
+- I2Cで通信 PIO:2本(表示装置のMAX6955と共通)<br>
+- キーボード: 横6 x 縦4 = 24キー　内16進で16個使用 ファンクションで8個使用<br>
+
+### ステレオオーディオ
+
+- ステレオオーディオ出力: I2C+I2Sで使えるPCM5102Aを使用(I2C側 PIO:2本-MAX6955と共通 I2S側 PIO:3本)<br>
+- オーディオ出力では、PIOを使ったダブルバッファにてDMAで出力する<br>
+- ステレオオーディオ入力: RP2354B 内蔵ADC使用(PIO:2本)<br>
+- オーディオ入力では、PIOを使ったダブルバッファにてDMAで入力する<br>
+
+### その他のデバイス
+
+- SDカードスロット(ハイスピード対応)(PIO:7本)<br>
 - USB Type-A カメラ入力用 / SDR USB受信機入力用(PIO:0本 PC接続用 USBと兼用)<br>
-- USB HUB ICを使ってHUB内蔵ボードとする<br>
+- USB HUB ICを使ってHUB内蔵ボードとする（Microchip USB2422を使用）<br>
 
 ### 2階ボードとの接続
 
@@ -171,7 +184,59 @@ alwaysApply: true
 - 書き込みの場合は、前回値比較が行える（こちらはIO/MEM両方で前回値が取得できる。CPLDに前回値を保存しておく。取り出しはIOポートを読み込む）<br>
 - 履歴機能があり、後から履歴を参照することができる（1つの比較器に対して最大16履歴　値比較不一致の場合は履歴に書かない）
 - 履歴に時刻を記録するため、ハンドシェイクで時刻取得を行う<br>
-- 履歴は、その時のCPUレジスタの状態、書き込んだ値、前回書き込み値　が履歴として残る
+- 履歴は、その時のCPUレジスタの状態、書き込んだ値、前回書き込み値　が履歴として残る<br>
+
+### RP2354B IOピンの機能内訳
+
+※以下は暫定のGPIO割り当て案（基板配線検討用）。最終確定時は RP2354B のピン機能表（ADC/SDIO/USB兼用制約）で再確認すること。<br>
+
+| 区分                       | 信号名         | 割り当てピン | 備考                                  |
+| -------------------------- | -------------- | -----------: | ------------------------------------- |
+| MAX6955/LCD 共有I2C        | I2C_SCL        |        GPIO0 | MAX6955 x2 / LCD(PCF8574) で共用      |
+| MAX6955/LCD 共有I2C        | I2C_SDA        |        GPIO1 | MAX6955 x2 / LCD(PCF8574) で共用      |
+| SDカード（SDIO）           | SD_CLK         |        GPIO2 |                                       |
+| SDカード（SDIO）           | SD_CMD         |        GPIO3 |                                       |
+| SDカード（SDIO）           | SD_D0          |        GPIO4 |                                       |
+| SDカード（SDIO）           | SD_D1          |        GPIO5 |                                       |
+| SDカード（SDIO）           | SD_D2          |        GPIO6 |                                       |
+| SDカード（SDIO）           | SD_D3          |        GPIO7 |                                       |
+| SDカード（SDIO）           | SD_DET         |        GPIO8 | カード検出                            |
+| 2階ボード接続（基本）      | RESET          |        GPIO9 |                                       |
+| 2階ボード接続（基本）      | HSHK_REQ_0     |       GPIO10 | 2階->1階 割り込み要求                 |
+| 2階ボード接続（基本）      | HSHK_REQ_1     |       GPIO11 | 1階->2階 割り込み要求                 |
+| 2階ボード接続（基本）      | IRQ_CAUSE0     |       GPIO12 | 割り込み要因                          |
+| 2階ボード接続（基本）      | IRQ_CAUSE1     |       GPIO13 | 割り込み要因                          |
+| 2階ボード接続（基本）      | IRQ_CAUSE2     |       GPIO14 | 割り込み要因                          |
+| 2階ボード接続（基本）      | IRQ_IN_SERVICE |       GPIO15 | 割り込み処理中                        |
+| 2階ボード接続（基本）      | CLK_SEL0       |       GPIO16 | クロック切り替え                      |
+| 2階ボード接続（基本）      | CLK_SEL1       |       GPIO17 | クロック切り替え                      |
+| 2階ボード接続（基本）      | SYNC_CLK       |       GPIO18 | ハンドシェイク/DMAでも共用            |
+| ハンドシェイク専用（追加） | HSHK_ENA       |       GPIO19 |                                       |
+| ハンドシェイク専用（追加） | HSHK_DENA      |       GPIO20 |                                       |
+| ハンドシェイク専用（追加） | HSHK_DACK      |       GPIO21 |                                       |
+| ハンドシェイク専用（追加） | HSHK_IN_DATA   |       GPIO22 | 8bitシリアル入力                      |
+| ハンドシェイク専用（追加） | HSHK_OUT_DATA  |       GPIO23 | 8bitシリアル出力                      |
+| DMA専用（追加）            | DMA_DATA0      |       GPIO24 |                                       |
+| DMA専用（追加）            | DMA_DATA1      |       GPIO25 |                                       |
+| DMA専用（追加）            | DMA_DATA2      |       GPIO26 |                                       |
+| DMA専用（追加）            | DMA_DATA3      |       GPIO27 |                                       |
+| DMA専用（追加）            | DMA_DATA4      |       GPIO28 |                                       |
+| DMA専用（追加）            | DMA_DATA5      |       GPIO29 |                                       |
+| DMA専用（追加）            | DMA_DATA6      |       GPIO30 |                                       |
+| DMA専用（追加）            | DMA_DATA7      |       GPIO31 |                                       |
+| DMA専用（追加）            | A_ENABLE       |       GPIO32 |                                       |
+| DMA専用（追加）            | D_ENABLE       |       GPIO33 |                                       |
+| DMA専用（追加）            | HALT           |       GPIO34 |                                       |
+| DMA専用（追加）            | RUN            |       GPIO35 |                                       |
+| DMA専用（追加）            | DMA_ENA        |       GPIO36 | DMA CLK は SYNC_CLK(GPIO18) を共用    |
+| オーディオ入力（内蔵ADC）  | AUDIO_IN_L     |       GPIO37 | ステレオ入力 L（ADC機能ピンを要確認） |
+| オーディオ入力（内蔵ADC）  | AUDIO_IN_R     |       GPIO38 | ステレオ入力 R（ADC機能ピンを要確認） |
+| USB Type-A（カメラ/SDR）   | USB共用        |            - | GPIO消費なし（USB接続を共用）         |
+
+| 集計種別     | 本数 | 説明                                                                |
+| ------------ | ---: | ------------------------------------------------------------------- |
+| 延べ要求本数 |   48 | 各機能の記載本数を単純加算（共通線を重複計上）                      |
+| 実配線本数   |   39 | GPIO0〜GPIO38 を使用（I2C共有、HSHK重複、DMA-CLK=SYNC_CLK共用反映） |
 
 # 回路図エディタ
 
