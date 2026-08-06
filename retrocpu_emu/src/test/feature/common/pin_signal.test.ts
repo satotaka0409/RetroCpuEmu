@@ -17,6 +17,8 @@ import {
   tickCpu,
   getExecStatus,
   setMemory,
+  setIoReadCallback,
+  halt,
 } from "../../../main/feature/cpu/mn1613/mn1613";
 
 describe("pin_signal", () => {
@@ -38,6 +40,7 @@ describe("pin_signal", () => {
 
 describe("mn1613 pin + tickCpu", () => {
   it("RST パルスでレジスタがクリアされる", () => {
+    setIoReadCallback((_p) => 0);
     reset();
     const buf = new ArrayBuffer(0x10000);
     new DataView(buf).setUint16(0, 0x0801, false); // MVI R0,#1
@@ -49,14 +52,17 @@ describe("mn1613 pin + tickCpu", () => {
     setPins({ RST: false });
     expect(getState().R[0]).toBe(0);
     expect(getState().IC).toBe(0);
+    expect(getExecStatus()).toBe("running");
   });
 
-  it("tickCpu は idle では命令を進めない", () => {
+  it("tickCpu は halted では命令を進めない", () => {
+    setIoReadCallback((_p) => 0);
     reset();
+    halt();
     const ic = getState().IC;
     tickCpu();
     expect(getState().IC).toBe(ic);
-    expect(getExecStatus()).toBe("idle");
+    expect(getExecStatus()).toBe("halted");
   });
 
   it("IRQ ピン下げても pending は残る", () => {

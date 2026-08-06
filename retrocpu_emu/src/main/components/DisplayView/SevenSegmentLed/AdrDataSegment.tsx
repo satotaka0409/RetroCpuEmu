@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { SevenSegment } from "./SevenSegment";
 
 /**
- * 7セグメントLED アドレス部16進6桁 データ部16進4桁
- * @param address 7セグメントLED アドレス部16進6桁
+ * 7セグメントLED アドレス部16進8桁 データ部16進4桁
+ * @param address 7セグメントLED アドレス部16進8桁
  * @param data 7セグメントLED データ部16進4桁
  */
 const AdrDataAllSegment: React.FC<{

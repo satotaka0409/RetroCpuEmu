@@ -10,10 +10,9 @@
  *                  → IoControlHandshake.send() で応答を返す
  *
  * ■ 受信フロー例（I/Oボード側）
- *   const cmdByte  = await io.receive(1);
- *   const restSize = CPU_PAYLOAD_REMAINING_SIZE[cmdByte[0]] ?? 0;
- *   const rest     = restSize > 0 ? await io.receive(restSize) : new Uint8Array(0);
- *   const frame    = new Uint8Array([...cmdByte, ...rest]);
+ *   const frame = await io.receiveFramed(
+ *     (cmd) => CPU_PAYLOAD_REMAINING_SIZE[cmd] ?? 0,
+ *   );
  *   const response = dispatcher.dispatch(frame);
  *   await io.send(response);
  *
@@ -367,14 +366,10 @@ export function buildAddrBreakGetFrame(): Uint8Array {
  *
  * @example
  * const dispatcher = new CpuToIoCommandDispatcher(handlers);
- *
- * // コマンドバイトを受信
- * const cmdByte = await io.receive(1);
- * const restSize = CPU_PAYLOAD_REMAINING_SIZE[cmdByte[0]] ?? 0;
- * const rest = restSize > 0 ? await io.receive(restSize) : new Uint8Array(0);
- *
- * // ディスパッチ & 応答
- * const response = dispatcher.dispatch(new Uint8Array([...cmdByte, ...rest]));
+ * const frame = await io.receiveFramed(
+ *   (cmd) => CPU_PAYLOAD_REMAINING_SIZE[cmd] ?? 0,
+ * );
+ * const response = dispatcher.dispatch(frame);
  * await io.send(response);
  */
 export class CpuToIoCommandDispatcher {

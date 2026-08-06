@@ -8,7 +8,7 @@
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder:cursor_asm_editer}",
-        "${workspaceFolder:test_project}"
+        "${workspaceFolder:root}/cursor_expand/monitor"
       ],
       "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
       "preLaunchTask": "cursor_asm_editer: npm: compile",

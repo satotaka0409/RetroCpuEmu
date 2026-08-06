@@ -1,9 +1,9 @@
 ; ハンドシェイク用IOポート定義（CPUボード視点）
 ; 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc
-
-; 割り込み関連
-INTERRUPT_BUSY	.equ	0x20	; Bit0
-INT_CAUSE	.equ	0x21	; Bit0-2
+;
+; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
+; interrupt_io.inc と共有。amalgam 時の二重 .equ を避けるため include する。
+.include "../interrupt_io.inc"
 
 ; 制御信号ポート（同一アドレス、ビットで区別）
 HSHK_CTRL	.equ	0x22
@@ -23,7 +23,7 @@ HSHK_DACK_BIT	.equ	0x04
 HSHK_REQ0_BIT	.equ	0x08
 HSHK_REQ1_BIT	.equ	0x10
 
-INT_CAUSE_HSHK	.equ	2
+; INT_CAUSE_HSHK は interrupt_io.inc 側の定義を使用
 
 HSHK_OK		.equ	0x00
 HSHK_NG		.equ	0x01

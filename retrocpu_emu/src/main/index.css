@@ -176,6 +176,35 @@ body {
   gap: 7px;
 }
 
+.bullet-leds-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.bullet-led-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid #3a4552;
+  background: #12161b;
+}
+
+.bullet-led-item {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  width: 18px;
+}
+
+.bullet-led-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: #8fa3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .debug-led {
   width: 12px;
   height: 12px;

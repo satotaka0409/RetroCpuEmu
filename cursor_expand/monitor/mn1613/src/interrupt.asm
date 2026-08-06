@@ -23,7 +23,7 @@ gl_int_handler:
 	mvwi	X0, interrupt_sub_func
 	a	X0, R0
 	; 広域サブルーチンコール
-	balr	(X0)
+	balr	(R3)
 
 	; 割り込み処理実行中フラグをクリア
 	mvi	R0, 0

@@ -31,6 +31,24 @@ export class IoControlHandshake {
     return data;
   }
 
+  /**
+   * 先頭1バイトを見て残余長を決め、同一 ENA セッションでフレーム全体を受信する。
+   * CPU→IO コマンド（コマンドで転送長が確定）向け。
+   */
+  async receiveFramed(
+    remainingAfterFirst: (firstByte: number) => number,
+  ): Promise<Uint8Array> {
+    await this.waitForCpuRequest();
+    const first = await this.receiveOneByteFromCpu();
+    const rem = Math.max(0, remainingAfterFirst(first) | 0);
+    const rest = rem > 0 ? await this.receiveBytesFromCpu(rem) : new Uint8Array(0);
+    await this.finalizeReceive();
+    const frame = new Uint8Array(1 + rest.length);
+    frame[0] = first;
+    frame.set(rest, 1);
+    return frame;
+  }
+
   private async waitForCpuRequest(): Promise<void> {
     await waitCondition(() => this.bus.HSHK_REQ_0 === 1, this.timeoutMs);
     this.bus.HSHK_DACK = 0;
@@ -38,14 +56,19 @@ export class IoControlHandshake {
     await waitCondition(() => this.bus.HSHK_REQ_0 === 0, this.timeoutMs);
   }
 
+  private async receiveOneByteFromCpu(): Promise<number> {
+    await waitCondition(() => this.bus.HSHK_DENA === 1, this.timeoutMs);
+    const byte = this.bus.HSHK_IN_DATA & 0xff;
+    this.bus.HSHK_DACK = 1;
+    await waitCondition(() => this.bus.HSHK_DENA === 0, this.timeoutMs);
+    this.bus.HSHK_DACK = 0;
+    return byte;
+  }
+
   private async receiveBytesFromCpu(length: number): Promise<Uint8Array> {
     const data = new Uint8Array(length);
     for (let i = 0; i < length; i++) {
-      await waitCondition(() => this.bus.HSHK_DENA === 1, this.timeoutMs);
-      data[i] = this.bus.HSHK_IN_DATA & 0xff;
-      this.bus.HSHK_DACK = 1;
-      await waitCondition(() => this.bus.HSHK_DENA === 0, this.timeoutMs);
-      this.bus.HSHK_DACK = 0;
+      data[i] = await this.receiveOneByteFromCpu();
     }
     return data;
   }

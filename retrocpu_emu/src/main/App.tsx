@@ -9,8 +9,8 @@ import {
   subscribeEmu,
   type EmuSnapshot,
 } from "./feature/board/emu_loop";
+import { coldBootHaltStub, pulseCpuReset } from "./feature/board/boot";
 import {
-  reset,
   setPins,
   startRun,
   step,
@@ -35,13 +35,24 @@ function toDigits(hex: string, width: number): string[] {
 
 function App() {
   const [snap, setSnap] = useState<EmuSnapshot>(() => getSnapshot());
-  const [log, setLog] = useState<string[]>([
-    "[boot] emulator loop ready",
-  ]);
+  const [log, setLog] = useState<string[]>([]);
 
   useEffect(() => {
+    const boot = coldBootHaltStub();
+    setLog(boot.log);
     startEmuLoop({ cpuStepsPerFrame: 32, uiEveryFrames: 1 });
-    const unsub = subscribeEmu(setSnap);
+    const unsub = subscribeEmu((s) => {
+      setSnap(s);
+      if (s.status === "halted") {
+        setLog((prev) => {
+          if (prev.some((l) => l.includes("CPU halted at stub"))) return prev;
+          return [
+            `[boot] CPU halted at stub IC=0x${hex4(s.regs.IC)} (expected after H @ 0x0200)`,
+            ...prev,
+          ].slice(0, 40);
+        });
+      }
+    });
     return () => {
       unsub();
       stopEmuLoop();
@@ -53,10 +64,12 @@ function App() {
     setLog((prev) => [`[${t}] ${msg}`, ...prev].slice(0, 40));
   };
 
-  const icDigits = useMemo(
-    () => toDigits(hex4(snap.regs.IC), 4),
-    [snap.regs.IC],
-  );
+  const addrDigits = useMemo(() => {
+    // 物理アドレス概算: (CSBR<<14)+IC → 表示はハードどおり 8 桁
+    const phys =
+      (((snap.regs.CSBR & 0xf) << 14) + (snap.regs.IC & 0xffff)) & 0xffffffff;
+    return toDigits(phys.toString(16), 8);
+  }, [snap.regs.CSBR, snap.regs.IC]);
   const dataDigits = useMemo(
     () => toDigits(hex4(snap.regs.R[0] ?? 0), 4),
     [snap.regs.R],
@@ -84,18 +97,21 @@ function App() {
     { name: "STATUS", value: snap.status },
   ];
 
-  const debugBlueLeds = Array.from({ length: 8 }, (_, i) =>
-    ((snap.regs.STR >> i) & 1) !== 0,
-  );
-  const debugRedLeds = Array.from({ length: 8 }, (_, i) =>
-    ((snap.regs.R[0] >> i) & 1) !== 0,
-  );
+  // 砲弾 LED 0〜F（暫定: 下位8=STR、上位8=R0）。HALT 時は右端(F)を点灯
+  const bulletLeds = useMemo(() => {
+    const lo = snap.regs.STR & 0xff;
+    const hi = (snap.regs.R[0] ?? 0) & 0xff;
+    const halted = snap.status === "halted" || snap.pins.HLT;
+    return Array.from({ length: 16 }, (_, i) => {
+      if (halted && i === 15) return true;
+      const bit = i < 8 ? (lo >> i) & 1 : (hi >> (i - 8)) & 1;
+      return bit !== 0;
+    });
+  }, [snap.regs.STR, snap.regs.R, snap.status, snap.pins.HLT]);
 
   const onReset = () => {
-    setPins({ RST: true });
-    setPins({ RST: false });
-    reset();
-    pushLog("RESET pulsed");
+    const r = pulseCpuReset();
+    for (const line of r.log) pushLog(line);
     setSnap(getSnapshot());
   };
 
@@ -142,64 +158,62 @@ function App() {
 
       <main className="emu-main">
         <section className="left-panel panel">
-          <h2>Hex Keyboard / 8-Digit LED</h2>
+          <h2>Hex Keyboard / Display</h2>
           <div className="led-stack">
             <section className="led-card">
-              <h3>8-Digit Seven Segment LED</h3>
+              <h3>12-Digit Seven Segment (ADDR 8 + DATA 4)</h3>
               <div className="led-bank-split">
                 <div className="led-group">
-                  <div className="led-bank">
-                    {icDigits.map((digit, idx) => (
+                  <div className="led-bank led-bank-addr">
+                    {addrDigits.map((digit, idx) => (
                       <SevenSegment
-                        key={`pc-${digit}-${idx}`}
+                        key={`addr-${idx}`}
                         value={digit}
                         color="#ff3b1f"
                         backgroundColor="#1a0d0b"
-                        width={34}
-                        height={72}
-                        thickness={7}
+                        width={28}
+                        height={60}
+                        thickness={6}
                       />
                     ))}
                   </div>
-                  <span className="led-caption">IC</span>
+                  <span className="led-caption">ADDRESS</span>
                 </div>
                 <div className="led-group">
                   <div className="led-bank">
                     {dataDigits.map((digit, idx) => (
                       <SevenSegment
-                        key={`data-${digit}-${idx}`}
+                        key={`data-${idx}`}
                         value={digit}
                         color="#ff3b1f"
                         backgroundColor="#1a0d0b"
-                        width={34}
-                        height={72}
-                        thickness={7}
+                        width={28}
+                        height={60}
+                        thickness={6}
                       />
                     ))}
                   </div>
-                  <span className="led-caption">R0</span>
+                  <span className="led-caption">DATA</span>
                 </div>
               </div>
             </section>
 
             <section className="led-card">
-              <h3>16 Debug LEDs</h3>
-              <div className="debug-leds-wrap">
-                <div className="debug-led-group">
-                  <span className="debug-label">STR.lo</span>
-                  <div className="debug-led-row">
-                    {debugBlueLeds.map((on, idx) => (
-                      <Led key={`blue-${idx}`} on={on} color="blue" size={12} />
-                    ))}
-                  </div>
-                </div>
-                <div className="debug-led-group">
-                  <span className="debug-label">R0.lo</span>
-                  <div className="debug-led-row">
-                    {debugRedLeds.map((on, idx) => (
-                      <Led key={`red-${idx}`} on={on} color="red" size={12} />
-                    ))}
-                  </div>
+              <h3>Bullet LEDs (0–F)</h3>
+              <div className="bullet-leds-wrap">
+                <div className="bullet-led-row">
+                  {bulletLeds.map((on, idx) => (
+                    <div className="bullet-led-item" key={`bullet-${idx}`}>
+                      <span className="bullet-led-label">
+                        {idx.toString(16).toUpperCase()}
+                      </span>
+                      <Led
+                        on={on}
+                        color={idx < 8 ? "red" : "orange"}
+                        size={12}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             </section>

@@ -24,29 +24,26 @@ const normalizeHex = (
   return normalized.padStart(digits, "0").slice(-digits).split("");
 };
 
-const statusDefault: boolean[] = Array.from({ length: 8 }, () => false);
-const statusColorDefault: LedColor[] = [
-  "red",
-  "red",
-  "yellow",
-  "yellow",
-  "blue",
-  "blue",
-  "white",
-  "orange",
-];
+const statusDefault: boolean[] = Array.from({ length: 16 }, () => false);
+const statusColorDefault: LedColor[] = Array.from({ length: 16 }, (_, i) =>
+  i < 8 ? "red" : "orange",
+);
 
 const DisplayView: React.FC<DisplayViewProps> = ({
-  address = "000000",
+  address = "00000000",
   data = "0000",
   status = statusDefault,
   statusColors = statusColorDefault,
 }) => {
-  const addressDigits: string[] = normalizeHex(address, 6);
+  const addressDigits: string[] = normalizeHex(address, 8);
   const dataDigits: string[] = normalizeHex(data, 4);
   const statusValues: boolean[] = Array.from(
-    { length: 8 },
+    { length: 16 },
     (_, i) => status[i] ?? false,
+  );
+  const colors: LedColor[] = Array.from(
+    { length: 16 },
+    (_, i) => statusColors[i] ?? (i < 8 ? "red" : "orange"),
   );
 
   return (
@@ -67,13 +64,20 @@ const DisplayView: React.FC<DisplayViewProps> = ({
           alignItems: "flex-start",
           justifyContent: "space-between",
           gap: 20,
+          flexWrap: "wrap",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <p style={{ margin: 0, color: "#d8deea", fontSize: 12 }}>ADDRESS</p>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 4 }}>
             {addressDigits.map((digit, index) => (
-              <SevenSegment key={`addr-${index}`} value={digit} />
+              <SevenSegment
+                key={`addr-${index}`}
+                value={digit}
+                width={28}
+                height={60}
+                thickness={6}
+              />
             ))}
           </div>
         </div>
@@ -83,13 +87,19 @@ const DisplayView: React.FC<DisplayViewProps> = ({
             display: "flex",
             flexDirection: "column",
             gap: 6,
-            marginLeft: 32,
+            marginLeft: 24,
           }}
         >
           <p style={{ margin: 0, color: "#d8deea", fontSize: 12 }}>DATA</p>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 4 }}>
             {dataDigits.map((digit, index) => (
-              <SevenSegment key={`data-${index}`} value={digit} />
+              <SevenSegment
+                key={`data-${index}`}
+                value={digit}
+                width={28}
+                height={60}
+                thickness={6}
+              />
             ))}
           </div>
         </div>
@@ -99,7 +109,8 @@ const DisplayView: React.FC<DisplayViewProps> = ({
         style={{
           display: "flex",
           justifyContent: "center",
-          gap: 12,
+          flexWrap: "wrap",
+          gap: 10,
           paddingTop: 4,
         }}
       >
@@ -107,7 +118,7 @@ const DisplayView: React.FC<DisplayViewProps> = ({
           <Led
             key={`status-${index}`}
             on={on}
-            color={statusColors[index] ?? "red"}
+            color={colors[index] ?? "red"}
             size={14}
           />
         ))}

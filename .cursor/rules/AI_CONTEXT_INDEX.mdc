@@ -14,6 +14,10 @@
   - `.cursor/rules/TMS9995_hardware.mdc`
 - 1階ボードと2階ボードのハンドシェイク仕様
   - `.cursor/rules/HandShake.md`
+- MN1613 アセンブラ成果物のエミュレータ検証（HEX / CDB / call）
+  - `.cursor/rules/emulater_code_test.mdc`
+- ブラウザ retrocpu_emu と Cursor/CLI 間の WebSocket メッセージ
+  - `.cursor/rules/WebSOcket.mdc`
 - レジスタ表示レイアウト
   - `.cursor/rules/mn1613_register.png`
 - 7セグメント表示ビット定義

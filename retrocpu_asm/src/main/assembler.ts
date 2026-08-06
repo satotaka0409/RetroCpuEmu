@@ -27,7 +27,7 @@ import type {
 function directiveSize(line: ParsedLine, cpuType: CpuType): number {
   if (!line.op) return 0;
   const op: string = line.op.toUpperCase();
-  if (op === ".WORD" || op === "DW") {
+  if (op === ".WORD" || op === ".DW" || op === "DW") {
     const words = line.args.length;
     return cpuType === "tms9995" ? words * 2 : words;
   }
@@ -239,7 +239,7 @@ function pass2(
       continue;
     }
 
-    if (op === ".WORD" || op === "DW") {
+    if (op === ".WORD" || op === ".DW" || op === "DW") {
       for (const arg of line.args) {
         const diff = matchWordDiffReloc(arg, symbolInfos);
         if (diff) {

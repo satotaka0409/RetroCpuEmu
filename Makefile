@@ -7,7 +7,8 @@ PROJECTS := \
 	cursor_expand/asm_editer
 
 .PHONY: all init clean install build help \
-	clean-% install-% build-% init-%
+	clean-% install-% build-% init-% \
+	sdcc-setup monitor-ihx monitor-clean
 
 # 既定: クリーン → 依存インストール → ビルド
 all: init
@@ -25,6 +26,20 @@ help:
 	@echo "  make build      # 各プロジェクトのビルド"
 	@echo "  make init-<dir> # 例: make init-retrocpu_asm"
 	@echo "  make clean-<dir> / install-<dir> / build-<dir>"
+	@echo "  make sdcc-setup # SDCC (sdasmn1613/sdld) を CMake 経由で構築"
+	@echo "  make monitor-ihx# モニター Intel HEX（retrocpu_asm + sdld）"
+
+# -------------------------------------------------------
+# cursor_expand/monitor（SDCC + IHX）
+# -------------------------------------------------------
+sdcc-setup:
+	$(MAKE) -C cursor_expand/monitor sdcc-setup
+
+monitor-ihx:
+	$(MAKE) -C cursor_expand/monitor ihx
+
+monitor-clean:
+	$(MAKE) -C cursor_expand/monitor clean
 
 # -------------------------------------------------------
 # clean: 一度消してから作り直す前提の掃除

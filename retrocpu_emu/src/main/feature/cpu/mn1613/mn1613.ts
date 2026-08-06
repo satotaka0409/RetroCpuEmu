@@ -32,7 +32,7 @@ import {
  *
  * 公開 API:
  *   setMemory(buf) / getMemory()
- *   reset() / getState() / getExecStatus()
+ *   powerOnIdle() / reset() / getState() / setState() / getExecStatus()
  *   step() / run(startAddr, maxCycles?) / halt()
  *   addBreakpoint / removeBreakpoint / clearBreakpoints / getBreakpoints
  *   setStepMode(enable)
@@ -167,8 +167,11 @@ const _outputPins: OutputPin[] = [_pinIOP, _pinBSRQ, _pinWRT];
 // 公開 API
 // ─────────────────────────────────────────────
 
-/** CPU をリセットする（MN1613 仕様: NPP=1 で初期化） */
-export function reset(): void {
+/**
+ * 電源投入直後相当: レジスタ初期化のみ行い、実行はしない（リセット待ち）。
+ * IO:0 は読まない。RST パルス（reset）でベクタ読み出し＋実行開始する。
+ */
+export function powerOnIdle(): void {
   cpuRegister = {
     R: [0, 0, 0, 0, 0],
     SP: 0,
@@ -187,6 +190,35 @@ export function reset(): void {
   _execStatus = "idle";
   _stepMode = false;
   _pendingIRQ = 0;
+  for (const p of _inputPins) {
+    clearDeferred(p);
+    p[1] = p[0];
+  }
+  for (const p of _outputPins) {
+    setOutputLevel(p, false);
+    p[1] = false;
+  }
+}
+
+/** CPU をリセットする（MN1613 仕様: IO:0 の RESET_VECTOR → IC、実行開始、NPP=1） */
+export function reset(): void {
+  cpuRegister = {
+    R: [0, 0, 0, 0, 0],
+    SP: 0,
+    STR: 0,
+    IC: 0,
+    CSBR: 0,
+    SSBR: 0,
+    TSR0: 0,
+    TSR1: 0,
+    OSR: [0, 0, 0, 0],
+    NPP: 0x01,
+    IISR: 0,
+    SBRB: 0,
+    ICB: 0,
+  };
+  _stepMode = false;
+  _pendingIRQ = 0;
   // 入力 [0] は外部駆動のまま残し、エッジ再発火を防ぐため [1] を同期
   for (const p of _inputPins) {
     clearDeferred(p);
@@ -196,6 +228,9 @@ export function reset(): void {
     setOutputLevel(p, false);
     p[1] = false;
   }
+  // MN1613: リセット後に IO アドレス 0 を読み、IC にセットして実行開始
+  cpuRegister.IC = _doIoRead(0) & 0xffff;
+  _execStatus = "running";
 }
 
 /**
@@ -306,6 +341,43 @@ export function requestHalt(): void {
 export function getState(): CPURegister {
   // CPU レジスタをディープコピーして返す
   return JSON.parse(JSON.stringify(cpuRegister));
+}
+
+/**
+ * テスト／デバッガ用: レジスタを部分更新する。
+ * 未指定フィールドは維持。R は指定インデックスのみ上書き。
+ */
+export function setState(
+  partial: Partial<Omit<CPURegister, "R" | "OSR">> & {
+    R?: Partial<CPURegister["R"]> | number[];
+    OSR?: Partial<CPURegister["OSR"]> | number[];
+  },
+): void {
+  if (partial.R) {
+    const r = partial.R;
+    for (let i = 0; i < 5; i++) {
+      const v = (r as number[])[i];
+      if (v !== undefined) cpuRegister.R[i] = v & 0xffff;
+    }
+  }
+  if (partial.OSR) {
+    const o = partial.OSR;
+    for (let i = 0; i < 4; i++) {
+      const v = (o as number[])[i];
+      if (v !== undefined) cpuRegister.OSR[i] = v & 0xffff;
+    }
+  }
+  if (partial.SP !== undefined) cpuRegister.SP = partial.SP & 0xffff;
+  if (partial.STR !== undefined) cpuRegister.STR = partial.STR & 0xffff;
+  if (partial.IC !== undefined) cpuRegister.IC = partial.IC & 0xffff;
+  if (partial.CSBR !== undefined) cpuRegister.CSBR = partial.CSBR & 0xf;
+  if (partial.SSBR !== undefined) cpuRegister.SSBR = partial.SSBR & 0xf;
+  if (partial.TSR0 !== undefined) cpuRegister.TSR0 = partial.TSR0 & 0xf;
+  if (partial.TSR1 !== undefined) cpuRegister.TSR1 = partial.TSR1 & 0xf;
+  if (partial.NPP !== undefined) cpuRegister.NPP = partial.NPP & 0xff;
+  if (partial.IISR !== undefined) cpuRegister.IISR = partial.IISR & 0xffff;
+  if (partial.SBRB !== undefined) cpuRegister.SBRB = partial.SBRB & 0xffff;
+  if (partial.ICB !== undefined) cpuRegister.ICB = partial.ICB & 0xffff;
 }
 
 export function getExecStatus(): ExecStatus {

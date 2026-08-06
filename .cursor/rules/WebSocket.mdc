@@ -1,0 +1,366 @@
+---
+alwaysApply: false
+description: Cursor/CLI/vitest とブラウザ上 retrocpu_emu 間の WebSocket メッセージ仕様
+---
+
+# WebSocket メッセージ仕様
+
+根拠: 本ファイル。関連は `retrocpu_emu.mdc` / `emulater_code_test.mdc` / `retrocpu_debug.mdc` / `HandShake.mdc`。
+
+## 目的
+
+ブラウザ上で動く `retrocpu_emu` を、次のクライアントから操作・検証する。
+
+| クライアント | 用途 |
+| --- | --- |
+| vitest / コードテスト | `emulater_code_test` 相当（HEX ロード・ラベル call・結果取得） |
+| Cursor / VS Code 拡張 | デバッグ UI（レジスタ・メモリ・BP・実行制御） |
+| 将来: 実 IO ボード経由 | 同じコマンド面を USB 側でも共有可能にする |
+
+CPU 実行の本体は常に **ブラウザ側**。クライアントはリモート API としてメッセージを送る。
+
+## 接続モデル
+
+```text
+[クライアント]  <---- WebSocket ---->  [ブラウザ retrocpu_emu]
+  request / response                     実行ホスト
+  （任意）subscribe events               emu_loop / mn1613 / code_test
+```
+
+- 輸送: WebSocket、ペイロードは **UTF-8 JSON**（大きな HEX も当面 JSON 文字列。必要なら後でバイナリフレームを追加）
+- 終端: 開発時は Vite プロキシ or 小さな WS ブリッジ。本番 nginx は静的配信のみ想定のため、別途 WS 終端が必要
+- セッション: 接続あたり 1 エミュレータ。複数タブ接続時は後勝ち、または `busy` エラー
+
+### モード
+
+| モード | 説明 |
+| --- | --- |
+| `ui` | 通常。`emu_loop`（rAF）が CPU を進める。UI 操作と WS が共存 |
+| `test` | コードテスト専用。`emu_loop` の CPU 進行を止め、ホストが `run`/`step` を独占 |
+| `debug` | デバッグ専用。BP 停止・ステップ・ダンプを優先。必要なら `ui` と併用可 |
+
+`session.setMode` で切替える。`test` 中の UI RUN は拒否してよい。
+
+## エンベロープ
+
+### クライアント → ホスト（request）
+
+```json
+{
+  "v": 1,
+  "id": "req-001",
+  "type": "req",
+  "method": "mem.loadIntelHex",
+  "params": {}
+}
+```
+
+| フィールド | 必須 | 説明 |
+| --- | --- | --- |
+| `v` | ○ | プロトコル版。当面 `1` |
+| `id` | ○ | リクエスト ID。応答でエコー |
+| `type` | ○ | 常に `"req"` |
+| `method` | ○ | 下記メソッド名（ドット区切り） |
+| `params` | ○ | オブジェクト。引数なしは `{}` |
+
+### ホスト → クライアント（response）
+
+```json
+{
+  "v": 1,
+  "id": "req-001",
+  "type": "res",
+  "ok": true,
+  "result": {}
+}
+```
+
+失敗時:
+
+```json
+{
+  "v": 1,
+  "id": "req-001",
+  "type": "res",
+  "ok": false,
+  "error": {
+    "code": "not_found",
+    "message": "symbol not found: add",
+    "data": { "symbol": "add" }
+  }
+}
+```
+
+| `error.code` | 意味 |
+| --- | --- |
+| `bad_request` | パラメータ不正 |
+| `not_found` | シンボル／スロットなし |
+| `busy` | 実行中・他セッション占有 |
+| `timeout` | `maxCycles` 超過など |
+| `halt_expected` | call が stub HALT 以外で止まった |
+| `assert_failed` | expect 系の不一致 |
+| `unsupported` | 未実装メソッド |
+| `internal` | ホスト内部エラー |
+
+### ホスト → クライアント（event・購読時）
+
+```json
+{
+  "v": 1,
+  "type": "evt",
+  "event": "cpu.stopped",
+  "payload": {}
+}
+```
+
+`id` は付けない。クライアントは `session.subscribe` で購読する。
+
+## 共通型
+
+### アドレス
+
+メッセージ内では単位を明示する。
+
+| フィールド名の慣例 | 単位 |
+| --- | --- |
+| `*WordAddr` / `wordAddr` | MN1613 **ワード**アドレス |
+| `*ByteAddr` / `byteAddr` | **バイト**アドレス（Intel HEX / CDB と同じ） |
+| `port` | IO ポート番号（16bit） |
+
+HEX ロード時のアドレス欄は常にバイトアドレス（`emulater_code_test.mdc` 準拠）。
+
+### レジスタ（部分可）
+
+```json
+{
+  "R0": 3,
+  "R1": 4,
+  "R2": 0,
+  "R3": 0,
+  "R4": 0,
+  "SP": 65535,
+  "STR": 57344,
+  "IC": 512,
+  "CSBR": 0,
+  "SSBR": 0,
+  "TSR0": 0,
+  "TSR1": 0,
+  "OSR0": 0,
+  "OSR1": 0,
+  "OSR2": 0,
+  "NPP": 0,
+  "IISR": 0,
+  "SBRB": 0,
+  "ICB": 0
+}
+```
+
+`get` 応答のフルセットは `CPURegister` に合わせ、`R` は長さ 5 の配列でもよい（ホスト実装の都合でどちらかに統一すること。推奨: 応答は `R:[...]` + 個別フィールド併記なし、または個別のみ。**当面は個別 `R0`〜`R4` + `SP`/`STR`/`IC`/...** とする）。
+
+### 実行状態 `status`
+
+`"idle" | "running" | "step" | "break" | "halted"`（`mn1613.ts` の `ExecStatus`）
+
+### 数値
+
+JSON では 16bit/24bit 値は number（0〜）。64bit 時刻は **8 バイト配列**（上位が index 0）または hex 文字列 `"0123..."`。
+
+---
+
+## メソッド一覧
+
+優先度: **P0** コードテストに必須 / **P1** デバッグ UI / **P2** モニター・ハンドシェイク結合
+
+### 1. セッション（P0）
+
+| method | params | result | 説明 |
+| --- | --- | --- | --- |
+| `session.hello` | `{ client: string, features?: string[] }` | `{ server: "retrocpu_emu", v: 1, cpu: "mn1613", mode, features: string[] }` | 接続確認・能力交換 |
+| `session.setMode` | `{ mode: "ui"\|"test"\|"debug" }` | `{ mode }` | 実行モード切替 |
+| `session.subscribe` | `{ events: string[] }` | `{ events }` | イベント購読（`*` で全部） |
+| `session.unsubscribe` | `{ events: string[] }` | `{ events }` | 購読解除 |
+| `session.ping` | `{}` | `{ t: number }` | 疎通。`t` はホスト monotonic ms |
+
+### 2. CPU 制御（P0 / P1）
+
+| method | params | result | 優先 |
+| --- | --- | --- | --- |
+| `cpu.reset` | `{ clearMemory?: boolean }` | `{ status, registers }` | P0 |
+| `cpu.getState` | `{}` | `{ status, registers, pins? }` | P0 |
+| `cpu.setState` | `{ registers: Partial<Regs> }` | `{ registers }` | P0 |
+| `cpu.run` | `{ startWordAddr?: number, maxCycles?: number }` | `{ status, registers, cycles? }` | P0 |
+| `cpu.stop` | `{}` | `{ status, registers }` | P1 |
+| `cpu.step` | `{}` | `{ status, registers }` | P1 |
+| `cpu.startRun` | `{}` | `{ status }` | P1（`emu_loop` 連続実行。`ui`/`debug` 向け） |
+| `cpu.setPins` | `{ HLT?, RST?, IRQ0?, IRQ1?, IRQ2?, ... }` | `{ pins }` | P2 |
+
+`cpu.run` は完了（halt/break/timeout）まで応答を遅延する。長時間は `cpu.stopped` イベントと併用してよいが、**req/res は必ず返す**。
+
+### 3. メモリ / IO（P0 / P1）
+
+| method | params | result | 優先 |
+| --- | --- | --- | --- |
+| `mem.loadIntelHex` | `{ hex: string, clear?: boolean }` | `{ bytesWritten: number }` | P0 |
+| `mem.writeWords` | `{ wordAddr: number, words: number[] }` | `{ count }` | P0 |
+| `mem.writeBytes` | `{ byteAddr: number, bytes: number[] }` | `{ count }` | P0 |
+| `mem.readWords` | `{ wordAddr: number, count: number }` | `{ wordAddr, words: number[] }` | P0 |
+| `mem.readBytes` | `{ byteAddr: number, count: number }` | `{ byteAddr, bytes: number[] }` | P0 |
+| `mem.clear` | `{ fill?: number }` | `{}` | P0 |
+| `io.read` | `{ port: number, count?: number }` | `{ port, values: number[] }` | P2 |
+| `io.write` | `{ port: number, values: number[] }` | `{ count }` | P2 |
+
+`clear: true` のロードは事前に対象空間を 0 埋めしてから HEX を載せる。
+
+### 4. シンボル / コードテスト（P0）
+
+`emulater_code_test.mdc` の Remote 面。検証の **判定はクライアントでもホストでも可**。ホストに `expect*` を置くと Remote 往復が減る。
+
+| method | params | result | 説明 |
+| --- | --- | --- | --- |
+| `sym.loadCdb` | `{ cdb: string, replace?: boolean }` | `{ count: number }` | CDB ロード。`replace` 缺省 true |
+| `sym.resolve` | `{ name: string }` | `{ name, byteAddr, wordAddr, scope }` | ラベル解決 |
+| `sym.list` | `{ prefix?: string }` | `{ symbols: { name, byteAddr, wordAddr }[] }` | 一覧（デバッグ用） |
+| `test.configure` | `{ stackInit?, returnStubWordAddr?, maxCycles?, memoryBytes? }` | `{ config }` | ハーネス既定値 |
+| `test.writeZeroPageWords` | `{ words: Record<string, number> }` | `{ count }` | キーはワードアドレス文字列 `"16"` 等 |
+| `test.writeLabelWords` | `{ name: string, words: number[] }` | `{ wordAddr, count }` | |
+| `test.writeLabelBytes` | `{ name: string, bytes: number[] }` | `{ byteAddr, count }` | |
+| `test.call` | `{ name: string, registers?: Partial<Regs>, stack?: number[], maxCycles?: number }` | `{ status, registers, preCallSp, entryWordAddr }` | サブルーチン呼出相当 |
+| `test.expectRegisters` | `{ registers: Partial<Regs> }` | `{ ok: true }` or assert エラー | |
+| `test.expectMemoryWords` | `{ wordAddr: number, words: number[] }` | `{ ok: true }` | |
+| `test.expectMemoryBytes` | `{ byteAddr: number, bytes: number[] }` | `{ ok: true }` | |
+| `test.expectLabelWords` | `{ name: string, words: number[] }` | `{ ok: true }` | |
+| `test.expectLabelBytes` | `{ name: string, bytes: number[] }` | `{ ok: true }` | |
+| `test.expectStackWork` | `{ from: "preCallSp", offset: number, words: number[] }` | `{ ok: true }` | 直前の `test.call` の `preCallSp` を使う |
+
+#### `test.call` シーケンス（ホスト側）
+
+1. SP を `stackInit`（缺省 `0xFFFF`）に
+2. `stack[]` を順に PUSH（先頭が先 → 高位アドレス側）
+3. 戻りスタブ（`H`）ワードアドレスを PUSH
+4. `registers` を `setState`
+5. `IC = entryWordAddr` で `run`
+6. stub HALT で `{ status, registers, preCallSp, entryWordAddr }` を返す
+
+### 5. ブレイクポイント（P1）
+
+ソフト BP（エミュレータ内蔵）と、ハンドシェイク経由のハード相当 BP を分ける。
+
+#### 5a. エミュレータ命令 BP（ソフト）
+
+| method | params | result |
+| --- | --- | --- |
+| `bp.list` | `{}` | `{ wordAddrs: number[] }` |
+| `bp.add` | `{ wordAddr: number }` | `{ wordAddrs }` |
+| `bp.remove` | `{ wordAddr: number }` | `{ wordAddrs }` |
+| `bp.clear` | `{}` | `{}` |
+
+#### 5b. デバッグ仕様 BP（`retrocpu_debug.mdc` / HandShake）
+
+スロット数: 命令 0–7、メモリ/IO 合計 0–5。
+
+| method | params | result |
+| --- | --- | --- |
+| `bp.inst.set` | `{ slot: 0-7, wordAddr: number }` または byte 24bit アドレス | `{ slot }` |
+| `bp.inst.clear` | `{ slot: 0-7 }` | `{ slot }` |
+| `bp.memio.set` | `{ slot: 0-5, target: "mem"\|"io", dir: "read"\|"write", cond, count, addr, data?, history?: boolean }` | `{ slot }` |
+| `bp.memio.clear` | `{ slot: 0-5 }` | `{ slot }` |
+| `bp.memio.getHistory` | `{ slot: 0-5, clear?: boolean }` | HandShake `60h` 相当の構造化結果 |
+| `bp.getHit` | `{}` | `{ kind, slot, historyIndex?, registers, access? }` |
+
+`cond`: `"none" | "eq" | "neq" | "gte" | "lte" | "and_nz" | "and_z"`（HandShake Bit2–4 と対応。仕様差分は実装時に `HandShake.mdc` を正とする）。
+
+実機/モニター結合時はホストが HandShake コマンド（`40h`–`43h`, `60h`）に変換する。純エミュ単体ではローカル実装でよい。
+
+### 6. 逆アセンブル / ダンプ補助（P1）
+
+| method | params | result |
+| --- | --- | --- |
+| `disasm.range` | `{ wordAddr: number, count: number }` | `{ lines: { wordAddr, bytes: number[], text: string }[] }` |
+| `mem.dump` | `{ wordAddr: number, rows: number, cols?: number }` | `{ rows: { wordAddr, words: number[], ascii?: string }[] }` |
+
+### 7. IO ボードモック / ハンドシェイク（P2）
+
+モニターデバッグ用。ブラウザ内 `IoBoardHandshakeMock` を WS から触る。
+
+| method | params | result |
+| --- | --- | --- |
+| `hshk.mock.start` | `{ timeoutMs? }` | `{ serving: true }` |
+| `hshk.mock.stop` | `{}` | `{ serving: false }` |
+| `hshk.mock.getState` | `{}` | モード・LED・最終 BEEP・log 要約など |
+| `hshk.mock.setHexKeys` | `{ columns: number[8] }` | `{}` |
+| `hshk.mock.setPcKey` | `{ ascii: number, keyCode: number }` | `{}` |
+| `hshk.mock.setTimestamp` | `{ bytes: number[8] }` | `{}` |
+| `hshk.mock.sendToCpu` | `{ bytes: number[] }` | `{}` | IO→CPU 生フレーム（完了まで待機） |
+| `hshk.mock.handleOne` | `{}` | `{ response: number[] }` | CPU→IO 1 トランザクション（通常は `start` で自動） |
+
+### 8. スナップショット（P1）
+
+| method | params | result |
+| --- | --- | --- |
+| `emu.getSnapshot` | `{}` | `EmuSnapshot` 相当（status, regs, pins, memRows, frame） |
+
+---
+
+## イベント一覧
+
+| event | payload | 発火条件 |
+| --- | --- | --- |
+| `cpu.stopped` | `{ status, registers, reason?: "halt"\|"break"\|"step"\|"maxCycles"\|"halt_pin" }` | 実行停止 |
+| `cpu.started` | `{ status }` | `startRun` / `run` 開始 |
+| `bp.hit` | `{ kind: "soft"\|"inst"\|"mem"\|"io", slot?, wordAddr?, registers, access? }` | BP ヒット |
+| `hshk.cpuToIo` | `{ cmd, frame: number[], response?: number[] }` | モックが CPU→IO を処理した |
+| `hshk.ioToCpu` | `{ cmd, frame: number[] }` | モックが IO→CPU を送った |
+| `session.modeChanged` | `{ mode }` | モード変更 |
+| `log` | `{ level: "info"\|"warn"\|"error", message: string }` | ホストログ（任意） |
+
+---
+
+## コードテスト Remote の最小フロー
+
+```text
+session.hello
+session.setMode { mode: "test" }
+test.configure { maxCycles: 100000 }
+mem.clear
+mem.loadIntelHex { hex }
+sym.loadCdb { cdb }
+test.writeZeroPageWords { ... }      // 任意
+test.call { name: "add", registers: { R0: 3, R1: 4 } }
+test.expectRegisters { registers: { R0: 7 } }
+session.setMode { mode: "ui" }       // 任意
+```
+
+クライアントの `createMn1613CodeTest` Remote 実装は、上記メソッドに 1:1 でマップすれば Local と同じテストが書ける。
+
+## デバッグ UI の最小フロー
+
+```text
+session.hello
+session.setMode { mode: "debug" }
+session.subscribe { events: ["cpu.stopped", "bp.hit"] }
+mem.loadIntelHex { hex }
+bp.add { wordAddr }                 // または bp.inst.set
+cpu.run { startWordAddr }           // または cpu.startRun
+# ← evt cpu.stopped / bp.hit
+cpu.getState
+mem.readWords { wordAddr, count }
+disasm.range { wordAddr, count }
+cpu.step
+```
+
+## 実装メモ（規範）
+
+1. **単一フライト**: 同じ接続で `cpu.run` / `test.call` 実行中の再 `run` は `busy`
+2. **巨大 HEX**: 当面 1 メッセージ。1MB 超で問題が出たら `mem.loadIntelHexChunk`（`seq`, `last`）を追加
+3. **検証エラー**: `assert_failed` の `data` に `expected` / `actual` / `path`（例: `R0`, `mem:0100`）を必ず入れる
+4. **Local 互換**: Node vitest は WS なしで同一メソッド面を直接呼んでよい（CI 用）
+5. **CPU 当面 MN1613 のみ**。`session.hello.cpu` で拡張余地を残す
+6. 仕様衝突時の優先順位: 本ファイル（WS 面）＜ `HandShake.mdc`（階間コマンド）＜ `emulater_code_test.mdc`（call 規約）
+
+## 関連
+
+- エミュ主ループ: `retrocpu_emu.mdc`
+- コードテスト: `emulater_code_test.mdc`
+- デバッグ UI: `retrocpu_debug.mdc`
+- ハンドシェイク: `HandShake.mdc`
+- IO ボードモック実装: `retrocpu_emu/src/main/feature/board/handshake/io_board_mock.ts`

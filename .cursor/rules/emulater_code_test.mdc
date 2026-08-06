@@ -1,0 +1,139 @@
+---
+alwaysApply: false
+description: MN1613 アセンブラ／C 成果物をエミュレータで検証するコードテスト・ミドルウェア仕様
+---
+
+# エミュレータ・コードテスト（MN1613）
+
+根拠: 本ファイル。実装は `retrocpu_emu/src/main/feature/code_test/`。
+CPU コア API は `feature/cpu/mn1613/mn1613.ts`。
+
+## 目的
+
+アセンブラ（および将来 SDCC 等）が出力したバイナリを、**TypeScript のテストから MN1613 エミュレータ上で呼び出し・検証**する。
+ターゲット CPU は当面 **MN1613** のみ。
+
+## 成果物の入力
+
+| 入力 | 説明 |
+|------|------|
+| Intel HEX（`.ihx` / `.hex`） | プログラム／データのロード。レコード種別 00（データ）と 01（EOF）を必須対応 |
+| SDCC CDB（`.cdb`） | ラベル／シンボルのアドレス解決。最低限 `L:`（リンク）レコードを解決する |
+
+### アドレス単位（MN1613）
+
+- エミュレータ内部の IC / SP / メモリアクセスは **ワードアドレス**
+- 物理バッファは 1 ワード = 2 バイト（ビッグエンディアン）
+- Intel HEX のアドレス欄は **バイトアドレス** として解釈し、バッファオフセットにそのまま載せる  
+  → ワードアドレス `W` の命令は HEX 上 `2*W` に置かれる（REL 出力規約と同じ）
+- CDB の `L:` 末尾アドレスも当面 **バイトアドレス** として扱い、呼び出し時は `wordAddr = byteAddr / 2`（奇数ならエラー）
+
+## 実行モデル
+
+1. メモリを確保（既定: MN1613 フル空間相当）し、必要ならゼロクリア
+2. Intel HEX をロード
+3. CDB をロードしシンボル表を構築
+4. **スタックポインタを既定値で初期化**（既定 `SP = 0xFFFF`。メモリマップのスタック領域 `F800–FFFF` に合わせる）
+5. 任意でゼロページ／CDB ラベル先へ初期値を書き込む
+6. ラベルを「サブルーチン呼び出し」相当で実行:
+   - 指定のスタック値を積む（先に指定した方が先に PUSH → アドレスが高い側）
+   - 戻りスタブ（`H` 命令）のワードアドレスを PUSH
+   - レジスタを設定
+   - `IC = ラベルのワードアドレス` で `run`
+7. スタブで HALT したらレジスタ・メモリ・スタックワークを検証
+
+### 呼び出し規約（ミドルウェア側）
+
+MN1613 の `BAL`/`BALD` と同様、**戻り先ワードアドレスをスタックに積んでから入口へジャンプ**する。
+被試験コードが `RET` するとスタブに戻り、`H` で停止する。
+
+### スタックワークオフセット
+
+`call` 直前の SP を `preCallSp` とする（空きスロット）。
+
+例: `stack: [A]` のとき（初期 SP=`FFFF`）
+
+| アドレス | 内容 |
+|----------|------|
+| FFFF | A |
+| FFFE | 戻りスタブ |
+| FFFD | 空き ← `preCallSp` |
+
+- `expectStackWork({ from: "preCallSp", offset: 1, words: [stub] })`
+- `expectStackWork({ from: "preCallSp", offset: 2, words: [A] })`
+
+## TypeScript API（概要）
+
+```ts
+import { createMn1613CodeTest } from "../main/feature/code_test";
+
+const t = createMn1613CodeTest({
+  stackInit: 0xffff,       // 省略可
+  returnStubAddr: 0x17fe,  // ワード。省略可。ここに H を置く
+  maxCycles: 100_000,
+});
+
+t.loadIntelHex(hexText);
+t.loadCdb(cdbText);
+
+// ゼロページ（ワードアドレス → ワード値）
+t.writeZeroPageWords({ 0x10: 0x1234 });
+
+// CDB ラベル先へワード列／バイト列
+t.writeLabelWords("buf", [0x0001, 0x0002]);
+t.writeLabelBytes("buf", Uint8Array.from([0x00, 0x01]));
+
+const r = await t.call("add", {
+  registers: { R0: 3, R1: 4 },
+  stack: [0x1111], // RET 前に積む追加ワード（戻り先より先に PUSH）
+});
+
+// 検証ヘルパ
+t.expectRegisters({ R0: 7 });
+t.expectMemoryWords(0x0100, [0x0001, 0x0002]);
+t.expectLabelWords("buf", [0x0001, 0x0002]);
+t.expectStackWork({ from: "preCallSp", offset: 0, words: [0x1111] });
+```
+
+### `call` オプション
+
+| フィールド | 意味 |
+|------------|------|
+| `registers` | `R0`–`R4`, `STR`, `CSBR`, `SSBR` など（部分指定） |
+| `stack` | 呼び出し前に PUSH するワード列（戻りアドレスより前） |
+
+### 検証
+
+| API | 内容 |
+|-----|------|
+| 戻り値（レジスタ） | `expectRegisters` / `call` の戻り `registers` |
+| 所定メモリ | `expectMemoryWords` / `expectMemoryBytes`（ワード or バイトアドレス指定を明示） |
+| ラベル先 | `expectLabelWords` / `expectLabelBytes` |
+| スタックワーク | `expectStackWork`（`preCallSp` 基準のオフセット、または絶対ワードアドレス） |
+
+不一致時は例外（メッセージに期待値／実際値／アドレスを含める）。
+
+## ファイル配置
+
+```
+retrocpu_emu/src/main/feature/code_test/
+  index.ts
+  types.ts
+  intel_hex.ts
+  cdb.ts
+  mn1613_harness.ts
+retrocpu_emu/src/test/feature/code_test/
+  *.test.ts
+```
+
+## 拡張（将来）
+
+- TMS9995 等の別 CPU ハーネス
+- CDB の `S:`/`F:` からの型・サイズ利用
+- ソース行 `L:C$...` ブレーク
+
+## 関連
+
+- メモリマップ: `MN1613_CPUボードメモリ_IOマップ.mdc`
+- エミュレータ概要: `retrocpu_emu.mdc`
+- 命令: `MN1610.mdc` / `MN1613.mdc`

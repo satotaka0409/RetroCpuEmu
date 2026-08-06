@@ -106,17 +106,17 @@ beforeEach(() => {
     BSAV: false,
     STRT: false,
   });
-  reset();
   clearBreakpoints();
   setIoReadCallback((_p) => 0x00);
   setIoWriteCallback((_p, _v) => {});
+  reset();
 });
 
 // ─────────────────────────────────────────────
 // 1. リセット / 初期状態
 // ─────────────────────────────────────────────
 describe("reset", () => {
-  it("全レジスタが 0 で IC=0 になる", () => {
+  it("全レジスタが 0 で IC は IO:0（テストでは 0）になる", () => {
     const s = getState();
     expect(s.R[0]).toBe(0);
     expect(s.R[4]).toBe(0);
@@ -130,8 +130,15 @@ describe("reset", () => {
     expect(getState().NPP).toBe(0x01);
   });
 
-  it("getExecStatus() は idle を返す", () => {
-    expect(getExecStatus()).toBe("idle");
+  it("getExecStatus() は running を返す（リセット後は実行開始）", () => {
+    expect(getExecStatus()).toBe("running");
+  });
+
+  it("IO:0 の値が IC に入る", () => {
+    setIoReadCallback((p) => (p === 0 ? 0x1234 : 0));
+    reset();
+    expect(getState().IC).toBe(0x1234);
+    expect(getExecStatus()).toBe("running");
   });
 });
 
@@ -902,7 +909,8 @@ describe("setPins / getPins", () => {
     setPins({ RST: true }); // 立ち上がりでリセット
     setPins({ RST: false }); // 立ち下がり（何もしない）
     expect(getState().R[0]).toBe(0x0000); // リセットされた
-    expect(getState().IC).toBe(0);
+    expect(getState().IC).toBe(0); // beforeEach の IO:0 → 0
+    expect(getExecStatus()).toBe("running");
   });
 
   it("setPins({ IRQ1: true }) でペンディング IRQ がセットされる", () => {

@@ -16,3 +16,12 @@ export {
   IO_PORT,
   HSHK_CTRL_BIT,
 } from "./io_port_bridge";
+export {
+  IoBoardHandshakeMock,
+  createIoBoardHandshakeMock,
+  createDefaultCpuToIoHandlers,
+  wireHshkReq1ToIrq2,
+  type IoBoardMockOptions,
+  type IoBoardMockState,
+  type IoBoardMockLogEntry,
+} from "./io_board_mock";
