@@ -9,7 +9,7 @@ alwaysApply: true
 - 12V ACアダプタ<br>
 - USB Type-C 12V-PDを使用<br>
 - （PC接続用のUSB Type-Cとは別系統）
-- 上記を併用できる構造とする<br>
+- 上記を併用できる構造とする 12V ACアダプタ優先の保護ダイオードを設ける。<br>
 
 ## SoCとして RP2354B を使用
 
@@ -31,16 +31,18 @@ alwaysApply: true
 
 ### ステレオオーディオ
 
-- ステレオオーディオ出力: I2C+I2Sで使えるPCM5102Aを使用(I2C側 PIO:2本-MAX6955と共通 I2S側 PIO:3本)<br>
+- ステレオオーディオ出力: I2Sで使えるPCM5102Aを使用(共通 I2S側 PIO:3本)<br>
 - オーディオ出力では、PIOを使ったダブルバッファにてDMAで出力する<br>
-- ステレオオーディオ入力: RP2354B 内蔵ADC使用(PIO:2本)<br>
-- オーディオ入力では、PIOを使ったダブルバッファにてDMAで入力する<br>
+- ステレオオーディオ入力: RP2354B 内蔵ADC使用(ADC専用ピン:2本)<br>
+- オーディオ入力では、PIOを使ったダブルバッファにてDMAで入力する（ADC->DMA直）<br>
 
 ### その他のデバイス
 
 - SDカードスロット(ハイスピード対応)(PIO:7本)<br>
-- USB Type-A カメラ入力用 / SDR USB受信機入力用(PIO:0本 PC接続用 USBと兼用)<br>
-- USB HUB ICを使ってHUB内蔵ボードとする（Microchip USB2422を使用）<br>
+- 温度センサー MCP9808（Microchip）(I2C PIO:2本-MAX6955と共通)<br>
+- リアルタイムクロック PCF8523（NXP）(I2C PIO:2本-MAX6955と共通)<br>
+- 色センサー TCS34725(I2C PIO:2本-MAX6955と共通)<br>
+- 距離センサー VL53L1X(I2C PIO:2本-MAX6955と共通)<br>
 
 ### 2階ボードとの接続
 
@@ -57,7 +59,7 @@ alwaysApply: true
 - HSHK_ENA PIO:1本
 - HSHK_DENA PIO:1本
 - HSHK_DACK PIO:1本
-- CLK PIO:1本((2階ボードとの接続で記載)<br>
+- CLK PIO:1本(2階ボードとの接続で記載)<br>
 - IN DATA レトロCPUボード -> 制御・I/Oボード PIO:1本(8Bit シリアル転送)<br>
 - OUT DATA レトロCPUボード <- 制御・I/Oボード PIO:1本(8Bit シリアル転送)<br>
 - HSHK_DENAでパラレル->シリアル変換が始まる 8Clockで変換完了
@@ -67,107 +69,45 @@ alwaysApply: true
 
 ### DMA転送用
 
-> 2階から1階にデータを直接RAMに書いたり読んだりする<br>
-> DMAは HALT 確定後のみ。A_ENABLE/D_ENABLE はそれ以外無視<br>
+> 2階から1階にデータを直接RAMに書く（読み込みは不可）<br>
+> DMAは HALT 確定後のみ<br>
 
 - DATA PIO:8本<br>
-- A_ENABLE PIO:1本<br>
+- AC_ENABLE PIO:1本<br>
 - D_ENABLE PIO:1本<br>
-- CLK PIO:1本((2階ボードとの接続で記載)<br>
+- CLK PIO:1本(2階ボードとの接続で記載)<br>
 - HALT PIO:1本<br>
 - RUN PIO:1本<br>
 - DMA_ENA PIO:1本<br>
-- GPIO節約のため、同期式でアドレス／データ双方を **データ8本 + A_ENABLE + D_ENABLE + CLK**（計11本、ENABLEはアドレスとデータで分ける）で制御する。<br>
+- GPIO節約のため、同期式でアドレス／データ双方を **データ8本 + AC_ENABLE + D_ENABLE + CLK**（計11本、ENABLEはアドレスとデータで分ける）で制御する。<br>
 
 1. 初期化
-   1-1. A_ENABLE:L
-   1-2. D_ENABLE:L
-   1-3. DMA_ENA:H
+   1-1. AC_ENABLE:L<br>
+   1-2. D_ENABLE:L<br>
+   1-3. DMA_ENA:H<br>
 2. 1階ボードから HALT でCPUを停止する
 3. RUNが無効になるのを待つ
-4. 5 or 6 を転送回数分ループする
-5. 書き込みの場合
-   5-1. アドレス 24–31 をDATAに出力
-   5-2. A_ENABLE:H CLK:H
-   5-3. CLK:L
-   5-4. アドレス 16–23 をDATAに出力
-   5-5. CLK:H
-   5-6. CLK:L
-   5-7. アドレス 8–15 をDATAに出力
-   5-8. CLK:H
-   5-9. CLK:L
-   5-10. アドレス 0–7 をDATAに出力
-   5-11. CLK:H
-   5-12. A_ENABLE:L CLK:L
-   5-13. Bit0 0:IO/1:MEM , Bit1 0:WRT をDATAに出力
-   5-14. D_ENABLE:H CLK:H
-   5-15. データ 8–15 をDATAに出力
-   5-16. D_ENABLE:H CLK:H
-   5-17. CLK:L
-   5-18. データ 0–7 をDATAに出力
-   5-19. CLK:H
-   5-20. D_ENABLE:L CLK:L
-6. 読み込みの場合
-   6-1. アドレス 24–31 をDATAに出力
-   6-2. A_ENABLE:H CLK:H
-   6-3. CLK:L
-   6-4. アドレス 16–23 をDATAに出力
-   6-5. CLK:H
-   6-6. CLK:L
-   6-7. アドレス 8–15 をDATAに出力
-   6-8. CLK:H
-   6-9. CLK:L
-   6-10. アドレス 0–7 をDATAに出力
-   6-11. CLK:H
-   6-12. A_ENABLE:L CLK:L
-   6-13. Bit0 0:IO/1:MEM , Bit1 1:RD をDATAに出力
-   6-14. D_ENABLE:H CLK:H
-   6-15. データ 8–15 をDATAに出力
-   6-16. D_ENABLE:H CLK:H
-   6-17. CLK:L
-   6-18. データ 0–7 をDATAに出力
-   6-19. CLK:H
-   6-20. D_ENABLE:L CLK:L
-7. 完了処理
-   7-1. DMA_ENA:L
-
-#### アドレス転送（A_ENABLE）
-
-| 手順 | A_ENABLE | CLK | バス上の内容       |
-| ---: | :------: | :-: | ------------------ |
-|    1 |    H     |  H  | アドレス 24–31     |
-|    2 |    H     |  L  | （ホールド／切替） |
-|    3 |    H     |  H  | アドレス 16–23     |
-|    4 |    H     |  L  | （ホールド／切替） |
-|    5 |    H     |  H  | アドレス 8–15      |
-|    6 |    H     |  L  | （ホールド／切替） |
-|    7 |    H     |  H  | アドレス 0–7       |
-|    8 |    L     |  L  | 終了               |
-|      |          |     |                    |
-
-#### DMAデータ転送（書き込み D_ENABLE）
-
-| 手順 | D_ENABLE | CLK | バス上の内容                 |
-| ---: | :------: | :-: | ---------------------------- |
-|    1 |    H     |  H  | Bit0 0:IO/1:MEM , Bit1 0:WRT |
-|    2 |    H     |  L  | （ホールド／切替）           |
-|    3 |    H     |  H  | データ 8–15 1階->2階         |
-|    4 |    H     |  L  | （ホールド／切替）           |
-|    5 |    H     |  H  | データ 0–7 1階->2階          |
-|    7 |    L     |  L  | 終了                         |
-|      |          |     |                              |
-
-#### DMAデータ転送（読み込み D_ENABLE）
-
-| 手順 | D_ENABLE | CLK | バス上の内容                |
-| ---: | :------: | :-: | --------------------------- |
-|    1 |    H     |  H  | Bit0 0:IO/1:MEM , Bit1 1:RD |
-|    2 |    H     |  L  | （ホールド／切替）          |
-|    3 |    H     |  H  | データ 8–15 2階->1階        |
-|    4 |    H     |  L  | （ホールド／切替）          |
-|    5 |    H     |  H  | データ 0–7 2階->1階         |
-|    7 |    L     |  L  | 終了                        |
-|      |          |     |                             |
+4. 書き込み（これらの手順はPIOのシーケンスで実装する）<br>
+   4-1. アドレス 24–31 をDATAに出力 AC_ENABLE:H CLK:H<br>
+   4-2. CLK:L<br>
+   4-3. アドレス 16–23 をDATAに出力 CLK:H<br>
+   4-4. CLK:L<br>
+   4-5. アドレス 8–15 をDATAに出力 CLK:H<br>
+   4-6. CLK:L<br>
+   4-7. アドレス 0–7 をDATAに出力 CLK:H<br>
+   4-8. CLK:L<br>
+   4-9. ループ数 8–15 をDATAに出力 CLK:H<br>
+   4-10. CLK:L<br>
+   4-11. ループ数 0–7 をDATAに出力 CLK:H<br>
+   4-12. AC_ENABLE:L CLK:L<br>
+   4-13. 以下をループ数分繰り返し<br>
+   4-14. データ 8–15 をDATAに出力 D_ENABLE:H CLK:H<br>
+   4-15. CLK:L<br>
+   4-16. データ 0–7 をDATAに出力 CLK:H<br>
+   4-17. D_ENABLE:L CLK:L<br>
+5. 完了処理<br>
+   5-1. DMA_ENA:L<br>
+   ※ループ数であってバイト数ではない<br>
 
 ### アドレスブレイク
 
@@ -184,7 +124,7 @@ alwaysApply: true
 - 書き込みの場合は、前回値比較が行える（こちらはIO/MEM両方で前回値が取得できる。CPLDに前回値を保存しておく。取り出しはIOポートを読み込む）<br>
 - 履歴機能があり、後から履歴を参照することができる（1つの比較器に対して最大16履歴　値比較不一致の場合は履歴に書かない）
 - 履歴に時刻を記録するため、ハンドシェイクで時刻取得を行う<br>
-- 履歴は、その時のCPUレジスタの状態、書き込んだ値、前回書き込み値　が履歴として残る<br>
+- 履歴は、その時の時刻、CPUレジスタの状態、書き込んだ値、前回書き込み値　が履歴として残る<br>
 
 ### RP2354B IOピンの機能内訳
 
@@ -224,14 +164,13 @@ alwaysApply: true
 | DMA専用（追加）            | DMA_DATA5      |       GPIO29 |                                       |
 | DMA専用（追加）            | DMA_DATA6      |       GPIO30 |                                       |
 | DMA専用（追加）            | DMA_DATA7      |       GPIO31 |                                       |
-| DMA専用（追加）            | A_ENABLE       |       GPIO32 |                                       |
+| DMA専用（追加）            | AC_ENABLE      |       GPIO32 |                                       |
 | DMA専用（追加）            | D_ENABLE       |       GPIO33 |                                       |
 | DMA専用（追加）            | HALT           |       GPIO34 |                                       |
 | DMA専用（追加）            | RUN            |       GPIO35 |                                       |
 | DMA専用（追加）            | DMA_ENA        |       GPIO36 | DMA CLK は SYNC_CLK(GPIO18) を共用    |
 | オーディオ入力（内蔵ADC）  | AUDIO_IN_L     |       GPIO37 | ステレオ入力 L（ADC機能ピンを要確認） |
 | オーディオ入力（内蔵ADC）  | AUDIO_IN_R     |       GPIO38 | ステレオ入力 R（ADC機能ピンを要確認） |
-| USB Type-A（カメラ/SDR）   | USB共用        |            - | GPIO消費なし（USB接続を共用）         |
 
 | 集計種別     | 本数 | 説明                                                                |
 | ------------ | ---: | ------------------------------------------------------------------- |
@@ -241,5 +180,3 @@ alwaysApply: true
 # 回路図エディタ
 
 KiCAD で回路図を作成する
-
-#
