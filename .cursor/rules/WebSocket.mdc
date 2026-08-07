@@ -19,6 +19,21 @@ description: Cursor/CLI/vitest とブラウザ上 retrocpu_emu 間の WebSocket 
 
 CPU 実行の本体は常に **ブラウザ側**。クライアントはリモート API としてメッセージを送る。
 
+## UI 役割分担
+
+ブラウザに見せるのは **1階 IO ボード相当だけ**。デバッグ用パネルは Cursor 拡張（本 WS）側。
+
+| 画面要素 | 置き場所 |
+| --- | --- |
+| 7セグ（ADDR 8 + DATA 4） | ブラウザ（IO ボード） |
+| 砲弾 LED 16 | ブラウザ（IO ボード） |
+| 16進キー + ファンクションキー 8 | ブラウザ（IO ボード）。F0–F7 の役割は後で決定 |
+| メモリダンプ | Cursor 拡張 |
+| レジスタ表示 | Cursor 拡張 |
+| CPU ステータス表示 | Cursor 拡張 |
+| ログ／デバッグコンソール | Cursor 拡張 |
+| HALT / RUN / STEP / RESET 操作 | Cursor 拡張（将来はファンクションキーにも割当可） |
+
 ## 接続モデル
 
 ```text

@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: "0.0.0.0",
+    // WSL 上で Windows 側ブラウザから localhost で触れるよう待受
+    host: "127.0.0.1",
+    strictPort: true,
   },
   build: {
     outDir: "../../dist",

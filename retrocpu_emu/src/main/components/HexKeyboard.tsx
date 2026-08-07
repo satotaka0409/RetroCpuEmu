@@ -14,16 +14,14 @@ const hexKeys: string[][] = [
 ];
 
 const functionKeys: string[] = [
-  "ADR SET",
-  "RUN",
-  "INC",
-  "DEC",
-  "WRT INC",
-  "WRT DEC",
-  "BREAK",
-  "STEP",
-  "RESET",
-  "",
+  "F0",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
 ];
 
 export const HexKeyboard: React.FC<HexKeyboardProps> = ({
@@ -39,6 +37,7 @@ export const HexKeyboard: React.FC<HexKeyboardProps> = ({
               <button
                 className="hex-key"
                 key={key}
+                type="button"
                 onClick={() => onHexClick && onHexClick(key)}
               >
                 {key}
@@ -48,12 +47,13 @@ export const HexKeyboard: React.FC<HexKeyboardProps> = ({
         ))}
       </div>
       <div className="function-keys function-keys-grid">
-        {[0, 1, 2, 3, 4].map((row) => (
+        {[0, 1, 2, 3].map((row) => (
           <div className="function-key-row" key={row}>
             {functionKeys.slice(row * 2, row * 2 + 2).map((fn) => (
               <button
                 className="function-key"
                 key={fn}
+                type="button"
                 onClick={() => onFunctionClick && onFunctionClick(fn)}
               >
                 {fn}

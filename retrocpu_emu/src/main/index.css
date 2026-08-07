@@ -23,7 +23,7 @@ body {
 }
 
 .emu-shell {
-  width: min(1320px, 100%);
+  width: min(720px, 100%);
   border: 2px solid #59636f;
   border-radius: 16px;
   padding: 16px;
@@ -58,47 +58,12 @@ body {
   text-transform: uppercase;
 }
 
-.header-controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.control-pill {
-  border: 1px solid #717b88;
-  background: linear-gradient(180deg, #515a66, #3b434f);
-  color: #f7f5ee;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-}
-
-.control-pill.danger {
-  background: linear-gradient(180deg, #91302b, #69201c);
-  border-color: #b56056;
-}
-
-.emu-main {
+.io-board-main {
   display: grid;
-  grid-template-columns: 1.08fr 1fr;
   gap: 14px;
-  min-height: 520px;
 }
 
-.left-panel,
-.status-panel,
-.memory-panel,
-.emu-footer {
-  display: grid;
-  gap: 12px;
-}
-
-.left-panel h2,
-.status-panel h2,
-.memory-panel h2,
-.emu-footer h2 {
+.io-board-main h2 {
   font-size: 0.9rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
