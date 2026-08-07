@@ -5,32 +5,29 @@ CURRENT_GID := $(shell id -g)
 NODE_MAJOR ?= 24
 NODESOURCE_SETUP_URL := https://deb.nodesource.com/setup_$(NODE_MAJOR).x
 
-# 個人の設定は local.mk に記載（git 管理外）
 -include local.mk
 
-.PHONY: install dev test build preview clean typescript typescript_uninstall
+.PHONY: install build start dev test clean typescript typescript_uninstall
 
-## WSL 上で依存関係を入れる
 install:
 	npm install
 
-## Vite 開発サーバ（http://127.0.0.1:5173）
+build:
+	npm run build
+
+## Electron アプリ起動（ビルド込み）
+start:
+	npm start
+
 dev:
 	npm run dev
 
 test:
 	npm test
 
-build:
-	npm run build
-
-preview:
-	npm run preview
-
 clean:
 	rm -rf node_modules dist coverage
 
-## Node.js / npm を WSL に入れ直して npm install
 typescript:
 	sudo apt update && \
 	curl -fsSL $(NODESOURCE_SETUP_URL) | sudo -E bash - && \

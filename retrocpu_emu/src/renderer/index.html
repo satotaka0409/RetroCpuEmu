@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IO Board</title>
+    <link rel="stylesheet" href="./styles/index.css" />
+    <link rel="stylesheet" href="./styles/hex-keyboard.css" />
+    <link rel="stylesheet" href="./styles/seven-segment.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div class="emu-shell io-board-shell">
+        <header class="emu-header panel">
+          <h1>IO Board</h1>
+        </header>
+
+        <main class="io-board-main panel">
+          <div class="led-stack">
+            <section class="led-card">
+              <h3>7-Segment (ADDR 8 + DATA 4)</h3>
+              <div class="led-bank-split">
+                <div class="led-group">
+                  <div id="addr-bank" class="led-bank led-bank-addr"></div>
+                  <span class="led-caption">ADDRESS</span>
+                </div>
+                <div class="led-group">
+                  <div id="data-bank" class="led-bank"></div>
+                  <span class="led-caption">DATA</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="led-card">
+              <h3>Bullet LEDs (0–F)</h3>
+              <div class="bullet-leds-wrap">
+                <div id="bullet-row" class="bullet-led-row"></div>
+              </div>
+            </section>
+          </div>
+
+          <div id="hex-keyboard-root" class="hex-keyboard-root"></div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

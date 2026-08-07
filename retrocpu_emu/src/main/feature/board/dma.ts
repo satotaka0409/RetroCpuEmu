@@ -1,11 +1,11 @@
 /**
- * DMA バス（ioboard.mdc）
+ * DMA バス信号シミュ（ioboard.mdc）
  *
- * 1階(IO)がマスタ。CLK はハンドシェイクと共有可。
- * DMA_ENA アサート中は他処理を止める（emu_loop 側で isDmaBusy を見る）。
+ * 本番の RAM 書き込みは CPU ボードの `CpuDmaTarget`（書き込み専用）。
+ * 本クラスは同一プロセス試験用のバス波形＋書き込みアダプタ。
+ * IO→CPU の読み込みは仕様上禁止（read API なし）。
  *
  * HALT / RUN は CPU の setPins({ HLT }) / getPins().RUN に配線する。
- * （HSHK の CLK×8 シリアルはエミュしない。コマンド層・WS 呼び出しは後続）
  */
 
 import { getPins, setPins } from "../cpu/mn1613/mn1613";
@@ -25,8 +25,8 @@ export interface DmaSignals {
   DMA_ENA: Bit;
 }
 
-export type DmaMemory = {
-  readWord: (wordAddr: number) => number;
+/** 書き込み専用メモリアダプタ（読み込みメソッドを持たない） */
+export type DmaWriteMemory = {
   writeWord: (wordAddr: number, value: number) => void;
 };
 
@@ -73,15 +73,15 @@ async function pulseClk(bus: DmaSignals): Promise<void> {
 }
 
 /**
- * IOボード側 DMA マスタ。
- * 仕様: HALT 確定・RUN 無効後のみ A/D_ENABLE 有効。
+ * IOボード側 DMA マスタ（書き込み専用）。
+ * 仕様: HALT 確定・RUN 無効後のみ A/D_ENABLE 有効。読み込みサイクルは無い。
  */
 export class DmaMaster {
   private readonly cpu: DmaCpuBridge;
 
   constructor(
     private readonly bus: DmaSignals,
-    private readonly mem: DmaMemory,
+    private readonly mem: DmaWriteMemory,
     private readonly timeoutMs = 5000,
     cpu: DmaCpuBridge = liveDmaCpuBridge,
   ) {
@@ -106,26 +106,6 @@ export class DmaMaster {
         offset += 2;
         addr += 2;
       }
-    } finally {
-      await this.endSession();
-    }
-  }
-
-  async readBytes(byteAddr: number, length: number): Promise<Uint8Array> {
-    await this.beginSession();
-    try {
-      const out = new Uint8Array(length);
-      let offset = 0;
-      let addr = byteAddr >>> 0;
-      while (offset < length) {
-        const wordAddr = (addr / 2) >>> 0;
-        const word = await this.readWordCycle(wordAddr, true);
-        out[offset] = (word >>> 8) & 0xff;
-        if (offset + 1 < length) out[offset + 1] = word & 0xff;
-        offset += 2;
-        addr += 2;
-      }
-      return out;
     } finally {
       await this.endSession();
     }
@@ -204,40 +184,23 @@ export class DmaMaster {
     this.bus.D_ENABLE = 0;
     this.mem.writeWord(wordAddr, word & 0xffff);
   }
-
-  private async readWordCycle(
-    wordAddr: number,
-    memNotIo: boolean,
-  ): Promise<number> {
-    await this.putAddress(wordAddr);
-    // Bit0 MEM, Bit1 RD=1
-    const cmd = (memNotIo ? 1 : 0) | 0b10;
-    this.bus.D_ENABLE = 1;
-    this.bus.DATA = cmd;
-    await pulseClk(this.bus);
-    const word = this.mem.readWord(wordAddr) & 0xffff;
-    this.bus.DATA = (word >>> 8) & 0xff;
-    await pulseClk(this.bus);
-    this.bus.DATA = word & 0xff;
-    await pulseClk(this.bus);
-    this.bus.D_ENABLE = 0;
-    return word;
-  }
 }
 
-/** mn1613 ArrayBuffer（ワードビッグエンディアン）向けアダプタ */
-export function dmaMemoryFromArrayBuffer(buf: ArrayBuffer): DmaMemory {
+/** mn1613 ArrayBuffer 向け書き込み専用アダプタ */
+export function dmaWriteMemoryFromArrayBuffer(
+  buf: ArrayBufferLike,
+): DmaWriteMemory {
   const view = new DataView(buf);
   return {
-    readWord(wordAddr: number): number {
-      const off = (wordAddr & 0xffff) * 2;
-      if (off + 1 >= view.byteLength) return 0;
-      return view.getUint16(off, false);
-    },
     writeWord(wordAddr: number, value: number): void {
       const off = (wordAddr & 0xffff) * 2;
       if (off + 1 >= view.byteLength) return;
       view.setUint16(off, value & 0xffff, false);
     },
   };
+}
+
+/** @deprecated dmaWriteMemoryFromArrayBuffer を使う */
+export function dmaMemoryFromArrayBuffer(buf: ArrayBufferLike): DmaWriteMemory {
+  return dmaWriteMemoryFromArrayBuffer(buf);
 }

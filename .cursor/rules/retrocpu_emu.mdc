@@ -1,32 +1,71 @@
 # レトロCPUエミュレータの仕様
 
+## 動作モデル（CPU / IO / LED）
+
+- **ブートモニタは LED を使わない**（7セグ／砲弾への 0x16 は送らない）
+- 電源投入〜通常時、CPU は **基本 HALT** で止まり、**IO ボードからの指示**（DMA 書き込み・ハンドシェイク実行指示・割り込みなど）で動く
+- **ユーザープログラム実行時**に、そのプログラムがハンドシェイク **LED表示依頼 (0x16)** で点灯する（フリーモード）
+- 将来 BIOS 的な定型（最小モニタ／ハンドシェイク受け）は用意するが、**当面はほぼ無し**（暫定は入口に `H` を置いて即 HALT するスタブのみ）
+- 画面のモニター機能（ダンプ・レジスタ・BP）は Cursor 拡張側。IO ボード画面は 1階ハード相当のみ
+
 ## エミュレータは、以下の順序で処理を行い、無限ループで処理する
 
-- Typescript + React でブラウザ上で全て完結する
-- WEBサーバーは直接実行はnginx、Cursor実行はviteを使い、コンテンツの配信のみで使用する
-- Cursor/Vscode とWebSocketで通信して、ブレイクポイント、IntelHexフォーマットのロード、実行指示など<br>
-  1階 IOボードでも可能だが、Cursor/Vscode からでも操作が可能
-- CPUエミュ、エミュレーションメモリは、ブラウザ上に存在する
-  Cursorから直接CPUの状態を見たり、メモリを参照、書き換えることはできない
-  あくまで、WebSocketを通して操作する
-- 全体のエミュレーション処理自体は無限ループを回っている。その処理順は以下の通り
+- **TypeScript + Electron** のデスクトップアプリとして実行する（React / Vite / nginx は使わない）
+- 画面に出すのは **1階 IO ボード相当**のみ（7セグ・砲弾LED・16進／ファンクションキー）
+- Cursor/VS Code とは WebSocket で通信し、レジスタ・メモリ・BP・実行制御などは拡張側 UI が担う
+- **CPU エミュレーションと IO ボード エミュレーションは別スレッド（`worker_threads`）**で動作する
+- **RAM は CPU ボード（CPU Worker）専有**。IO ボードは共有しない
+- IO から RAM へのアクセスは **書き込み専用 DMA API**（`CpuDmaTarget`）のみ。**読み込みは禁止**
+- DMA 書き込みは **HALT / RESET（idle・RST・halted）時のみ**許可。実行中は HALT してから書く
+- ボード間の制御フラグと UI 用ステータスミラーのみ `SharedArrayBuffer` で共有する
+- Electron メインプロセスはワーカ起動・UI IPC のみ（CPU 本体と RAM は CPU ワーカ上）
+- Cursor から直接参照せず、WebSocket 経由で操作する
+- 全体のエミュレーション処理自体は各ワーカが独立にループする。処理内容は以下の通り
 
-1. レトロCPUエミュレーション処理<br>
+1. レトロCPUエミュレーション処理（**CPU Worker**）<br>
    1-1. リセット信号監視<br>
    1-2. HALT信号監視<br>
    1-3. 割り込み信号監視<br>
    1-4. 命令処理<br>
-2. IOボード エミュレーション処理<br>
+   1-5. ステータスミラーを SharedArrayBuffer に書き出し（IO が参照）<br>
+   1-6. DMA 書き込み受け口（IO→CPU、読み込み API なし）
+2. IOボード エミュレーション処理（**IO Worker**）<br>
    2-1. レトロCPUボードからの割り込み要求監視<br>
    2-1-1. ハンドシェイク処理<br>
-   2-2. DMA処理 - DMA処理は処理終了まで他の処理は行わない<br>
-   2-3. キーボード入力処理<br>
-   2-4. React表示<br>
+   2-2. DMA処理 - MessagePort 経由で CPU の書き込み API を呼ぶ。処理終了まで他の処理は行わない（`DMA_BUSY`）<br>
+   2-3. キーボード入力処理（16進＋F0–F7。メモリ R/W はハンドシェイク 50h/51h、実行は 49h）<br>
+   2-3-1. Cursor の Intel HEX ロードは **DMA 書き込み**（ハンドシェイクではない）<br>
+   2-4. Electron メイン経由でレンダラへスナップショット通知（IOボード表示）<br>
+   2-4-1. 7セグ／砲弾 LED は **ユーザープログラム**が送るハンドシェイク **0x16** のラッチを表示（モニタは送らない。RAM／レジスタ覗き見もしない）
 3. WebSocket 処理 - CursorとWebSocketで通信している（この辺はまだ曖昧）<br>
    3-1. Cursorからのリクエスト処理<br>
    3-1-1. レジスタ表示リクエスト(IOボードが1度受けて、CPUボードにハンドシェイクで問い合わせ)<br>
    3-1-2. メモリダンプ(IOボードが1度受けて、CPUボードにハンドシェイクで問い合わせ)<br>
    3-1-3. ブレイクポイント(IOボードが1度受けて、CPUボードにハンドシェイクで設定)<br>
+
+## スレッド構成
+
+```text
+Electron Main
+  ├── CPU Worker   … mn1613 + RAM + CpuDmaTarget + BoardLink（DMA + hshk）+ status ミラー
+  ├── IO Worker    … tickIoBoard + IoConsole（F0–F7）+ BoardLinkClient + UI snapshot
+  └── Renderer     … IO ボード画面（IPC: keyHex / keyFn / loadIntelHex）
+
+SharedArrayBuffer: control + status のみ（RAM は含めない）
+MessageChannel:    IO → CPU（DMA 書き込み + ハンドシェイク 50h/51h/49h + HALT/RESET）
+```
+
+
+## 起動
+
+```bash
+cd retrocpu_emu
+npm install
+npm start          # ビルド後 Electron 起動
+# または Cursor: 「レトロマイコンエミュ Debug」
+```
+
+> Cursor / VS Code の統合ターミナルでは `ELECTRON_RUN_AS_NODE=1` が渡り、Electron API が無効になることがある。`npm start` / launch.json では解除済み。手動起動時は `env -u ELECTRON_RUN_AS_NODE electron .` を使う。
 
 ## エミュレータのCPU入力ピンの取り扱い方
 

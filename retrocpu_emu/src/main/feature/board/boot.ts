@@ -1,9 +1,14 @@
 /**
- * ブラウザ起動シーケンス（1階相当）
+ * 起動シーケンス（1階 IO 主導）
  * 根拠: MN1613.mdc リセット / MN1613_CPUボードメモリ_IOマップ.mdc / retrocpu_emu.mdc
  *
- * 本来: MONITOR を RAM 展開 → IO:0 に 0x0200 → RST パルス
- * 暫定: 0x0200 に H を置き、同様にリセットして即 HALT
+ * 動作モデル:
+ *   - ブートモニタは LED を使わない
+ *   - CPU は基本 HALT。IO ボードからの DMA／ハンドシェイク指示で動く
+ *   - LED(0x16) はユーザープログラム実行時のみ
+ *
+ * 当面の暫定: BIOS/モニタ本体は無し。0x0200 に H を置き RST → 即 halted
+ * （将来: 最小モニタを DMA で載せて IO 指示待ちループにする）
  */
 
 import {
@@ -66,7 +71,8 @@ export function enterResetWait(): BootResult {
 }
 
 /**
- * 暫定 MONITOR スタブ: 入口に H を置き、RESET_VECTOR=0x0200 を IO:0 に流す。
+ * 暫定ブートスタブ: 入口に H を置き、RESET_VECTOR=0x0200 を IO:0 に流す。
+ * （モニタ本体は未実装。LED も使わない）
  */
 export function loadHaltStubAtMonitorEntry(): BootResult {
   writeWord(MONITOR_ENTRY_WORD, OPCODE_H);
@@ -101,8 +107,8 @@ export function pulseCpuReset(): BootResult {
 }
 
 /**
- * ブラウザ向けコールドブート（MONITOR 無し暫定）。
- * リセット待ち → HALT スタブ展開 → RST →（emu_loop が H を実行して halted）
+ * コールドブート（BIOS/モニタ無し暫定）。
+ * リセット待ち → HALT スタブ展開 → RST →（CPU Worker が H を実行して halted＝IO 指示待ち）
  */
 export function coldBootHaltStub(): BootResult {
   const logs: string[] = [];

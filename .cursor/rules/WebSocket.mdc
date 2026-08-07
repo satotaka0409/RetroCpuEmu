@@ -1,6 +1,6 @@
 ---
 alwaysApply: false
-description: Cursor/CLI/vitest とブラウザ上 retrocpu_emu 間の WebSocket メッセージ仕様
+description: Cursor/CLI/vitest と Electron 上 retrocpu_emu 間の WebSocket メッセージ仕様
 ---
 
 # WebSocket メッセージ仕様
@@ -9,7 +9,7 @@ description: Cursor/CLI/vitest とブラウザ上 retrocpu_emu 間の WebSocket 
 
 ## 目的
 
-ブラウザ上で動く `retrocpu_emu` を、次のクライアントから操作・検証する。
+Electron で動く `retrocpu_emu` を、次のクライアントから操作・検証する。
 
 | クライアント | 用途 |
 | --- | --- |
@@ -17,41 +17,42 @@ description: Cursor/CLI/vitest とブラウザ上 retrocpu_emu 間の WebSocket 
 | Cursor / VS Code 拡張 | デバッグ UI（レジスタ・メモリ・BP・実行制御） |
 | 将来: 実 IO ボード経由 | 同じコマンド面を USB 側でも共有可能にする |
 
-CPU 実行の本体は常に **ブラウザ側**。クライアントはリモート API としてメッセージを送る。
+CPU 実行の本体は常に **Electron メインプロセス側**。クライアントはリモート API としてメッセージを送る。
 
 ## UI 役割分担
 
-ブラウザに見せるのは **1階 IO ボード相当だけ**。デバッグ用パネルは Cursor 拡張（本 WS）側。
+Electron ウィンドウに見せるのは **1階 IO ボード相当だけ**。デバッグ用パネルは Cursor 拡張（本 WS）側。
 
 | 画面要素 | 置き場所 |
 | --- | --- |
-| 7セグ（ADDR 8 + DATA 4） | ブラウザ（IO ボード） |
-| 砲弾 LED 16 | ブラウザ（IO ボード） |
-| 16進キー + ファンクションキー 8 | ブラウザ（IO ボード）。F0–F7 の役割は後で決定 |
+| 7セグ（ADDR 8 + DATA 4） | Electron（IO ボード）。パネル操作で更新。ユーザープログラムは 0x16 |
+| 砲弾 LED 16 | Electron（IO ボード）。E/F=ADS フォーカス等 |
+| 16進キー + ファンクションキー 8 | Electron（IO ボード）。F0=ADS … F7=RST（`ioboard.mdc`）。メモリ R/W はハンドシェイク |
 | メモリダンプ | Cursor 拡張 |
 | レジスタ表示 | Cursor 拡張 |
 | CPU ステータス表示 | Cursor 拡張 |
 | ログ／デバッグコンソール | Cursor 拡張 |
-| HALT / RUN / STEP / RESET 操作 | Cursor 拡張（将来はファンクションキーにも割当可） |
+| HALT / RUN / STEP / RESET 操作 | IO ファンクションキー、および Cursor 拡張 |
+| Intel HEX ロード | Cursor → **DMA 書き込み**（`mem.loadIntelHex`） |
 
 ## 接続モデル
 
 ```text
-[クライアント]  <---- WebSocket ---->  [ブラウザ retrocpu_emu]
-  request / response                     実行ホスト
-  （任意）subscribe events               emu_loop / mn1613 / code_test
+[クライアント]  <---- WebSocket ---->  [Electron retrocpu_emu]
+  request / response                     メインプロセス上の実行ホスト
+  （任意）subscribe events               CPU/IO Worker / mn1613 / code_test
 ```
 
 - 輸送: WebSocket、ペイロードは **UTF-8 JSON**（大きな HEX も当面 JSON 文字列。必要なら後でバイナリフレームを追加）
-- 終端: 開発時は Vite プロキシ or 小さな WS ブリッジ。本番 nginx は静的配信のみ想定のため、別途 WS 終端が必要
-- セッション: 接続あたり 1 エミュレータ。複数タブ接続時は後勝ち、または `busy` エラー
+- 終端: Electron 側が WS サーバを持つ、または小さなブリッジ。nginx / Vite は使わない
+- セッション: 接続あたり 1 エミュレータ。複数接続時は後勝ち、または `busy` エラー
 
 ### モード
 
 | モード | 説明 |
 | --- | --- |
-| `ui` | 通常。`emu_loop`（rAF）が CPU を進める。UI 操作と WS が共存 |
-| `test` | コードテスト専用。`emu_loop` の CPU 進行を止め、ホストが `run`/`step` を独占 |
+| `ui` | 通常。CPU/IO Worker が進行。UI 操作と WS が共存 |
+| `test` | コードテスト専用。Worker の CPU 連続進行を止め、ホストが `run`/`step` を独占 |
 | `debug` | デバッグ専用。BP 停止・ステップ・ダンプを優先。必要なら `ui` と併用可 |
 
 `session.setMode` で切替える。`test` 中の UI RUN は拒否してよい。
@@ -206,7 +207,7 @@ JSON では 16bit/24bit 値は number（0〜）。64bit 時刻は **8 バイト�
 | `cpu.run` | `{ startWordAddr?: number, maxCycles?: number }` | `{ status, registers, cycles? }` | P0 |
 | `cpu.stop` | `{}` | `{ status, registers }` | P1 |
 | `cpu.step` | `{}` | `{ status, registers }` | P1 |
-| `cpu.startRun` | `{}` | `{ status }` | P1（`emu_loop` 連続実行。`ui`/`debug` 向け） |
+| `cpu.startRun` | `{}` | `{ status }` | P1（CPU Worker 連続実行。`ui`/`debug` 向け） |
 | `cpu.setPins` | `{ HLT?, RST?, IRQ0?, IRQ1?, IRQ2?, ... }` | `{ pins }` | P2 |
 
 `cpu.run` は完了（halt/break/timeout）まで応答を遅延する。長時間は `cpu.stopped` イベントと併用してよいが、**req/res は必ず返す**。
@@ -215,7 +216,7 @@ JSON では 16bit/24bit 値は number（0〜）。64bit 時刻は **8 バイト�
 
 | method | params | result | 優先 |
 | --- | --- | --- | --- |
-| `mem.loadIntelHex` | `{ hex: string, clear?: boolean }` | `{ bytesWritten: number }` | P0 |
+| `mem.loadIntelHex` | `{ hex: string, clear?: boolean }` | `{ bytesWritten: number }` | P0（**DMA 書き込み**。ハンドシェイク 51h ではない） |
 | `mem.writeWords` | `{ wordAddr: number, words: number[] }` | `{ count }` | P0 |
 | `mem.writeBytes` | `{ byteAddr: number, bytes: number[] }` | `{ count }` | P0 |
 | `mem.readWords` | `{ wordAddr: number, count: number }` | `{ wordAddr, words: number[] }` | P0 |
@@ -295,7 +296,7 @@ JSON では 16bit/24bit 値は number（0〜）。64bit 時刻は **8 バイト�
 
 ### 7. IO ボードモック / ハンドシェイク（P2）
 
-モニターデバッグ用。ブラウザ内 `IoBoardHandshakeMock` を WS から触る。
+モニターデバッグ用。Electron 内 `IoBoardHandshakeMock` を WS から触る。
 
 | method | params | result |
 | --- | --- | --- |

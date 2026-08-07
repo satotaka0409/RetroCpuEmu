@@ -101,8 +101,8 @@ describe("CPU_FRAME_SIZE", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.HEX_KEY_GET]).toBe(1);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.PC_KEY_GET]).toBe(1);
   });
-  it("LED表示依頼は 13 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(13);
+  it("LED表示依頼は 15 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(15);
   });
   it("BEEP・タイマーは 5 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]).toBe(5);
@@ -236,41 +236,41 @@ describe("buildHexKeyGetFrame / buildPcKeyGetFrame", () => {
 
 describe("buildLedDisplayFrame", () => {
   const sevenSeg = new Uint8Array([
-    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f,
+    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c,
   ]);
 
-  it("13バイトのフレームを構築できる", () => {
+  it("15バイトのフレームを構築できる", () => {
     const frame = buildLedDisplayFrame({
       sevenSeg,
       bulletLed0_7: 0xab,
       bulletLed8_F: 0xcd,
     });
-    expect(frame.length).toBe(13);
+    expect(frame.length).toBe(15);
     expect(frame[0]).toBe(CMD_CPU_TO_IO.LED_DISPLAY);
   });
 
-  it("7セグデータが 0x01〜0x0A に格納される", () => {
+  it("7セグデータが 0x01〜0x0C に格納される", () => {
     const frame = buildLedDisplayFrame({
       sevenSeg,
       bulletLed0_7: 0,
       bulletLed8_F: 0,
     });
-    expect(Array.from(frame.slice(0x01, 0x0b))).toEqual(Array.from(sevenSeg));
+    expect(Array.from(frame.slice(0x01, 0x0d))).toEqual(Array.from(sevenSeg));
   });
 
-  it("砲弾LED が 0x0B, 0x0C に格納される", () => {
+  it("砲弾LED が 0x0D, 0x0E に格納される", () => {
     const frame = buildLedDisplayFrame({
       sevenSeg,
       bulletLed0_7: 0xab,
       bulletLed8_F: 0xcd,
     });
-    expect(frame[0x0b]).toBe(0xab);
-    expect(frame[0x0c]).toBe(0xcd);
+    expect(frame[0x0d]).toBe(0xab);
+    expect(frame[0x0e]).toBe(0xcd);
   });
 
-  it("sevenSeg が 10バイト以外の場合 RangeError をスロー", () => {
+  it("sevenSeg が 12バイト以外の場合 RangeError をスロー", () => {
     const bad: LedDisplayData = {
-      sevenSeg: new Uint8Array(9),
+      sevenSeg: new Uint8Array(10),
       bulletLed0_7: 0,
       bulletLed8_F: 0,
     };
@@ -496,7 +496,7 @@ describe("CpuToIoCommandDispatcher — LED表示依頼(0x16)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
   const sevenSeg = new Uint8Array([
-    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f,
+    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c,
   ]);
 
   beforeEach(() => {
@@ -621,7 +621,7 @@ describe("CpuToIoCommandDispatcher — エラーケース", () => {
   });
 
   it("フレーム長が不足している場合は NG を返す（LED表示 - 1バイト）", () => {
-    const short = new Uint8Array([CMD_CPU_TO_IO.LED_DISPLAY, 0x00]); // 2バイト、必要は13
+    const short = new Uint8Array([CMD_CPU_TO_IO.LED_DISPLAY, 0x00]); // 2バイト、必要は15
     expect(dispatcher.dispatch(short)[0]).toBe(RESPONSE_CODE.NG);
   });
 

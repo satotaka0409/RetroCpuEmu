@@ -50,7 +50,7 @@ export const CMD_CPU_TO_IO = {
   HEX_KEY_GET: 0x14,
   /** PCのキー入力を中継してキー入力状態を取得 */
   PC_KEY_GET: 0x15,
-  /** LED表示を指示（フリーモード時） */
+  /** LED表示を指示（フリーモード／ユーザープログラム用。モニタは使わない） */
   LED_DISPLAY: 0x16,
   /** BEEP音を鳴らす */
   BEEP: 0x18,

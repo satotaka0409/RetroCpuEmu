@@ -37,10 +37,11 @@ import { CMD_CPU_TO_IO, MODE, RESPONSE_CODE } from "./handshake_type";
 // 型定義
 // ─────────────────────────────────────────────
 
-/** LEDディスプレイデータ */
+/** LEDディスプレイデータ（HandShake.mdc LED表示依頼 0x16） */
 export interface LedDisplayData {
   /**
-   * 7セグメントLED 0〜9番のビットパターン (length=10)
+   * 7セグメントLED 0〜11番のビットパターン (length=12)
+   * 左から ADDR 8桁 + DATA 4桁。
    * ビット位置: [0,1,2,3,4,5,6,7] → 点灯位置: [a,b,c,d,e,f,g,dp]
    */
   sevenSeg: Uint8Array;
@@ -49,6 +50,8 @@ export interface LedDisplayData {
   /** 砲弾LED 8〜F番 ON/OFF (各Bit、1バイト) */
   bulletLed8_F: number;
 }
+
+export const LED_SEVEN_SEG_COUNT = 12;
 
 /** BEEP音パラメータ */
 export interface BeepParams {
@@ -93,7 +96,7 @@ export interface CpuToIoHandlers {
    */
   getPcKey(): { ascii: number; keyCode: number; status: number };
 
-  /** LED表示依頼 (cmd=0x16): フリーモード時のみ有効 */
+  /** LED表示依頼 (cmd=0x16): フリーモード／ユーザープログラム用。モニタは使わない */
   onLedDisplay(data: LedDisplayData): number;
 
   /**
@@ -136,8 +139,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.HEX_KEY_GET]: 1,
   /** PCキー入力取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.PC_KEY_GET]: 1,
-  /** LED表示依頼: cmd(1) + 7seg×10(10) + 砲弾LED×2(2) = 13バイト */
-  [CMD_CPU_TO_IO.LED_DISPLAY]: 13,
+  /** LED表示依頼: cmd(1) + 7seg×12(12) + 砲弾LED×2(2) = 15バイト */
+  [CMD_CPU_TO_IO.LED_DISPLAY]: 15,
   /** BEEP音: cmd(1) + 周波数(2) + 長さ(2) = 5バイト */
   [CMD_CPU_TO_IO.BEEP]: 5,
   /** タイマー設定: cmd(1) + 周期(2) + 回数(2) = 5バイト */
@@ -308,19 +311,19 @@ export function buildPcKeyGetFrame(): Uint8Array {
 /**
  * LED表示依頼フレームを構築する (cmd=0x16)。
  * フリーモード時のみ有効。
- * @param data sevenSeg は必ず length=10 の Uint8Array
+ * @param data sevenSeg は必ず length=12 の Uint8Array
  */
 export function buildLedDisplayFrame(data: LedDisplayData): Uint8Array {
-  if (data.sevenSeg.length !== 10) {
+  if (data.sevenSeg.length !== LED_SEVEN_SEG_COUNT) {
     throw new RangeError(
-      `sevenSeg must be exactly 10 bytes, got ${data.sevenSeg.length}`,
+      `sevenSeg must be exactly ${LED_SEVEN_SEG_COUNT} bytes, got ${data.sevenSeg.length}`,
     );
   }
   const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]);
   frame[0x00] = CMD_CPU_TO_IO.LED_DISPLAY;
-  frame.set(data.sevenSeg, 0x01); // 0x01〜0x0A
-  frame[0x0b] = data.bulletLed0_7 & 0xff;
-  frame[0x0c] = data.bulletLed8_F & 0xff;
+  frame.set(data.sevenSeg, 0x01); // 0x01〜0x0C
+  frame[0x0d] = data.bulletLed0_7 & 0xff;
+  frame[0x0e] = data.bulletLed8_F & 0xff;
   return frame;
 }
 
@@ -478,9 +481,9 @@ export class CpuToIoCommandDispatcher {
    */
   private _handleLedDisplay(frame: Uint8Array): Uint8Array {
     const data: LedDisplayData = {
-      sevenSeg: frame.slice(0x01, 0x0b), // 0x01〜0x0A: 10バイト
-      bulletLed0_7: frame[0x0b],
-      bulletLed8_F: frame[0x0c],
+      sevenSeg: frame.slice(0x01, 0x0d), // 0x01〜0x0C: 12バイト
+      bulletLed0_7: frame[0x0d]!,
+      bulletLed8_F: frame[0x0e]!,
     };
     const result = this.handlers.onLedDisplay(data);
     return new Uint8Array([result]);

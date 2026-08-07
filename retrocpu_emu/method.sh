@@ -1,5 +1,5 @@
 #!/bin/bash
-# WSL 上での補助スクリプト（Docker は使わない）
+# WSL 上での補助スクリプト（Electron アプリ）
 
 set -euo pipefail
 
@@ -27,21 +27,19 @@ case "${cmd}" in
     sudo chown -R "${UID_GID}" ./node_modules || true
     ;;
   install)
-    echo "npm install..."
     npm install
-    ;;
-  dev)
-    echo "Starting Vite on WSL (http://127.0.0.1:5173)..."
-    npm run dev
-    ;;
-  test)
-    npm test
     ;;
   build)
     npm run build
     ;;
+  start|dev)
+    npm start
+    ;;
+  test)
+    npm test
+    ;;
   *)
-    echo "Usage: $0 {typescript|install|dev|test|build}"
+    echo "Usage: $0 {typescript|install|build|start|dev|test}"
     exit 1
     ;;
 esac

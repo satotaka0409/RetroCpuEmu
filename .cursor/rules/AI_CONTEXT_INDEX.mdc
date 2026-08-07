@@ -16,8 +16,8 @@
   - `.cursor/rules/HandShake.md`
 - MN1613 アセンブラ成果物のエミュレータ検証（HEX / CDB / call）
   - `.cursor/rules/emulater_code_test.mdc`
-- ブラウザ retrocpu_emu と Cursor/CLI 間の WebSocket メッセージ
-  - `.cursor/rules/WebSOcket.mdc`
+- Electron 上 retrocpu_emu と Cursor/CLI 間の WebSocket メッセージ
+  - `.cursor/rules/WebSocket.mdc`
 - レジスタ表示レイアウト
   - `.cursor/rules/mn1613_register.png`
 - 7セグメント表示ビット定義

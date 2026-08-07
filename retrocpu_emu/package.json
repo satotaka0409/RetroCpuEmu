@@ -2,27 +2,23 @@
   "name": "retrocpu-emu",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
+  "description": "MN1613 Retro CPU Emulator (Electron IO Board)",
+  "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/node": "^22.15.30",
     "@vitest/coverage-v8": "^3.0.0",
-    "typescript": "^5.6.3",
-    "vite": "^6.0.5",
+    "electron": "^35.2.1",
+    "esbuild": "^0.25.4",
+    "typescript": "^5.9.2",
     "vitest": "^3.0.0"
   }
 }

@@ -47,15 +47,16 @@ import {
 // CSBR=0 なら 0〜0xFFFF のみ使用（MN1610 互換）
 // ─────────────────────────────────────────────
 const MEM_WORDS = 0x40000; // 256K words
-let _memory: ArrayBuffer = new ArrayBuffer(MEM_WORDS * 2);
+let _memory: ArrayBufferLike = new ArrayBuffer(MEM_WORDS * 2);
 let _memView: DataView = new DataView(_memory);
 
-export function setMemory(buf: ArrayBuffer): void {
+/** SharedArrayBuffer 可（CPU / IO ワーカ間で RAM を共有するとき） */
+export function setMemory(buf: ArrayBufferLike): void {
   _memory = buf;
   _memView = new DataView(_memory);
 }
 
-export function getMemory(): ArrayBuffer {
+export function getMemory(): ArrayBufferLike {
   return _memory;
 }
 

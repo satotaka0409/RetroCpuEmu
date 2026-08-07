@@ -54,7 +54,8 @@ MN1613.mdc にMN1613 CPUの仕様を載せる<br>
 TMS9995_instruction.mdc にTMS9995 命令セットを載せる<br>
 TMS9995_hardware.mdc にTMS9995 ピン・バス・CRU を載せる<br>
 
-レトロCPUのエミュレータをReact + Typescriptで実装する<br>
+レトロCPUのエミュレータを TypeScript + Electron のデスクトップアプリとして実装する（React / Vite / nginx は使わない）<br>
+画面は 1階 IO ボード相当のみ。デバッグ UI は Cursor 拡張 + WebSocket<br>
 実際のハードウェアは<br>
 2階がCPUボード+RAM+ハンドシェイク用のポート(8Bit双方向)+制御信号<br>
 1階は、7セグメントLED 12個 16進キーボード+ファンクションキー8個+状態表示用砲弾型LED16個+ハンドシェイク＋BEEP音+SDカード<br>
@@ -112,7 +113,7 @@ MN1613: http://www.st.rim.or.jp/~nkomatsu/panafacom/MN1613.html<br>
 
 # 開発順序
 
-1. まずTypescript + React でエミュレータを作る
+1. まず TypeScript + Electron でエミュレータを作る
 2. 1階のIOボードを作る
 3. 部品を購入して1階の試作ボードを制作する
 4. 1階とPCを接続して、1階のファームウェアを開発

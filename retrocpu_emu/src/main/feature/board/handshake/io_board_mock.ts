@@ -31,6 +31,7 @@ import {
   waitCondition,
 } from "../../cpu/mn1613/handhshake/handshake_type";
 import { createHandshakeIoPortBridge } from "./io_port_bridge";
+import { applyLedDisplayCommand } from "../io_led";
 
 export type IoBoardMockLogEntry = {
   at: number;
@@ -67,7 +68,7 @@ export type IoBoardMockOptions = {
 
 function emptyLed(): LedDisplayData {
   return {
-    sevenSeg: new Uint8Array(10),
+    sevenSeg: new Uint8Array(12),
     bulletLed0_7: 0,
     bulletLed8_F: 0,
   };
@@ -131,6 +132,7 @@ export function createDefaultCpuToIoHandlers(
         bulletLed0_7: data.bulletLed0_7,
         bulletLed8_F: data.bulletLed8_F,
       };
+      applyLedDisplayCommand(data);
       return RESPONSE_CODE.OK;
     },
     onBeep(params) {
@@ -240,7 +242,7 @@ export class IoBoardHandshakeMock {
 
   /**
    * バックグラウンドで CPU→IO 要求を待ち、ディスパッチして応答する。
-   * モニターを run() / emu_loop と並行して動かすときに使う。
+   * モニターを run() / CPU Worker と並行して動かすときに使う。
    */
   start(): void {
     if (this.serving) return;
