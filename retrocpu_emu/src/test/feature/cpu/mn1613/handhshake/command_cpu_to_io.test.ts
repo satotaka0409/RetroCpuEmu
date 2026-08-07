@@ -104,9 +104,9 @@ describe("CPU_FRAME_SIZE", () => {
   it("LED表示依頼は 15 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(15);
   });
-  it("BEEP・タイマーは 5 バイト", () => {
+  it("BEEP は 5 バイト、タイマーは番号込みで 6 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]).toBe(5);
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET]).toBe(5);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET]).toBe(6);
   });
 });
 
@@ -313,22 +313,35 @@ describe("buildBeepFrame", () => {
 // ─────────────────────────────────────────────
 
 describe("buildTimerSetFrame", () => {
-  it("5バイトのフレームを構築できる", () => {
-    const frame = buildTimerSetFrame({ periodMs: 100, count: 10 });
-    expect(frame.length).toBe(5);
+  it("6バイトのフレームを構築できる", () => {
+    const frame = buildTimerSetFrame({ timerNo: 0, periodMs: 100, count: 10 });
+    expect(frame.length).toBe(6);
     expect(frame[0]).toBe(CMD_CPU_TO_IO.TIMER_SET);
   });
 
-  it("周期が 0x01-0x02 に格納される", () => {
-    const frame = buildTimerSetFrame({ periodMs: 0x0064, count: 0 });
-    expect(frame[0x01]).toBe(0x00);
-    expect(frame[0x02]).toBe(0x64);
+  it("タイマー番号が 0x01 に格納される", () => {
+    const frame = buildTimerSetFrame({ timerNo: 1, periodMs: 0, count: 0 });
+    expect(frame[0x01]).toBe(0x01);
   });
 
-  it("回数が 0x03-0x04 に格納される", () => {
-    const frame = buildTimerSetFrame({ periodMs: 0, count: 0x000a });
-    expect(frame[0x03]).toBe(0x00);
-    expect(frame[0x04]).toBe(0x0a);
+  it("周期が 0x02-0x03 に格納される", () => {
+    const frame = buildTimerSetFrame({
+      timerNo: 0,
+      periodMs: 0x0064,
+      count: 0,
+    });
+    expect(frame[0x02]).toBe(0x00);
+    expect(frame[0x03]).toBe(0x64);
+  });
+
+  it("回数が 0x04-0x05 に格納される", () => {
+    const frame = buildTimerSetFrame({
+      timerNo: 0,
+      periodMs: 0,
+      count: 0x000a,
+    });
+    expect(frame[0x04]).toBe(0x00);
+    expect(frame[0x05]).toBe(0x0a);
   });
 });
 
@@ -578,24 +591,39 @@ describe("CpuToIoCommandDispatcher — タイマー設定(0x19)", () => {
   });
 
   it("onTimerSet が呼ばれ OK を返す", () => {
-    const params: TimerParams = { periodMs: 100, count: 10 };
+    const params: TimerParams = { timerNo: 0, periodMs: 100, count: 10 };
     const response = dispatcher.dispatch(buildTimerSetFrame(params));
     expect(handlers.onTimerSet).toHaveBeenCalledOnce();
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("onTimerSet に渡される周期・回数が正確", () => {
-    const params: TimerParams = { periodMs: 0x1234, count: 0xabcd };
+  it("onTimerSet に渡されるタイマー番号・周期・回数が正確", () => {
+    const params: TimerParams = {
+      timerNo: 1,
+      periodMs: 0x1234,
+      count: 0xabcd,
+    };
     dispatcher.dispatch(buildTimerSetFrame(params));
     const received = vi.mocked(handlers.onTimerSet).mock.calls[0][0];
+    expect(received.timerNo).toBe(1);
     expect(received.periodMs).toBe(0x1234);
     expect(received.count).toBe(0xabcd);
   });
 
   it("count=0 は無限繰り返しとして正しく渡される", () => {
-    dispatcher.dispatch(buildTimerSetFrame({ periodMs: 100, count: 0 }));
+    dispatcher.dispatch(
+      buildTimerSetFrame({ timerNo: 0, periodMs: 100, count: 0 }),
+    );
     const received = vi.mocked(handlers.onTimerSet).mock.calls[0][0];
     expect(received.count).toBe(0);
+  });
+
+  it("タイマー番号が 0/1 以外なら NG（ハンドラは呼ばない）", () => {
+    const frame = buildTimerSetFrame({ timerNo: 0, periodMs: 100, count: 0 });
+    frame[0x01] = 2;
+    const response = dispatcher.dispatch(frame);
+    expect(response[0]).toBe(RESPONSE_CODE.NG);
+    expect(handlers.onTimerSet).not.toHaveBeenCalled();
   });
 });
 

@@ -43,7 +43,7 @@ const { assemble } = require(path.join(asmRoot, "dist/main/assembler.js")) as {
 
 const handshakeAsmDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../../../../../cursor_expand/monitor/mn1613/src/handshake",
+  "../../../../../../../retrocpu_boot_monitor/mn1613/src/handshake",
 );
 
 type AsmImage = {
@@ -51,11 +51,20 @@ type AsmImage = {
   symbols: Map<string, number>;
 };
 
+/**
+ * ハンドシェイク用アセンブラソースを include 展開してアセンブルする。
+ * @param name handshake ディレクトリ内のファイル名
+ * @returns ワード列とシンボル表
+ */
 function assembleFile(name: string): AsmImage {
   const src = expandIncludesFromFile(path.join(handshakeAsmDir, name));
   return assemble(src, "mn1613");
 }
 
+/**
+ * 新しいメモリを用意し、アドレス指定付きのワードを配置する（範囲外は無視）。
+ * @param words アドレスと値の組
+ */
 function loadSparse(words: { address: number; value: number }[]): void {
   const buf = new ArrayBuffer(0x20000);
   const view = new DataView(buf);
@@ -68,6 +77,11 @@ function loadSparse(words: { address: number; value: number }[]): void {
   setMemory(buf);
 }
 
+/**
+ * メモリから 1 ワード読む。
+ * @param addr ワードアドレス
+ * @returns 16bit 値
+ */
 function readWord(addr: number): number {
   const view = new DataView(getMemory());
   return view.getUint16((addr & 0xffff) * 2, false);

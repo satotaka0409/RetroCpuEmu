@@ -20,10 +20,18 @@ export type CpuDmaHooks = {
 
 let _busy = false;
 
+/**
+ * DMA セッション中かどうかを返す。
+ * @returns true なら転送中
+ */
 export function isCpuDmaBusy(): boolean {
   return _busy;
 }
 
+/**
+ * いま RAM を触ってよいか（HALT / RESET 相当か）を判定する。
+ * @returns 書き込み可能なら true
+ */
 function mayTouchMemory(): boolean {
   const pins = getPins();
   const st = getExecStatus();
@@ -32,12 +40,22 @@ function mayTouchMemory(): boolean {
   return false;
 }
 
+/**
+ * 書き込み可能状態でなければ例外にする。
+ * @throws CPU が実行中の場合
+ */
 function assertWritable(): void {
   if (!mayTouchMemory()) {
     throw new Error("DMA write only allowed during HALT/RESET");
   }
 }
 
+/**
+ * RAM へ 1 ワード書く（ビッグエンディアン）。
+ * @param wordAddr ワードアドレス
+ * @param value 16bit 値
+ * @throws メモリ範囲外の場合
+ */
 function writeWordToRam(wordAddr: number, value: number): void {
   const view = new DataView(getMemory());
   const off = (wordAddr & 0xffff) * 2;
@@ -47,6 +65,10 @@ function writeWordToRam(wordAddr: number, value: number): void {
   view.setUint16(off, value & 0xffff, false);
 }
 
+/**
+ * イベントループへ制御を返す（RUN 落ち待ちのポーリング用）。
+ * @returns 次のタスクで解決する Promise
+ */
 function yield0(): Promise<void> {
   return new Promise((r) => setTimeout(r, 0));
 }
@@ -55,6 +77,10 @@ function yield0(): Promise<void> {
  * CPU ボード上の DMA 受け口。読み込みメソッドは持たない。
  */
 export class CpuDmaTarget {
+  /**
+   * @param timeoutMs RUN=0 になるまでの待ち時間上限（ミリ秒）
+   * @param hooks DMA 開始／終了の通知フック
+   */
   constructor(
     private readonly timeoutMs = 5000,
     private readonly hooks: CpuDmaHooks = {},
@@ -98,6 +124,10 @@ export class CpuDmaTarget {
     }
   }
 
+  /**
+   * DMA セッションを開始する。実行中なら HLT を立てて RUN=0 を待つ。
+   * @throws 既に転送中の場合、RUN=0 待ちがタイムアウトした場合
+   */
   private async begin(): Promise<void> {
     if (_busy) throw new Error("DMA already busy");
     _busy = true;
@@ -121,6 +151,7 @@ export class CpuDmaTarget {
     assertWritable();
   }
 
+  /** DMA セッションを終了し、begin() で立てた HLT を戻す */
   private end(): void {
     if (getPins().HLT) {
       setPins({ HLT: false });

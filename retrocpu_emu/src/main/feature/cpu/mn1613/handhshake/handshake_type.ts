@@ -28,13 +28,27 @@ export function createHandshakeBus(): CpuIoSignals {
 // ─────────────────────────────────────────────
 
 export const INT_CAUSE_CODE = {
-  /** タイマー */
-  TIMER: 0,
+  /** タイマー0（ハンドシェイク 19h のタイマー番号 0） */
+  TIMER0: 0,
+  /** タイマー1（ハンドシェイク 19h のタイマー番号 1） */
+  TIMER1: 1,
   /** ハンドシェイクによる割り込み */
   HANDSHAKE: 2,
   /** アドレスブレイク */
   ADDR_BREAK: 4,
 } as const;
+
+/**
+ * タイマー番号に対応する割り込み要因を返す。
+ * @param timerNo タイマー番号（0 または 1）
+ * @returns INT_CAUSE_CODE.TIMER0 / TIMER1
+ * @throws 0/1 以外を渡した場合
+ */
+export function intCauseForTimer(timerNo: number): 0 | 1 {
+  if (timerNo === 0) return INT_CAUSE_CODE.TIMER0;
+  if (timerNo === 1) return INT_CAUSE_CODE.TIMER1;
+  throw new Error(`invalid timer number: ${timerNo}`);
+}
 
 // ─────────────────────────────────────────────
 // コマンド定数
@@ -208,6 +222,7 @@ export function waitCondition(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
+    /** 条件成立なら resolve、期限切れなら reject、それ以外は次のタスクで再試行 */
     const check = () => {
       if (condition()) {
         resolve();

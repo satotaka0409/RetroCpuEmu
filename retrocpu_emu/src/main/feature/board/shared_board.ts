@@ -65,6 +65,10 @@ export type SharedBoard = {
   stat: Int32Array;
 };
 
+/**
+ * CPU / IO Worker 間で共有する制御・状態バッファを新規に作る。
+ * @returns SharedArrayBuffer とその Int32Array ビュー
+ */
 export function createSharedBoard(): SharedBoard {
   const control = new SharedArrayBuffer(64 * 4);
   const status = new SharedArrayBuffer(64 * 4);
@@ -76,6 +80,11 @@ export function createSharedBoard(): SharedBoard {
   };
 }
 
+/**
+ * workerData で受け取った共有バッファにビューを張り直す。
+ * @param parts control / status の SharedArrayBuffer
+ * @returns Worker 内で使う SharedBoard
+ */
 export function attachSharedBoard(parts: {
   control: SharedArrayBuffer;
   status: SharedArrayBuffer;

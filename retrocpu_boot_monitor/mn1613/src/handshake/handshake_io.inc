@@ -28,6 +28,9 @@ HSHK_REQ1_BIT	.equ	0x10
 HSHK_OK		.equ	0x00
 HSHK_NG		.equ	0x01
 
+; CPU→IO コマンド（HandShake.mdc「コマンド概要」）
+HSHK_CMD_TIMER_SET	.equ	0x19
+
 ; ENA=0 チェック: 最大10回
 HSHK_ENA0_RETRY	.equ	10
 HSHK_DELAY_50US	.equ	25

@@ -25,6 +25,10 @@ import {
   STR_OVF,
 } from "../../../../main/feature/cpu/mn1613/mn1613";
 
+/**
+ * 新しいメモリを用意し、ワード列を 0 番地から並べる。
+ * @param words 命令／データのワード列
+ */
 function loadWords(words: number[]): void {
   const buf = new ArrayBuffer(0x20000);
   const view = new DataView(buf);
@@ -34,6 +38,12 @@ function loadWords(words: number[]): void {
   setMemory(buf);
 }
 
+/**
+ * ワード列をロードして 0 番地から HALT まで実行する。
+ * @param words 命令／データのワード列（末尾に H を置く想定）
+ * @param maxCycles 最大サイクル数
+ * @returns 停止時点のレジスタ
+ */
 async function runHalt(
   words: number[],
   maxCycles = 5000,
@@ -64,6 +74,12 @@ function ibmHex(v: number): [number, number] {
   return [w0, w1];
 }
 
+/**
+ * IBM hex float の 2 語を JS の number に戻す（実行結果の確認用）。
+ * @param w0 符号・指数・仮数上位
+ * @param w1 仮数下位
+ * @returns 復元した値
+ */
 function decodeIbm(w0: number, w1: number): number {
   if ((w0 | w1) === 0) return 0;
   const sign = w0 >>> 15;

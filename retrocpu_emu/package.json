@@ -20,5 +20,8 @@
     "esbuild": "^0.25.4",
     "typescript": "^5.9.2",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "winston": "^3.19.0"
   }
 }

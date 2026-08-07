@@ -16,6 +16,11 @@ export type HexKeyboardHandlers = {
   functionLabels?: Record<string, string>;
 };
 
+/**
+ * 16進 16 キーとファンクション 8 キーを描画する（既存の子要素は差し替える）。
+ * @param root 描画先要素
+ * @param handlers クリック時のコールバックと F キーの表示ラベル
+ */
 export function mountHexKeyboard(
   root: HTMLElement,
   handlers: HexKeyboardHandlers = {},
@@ -50,7 +55,7 @@ export function mountHexKeyboard(
       btn.type = "button";
       btn.className = "function-key";
       const label = handlers.functionLabels?.[fn] ?? fn;
-      btn.innerHTML = `<span class="fn-id">${fn}</span><span class="fn-name">${label}</span>`;
+      btn.textContent = label;
       btn.title = `${fn} ${label}`;
       btn.addEventListener("click", () => handlers.onFunctionClick?.(fn));
       rowEl.appendChild(btn);

@@ -31,10 +31,19 @@ const DEFAULT_STUB = 0x17fe;
 const DEFAULT_MAX_CYCLES = 100_000;
 const DEFAULT_MEM_BYTES = 0x40000 * 2;
 
+/**
+ * 16bit 値を 4 桁の大文字 16 進文字列にする（エラーメッセージ用）。
+ * @param n 対象の値
+ * @returns 例 "01FE"
+ */
 function hex4(n: number): string {
   return (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 }
 
+/**
+ * 呼び出し前のレジスタ指定を CPU に反映する。
+ * @param regs 指定されたレジスタのみ設定（未指定は現状維持）
+ */
 function applyCallRegisters(regs?: CallRegisters): void {
   if (!regs) return;
   const partial: Parameters<typeof setState>[0] = {};
@@ -70,26 +79,51 @@ function applyCallRegisters(regs?: CallRegisters): void {
   setState(partial);
 }
 
+/**
+ * スタックへ 1 ワード積む。SP は空きスロットを指す規約。
+ * @param sp 現在のスタックポインタ
+ * @param value 積む値
+ * @returns 更新後のスタックポインタ
+ */
 function pushWord(sp: number, value: number): number {
-  // SP は空きスロット: 現在 SP に書いてから下げる
   writeWord(sp, value);
   return (sp - 1) & 0xffff;
 }
 
+/**
+ * 現在の CPU メモリに対する DataView を作る。
+ * @returns setMemory() されたバッファのビュー
+ */
 function view(): DataView {
   return new DataView(getMemory());
 }
 
+/**
+ * メモリから 1 ワード読む。
+ * @param wordAddr ワードアドレス
+ * @returns 16bit 値（ビッグエンディアン）
+ */
 export function readWord(wordAddr: number): number {
   const off = (wordAddr & 0xffff) * 2;
   return view().getUint16(off, false);
 }
 
+/**
+ * メモリへ 1 ワード書く。
+ * @param wordAddr ワードアドレス
+ * @param value 16bit 値（ビッグエンディアンで格納）
+ */
 export function writeWord(wordAddr: number, value: number): void {
   const off = (wordAddr & 0xffff) * 2;
   view().setUint16(off, value & 0xffff, false);
 }
 
+/**
+ * メモリからバイト列を読む。
+ * @param byteAddr 開始バイトアドレス
+ * @param length 読み出すバイト数
+ * @returns 読み出したバイト列
+ */
 export function readBytes(byteAddr: number, length: number): Uint8Array {
   const out = new Uint8Array(length);
   const v = view();
@@ -99,6 +133,11 @@ export function readBytes(byteAddr: number, length: number): Uint8Array {
   return out;
 }
 
+/**
+ * メモリへバイト列を書く。
+ * @param byteAddr 開始バイトアドレス
+ * @param data 書き込むバイト列
+ */
 export function writeBytes(byteAddr: number, data: Uint8Array | number[]): void {
   const v = view();
   for (let i = 0; i < data.length; i++) {
@@ -106,6 +145,13 @@ export function writeBytes(byteAddr: number, data: Uint8Array | number[]): void 
   }
 }
 
+/**
+ * ワード列を比較し、違えば内容付きの例外を投げる。
+ * @param label エラーメッセージに出す名前
+ * @param actual 実際の値
+ * @param expected 期待する値
+ * @throws 長さ違い、または値違いの場合
+ */
 function assertWords(label: string, actual: number[], expected: number[]): void {
   if (actual.length !== expected.length) {
     throw new Error(
@@ -131,6 +177,9 @@ export class Mn1613CodeTest {
   private lastResult: CallResult | null = null;
   private lastPreCallSp = 0;
 
+  /**
+   * @param opts スタック初期値、戻りスタブ位置、最大サイクル数、メモリサイズ
+   */
   constructor(opts: Mn1613CodeTestOptions = {}) {
     this.stackInit = opts.stackInit ?? DEFAULT_STACK;
     this.returnStubWordAddr = opts.returnStubWordAddr ?? DEFAULT_STUB;
@@ -157,16 +206,30 @@ export class Mn1613CodeTest {
     writeWord(this.returnStubWordAddr, H_OPCODE);
   }
 
+  /**
+   * Intel HEX をメモリへ展開する。
+   * @param hexText Intel HEX テキスト
+   */
   loadIntelHex(hexText: string): void {
     loadIntelHex(hexText, view());
     // スタブは HEX で上書きされる可能性があるので再設置
     writeWord(this.returnStubWordAddr, H_OPCODE);
   }
 
+  /**
+   * CDB シンボルテーブルを読み込む。
+   * @param cdbText CDB テキスト
+   */
   loadCdb(cdbText: string): void {
     this.cdb = parseCdb(cdbText);
   }
 
+  /**
+   * ラベル名からシンボルを引く。
+   * @param name ラベル名
+   * @returns ワード／バイトアドレスを持つシンボル
+   * @throws 未登録のラベルの場合
+   */
   getSymbol(name: string) {
     return requireSymbol(this.cdb, name);
   }
@@ -179,6 +242,11 @@ export class Mn1613CodeTest {
     }
   }
 
+  /**
+   * ラベル位置からワード列を書く。
+   * @param name ラベル名
+   * @param words 書き込むワード列
+   */
   writeLabelWords(name: string, words: number[]): void {
     const sym = requireSymbol(this.cdb, name);
     for (let i = 0; i < words.length; i++) {
@@ -186,6 +254,11 @@ export class Mn1613CodeTest {
     }
   }
 
+  /**
+   * ラベル位置からバイト列を書く。
+   * @param name ラベル名
+   * @param data 書き込むバイト列
+   */
   writeLabelBytes(name: string, data: Uint8Array | number[]): void {
     const sym = requireSymbol(this.cdb, name);
     writeBytes(sym.byteAddr, data);
@@ -242,11 +315,23 @@ export class Mn1613CodeTest {
     return result;
   }
 
+  /**
+   * レジスタ値を検証する。
+   * @param expected 期待値（指定されたレジスタのみ比較）
+   * @param actual 比較対象。省略時は直近の call 結果、無ければ現在値
+   * @throws 値が一致しない場合
+   */
   expectRegisters(
     expected: CallRegisters,
     actual?: CPURegister,
   ): void {
     const reg = actual ?? this.lastResult?.registers ?? getState();
+    /**
+     * 1 レジスタ分を比較する（期待値未指定ならスキップ）。
+     * @param name エラーメッセージ用のレジスタ名
+     * @param got 実際の値
+     * @param exp 期待値
+     */
     const check = (name: string, got: number, exp: number | undefined) => {
       if (exp === undefined) return;
       if ((got & 0xffff) !== (exp & 0xffff)) {
@@ -266,11 +351,23 @@ export class Mn1613CodeTest {
     check("SSBR", reg.SSBR, expected.SSBR);
   }
 
+  /**
+   * メモリのワード列を検証する。
+   * @param wordAddr 開始ワードアドレス
+   * @param expected 期待するワード列
+   * @throws 値が一致しない場合
+   */
   expectMemoryWords(wordAddr: number, expected: number[]): void {
     const actual = expected.map((_, i) => readWord(wordAddr + i));
     assertWords(`mem@0x${hex4(wordAddr)}`, actual, expected);
   }
 
+  /**
+   * メモリのバイト列を検証する。
+   * @param byteAddr 開始バイトアドレス
+   * @param expected 期待するバイト列
+   * @throws 値が一致しない場合
+   */
   expectMemoryBytes(byteAddr: number, expected: number[] | Uint8Array): void {
     const exp = Array.from(expected);
     const actual = Array.from(readBytes(byteAddr, exp.length));
@@ -283,11 +380,21 @@ export class Mn1613CodeTest {
     }
   }
 
+  /**
+   * ラベル位置のワード列を検証する。
+   * @param name ラベル名
+   * @param expected 期待するワード列
+   */
   expectLabelWords(name: string, expected: number[]): void {
     const sym = requireSymbol(this.cdb, name);
     this.expectMemoryWords(sym.wordAddr, expected);
   }
 
+  /**
+   * ラベル位置のバイト列を検証する。
+   * @param name ラベル名
+   * @param expected 期待するバイト列
+   */
   expectLabelBytes(name: string, expected: number[] | Uint8Array): void {
     const sym = requireSymbol(this.cdb, name);
     this.expectMemoryBytes(sym.byteAddr, expected);
@@ -312,6 +419,11 @@ export class Mn1613CodeTest {
   }
 }
 
+/**
+ * ハーネスを生成するショートカット。
+ * @param opts Mn1613CodeTest と同じオプション
+ * @returns 初期化済みハーネス
+ */
 export function createMn1613CodeTest(
   opts?: Mn1613CodeTestOptions,
 ): Mn1613CodeTest {

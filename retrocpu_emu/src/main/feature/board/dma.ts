@@ -43,6 +43,10 @@ export const liveDmaCpuBridge: DmaCpuBridge = {
   isRunning: () => getPins().RUN,
 };
 
+/**
+ * DMA バス信号を全て 0 で初期化して返す。
+ * @returns 新しいバス状態オブジェクト
+ */
 export function createDmaBus(): DmaSignals {
   return {
     DATA: 0,
@@ -57,14 +61,26 @@ export function createDmaBus(): DmaSignals {
 
 let _dmaBusy = false;
 
+/**
+ * DMA セッション中かどうかを返す。
+ * @returns true なら転送中
+ */
 export function isDmaBusy(): boolean {
   return _dmaBusy;
 }
 
+/**
+ * イベントループへ制御を返す（クロック生成と RUN 待ちに使う）。
+ * @returns 次のタスクで解決する Promise
+ */
 function yield0(): Promise<void> {
   return new Promise((r) => setTimeout(r, 0));
 }
 
+/**
+ * CLK を 1 → 0 と 1 パルス出す。
+ * @param bus 対象バス
+ */
 async function pulseClk(bus: DmaSignals): Promise<void> {
   bus.CLK = 1;
   await yield0();
@@ -79,6 +95,12 @@ async function pulseClk(bus: DmaSignals): Promise<void> {
 export class DmaMaster {
   private readonly cpu: DmaCpuBridge;
 
+  /**
+   * @param bus 波形を出す DMA バス
+   * @param mem 書き込み先メモリアダプタ
+   * @param timeoutMs RUN=0 になるまでの待ち時間上限（ミリ秒）
+   * @param cpu HALT/RUN の接続先（テストで差し替え可）
+   */
   constructor(
     private readonly bus: DmaSignals,
     private readonly mem: DmaWriteMemory,
@@ -111,10 +133,15 @@ export class DmaMaster {
     }
   }
 
+  /** CPU の実行状態をバスの RUN ミラーへ反映する */
   private syncRunMirror(): void {
     this.bus.RUN = this.cpu.isRunning() ? 1 : 0;
   }
 
+  /**
+   * DMA_ENA / HALT を立てて RUN=0 を待ち、転送を開始できる状態にする。
+   * @throws RUN=0 待ちがタイムアウトした場合（信号は元に戻す）
+   */
   private async beginSession(): Promise<void> {
     _dmaBusy = true;
     this.bus.A_ENABLE = 0;
@@ -140,6 +167,7 @@ export class DmaMaster {
     this.syncRunMirror();
   }
 
+  /** 全信号を戻し HALT を解除してセッションを閉じる */
   private async endSession(): Promise<void> {
     this.bus.A_ENABLE = 0;
     this.bus.D_ENABLE = 0;
@@ -150,6 +178,10 @@ export class DmaMaster {
     _dmaBusy = false;
   }
 
+  /**
+   * A_ENABLE を立ててアドレスを上位バイトから 4 回に分けて出す。
+   * @param wordAddr 転送先ワードアドレス
+   */
   private async putAddress(wordAddr: number): Promise<void> {
     const a = wordAddr >>> 0;
     const bytes = [
@@ -166,6 +198,12 @@ export class DmaMaster {
     this.bus.A_ENABLE = 0;
   }
 
+  /**
+   * アドレス出力 → コマンド → 上位／下位バイトの 1 ワード書き込みサイクル。
+   * @param wordAddr 転送先ワードアドレス
+   * @param word 書き込む 16bit 値
+   * @param memNotIo true=メモリ / false=I/O（コマンドの Bit0）
+   */
   private async writeWordCycle(
     wordAddr: number,
     word: number,

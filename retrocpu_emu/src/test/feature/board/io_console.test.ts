@@ -9,6 +9,11 @@ import {
 } from "../../../main/feature/board/io_console";
 import { getLedDisplay, resetLedDisplay } from "../../../main/feature/board/io_led";
 
+/**
+ * Map をメモリに見せる CPU ブリッジのモックを作る。
+ * @param mem 初期メモリ内容（ワードアドレス → 値）
+ * @returns ブリッジ実装と、検証用に参照できる同じ Map
+ */
 function mockBridge(
   mem: Map<number, number> = new Map(),
 ): ConsoleCpuBridge & { mem: Map<number, number> } {
@@ -93,11 +98,38 @@ describe("IoConsole", () => {
     const setHalt = vi.spyOn(bridge, "setHalt");
     const pulseReset = vi.spyOn(bridge, "pulseReset");
     const c = new IoConsole(bridge);
+    expect((getLedDisplay().bulletLed8_F >> 5) & 1).toBe(1); // D=HALT
     await c.onFunction("F5");
     expect(exec).toHaveBeenCalled();
+    expect((getLedDisplay().bulletLed8_F >> 4) & 1).toBe(1); // C=RUN
     await c.onFunction("F6");
     expect(setHalt).toHaveBeenCalledWith(true);
+    expect((getLedDisplay().bulletLed8_F >> 5) & 1).toBe(1);
     await c.onFunction("F7");
     expect(pulseReset).toHaveBeenCalled();
+  });
+
+  it("H/ST はパネル状態でトグル（isHalted が常に true でも HALT できる）", async () => {
+    const bridge = mockBridge();
+    bridge.isHalted = () => true;
+    const setHalt = vi.spyOn(bridge, "setHalt");
+    const c = new IoConsole(bridge);
+    await c.onFunction("F6");
+    expect(setHalt).toHaveBeenLastCalledWith(false);
+    expect(c.getState().halted).toBe(false);
+    await c.onFunction("F6");
+    expect(setHalt).toHaveBeenLastCalledWith(true);
+    expect(c.getState().halted).toBe(true);
+  });
+
+  it("未定義命令フラグで砲弾 B (UNDEF) が点灯", () => {
+    const c = new IoConsole(mockBridge());
+    c.syncFromCpu(0x8000);
+    expect(c.getState().undefInsn).toBe(true);
+    expect(c.getState().halted).toBe(true);
+    expect((getLedDisplay().bulletLed8_F >> 3) & 1).toBe(1); // B
+    c.syncFromCpu(0);
+    expect(c.getState().undefInsn).toBe(false);
+    expect((getLedDisplay().bulletLed8_F >> 3) & 1).toBe(0);
   });
 });

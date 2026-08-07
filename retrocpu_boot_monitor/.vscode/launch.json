@@ -8,7 +8,7 @@
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder:cursor_asm_editer}",
-        "${workspaceFolder:root}/cursor_expand/monitor"
+        "${workspaceFolder:root}/retrocpu_boot_monitor"
       ],
       "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
       "preLaunchTask": "cursor_asm_editer: npm: compile",

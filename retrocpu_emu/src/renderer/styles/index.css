@@ -103,10 +103,55 @@ body {
   justify-items: start;
 }
 
+.led-group-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  padding-left: 4px;
+}
+
+.focus-bullet-slot {
+  display: flex;
+  align-items: center;
+}
+
+.focus-bullet-slot .bullet-led-item {
+  width: 22px;
+}
+
 .led-caption {
   font-size: 0.74rem;
   letter-spacing: 0.12em;
   color: #91a4b8;
+}
+
+.led-data-with-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-led-col {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.status-led-col .bullet-led-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  justify-items: unset;
+}
+
+.status-led-col .bullet-led-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: #c8d3e1;
+  min-width: 2.8em;
 }
 
 .led-bank {

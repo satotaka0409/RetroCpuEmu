@@ -1,0 +1,378 @@
+---
+alwaysApply: false
+description: IOボードと Cursor デバッグ拡張の TCP/IP バイナリプロトコル原案（実機IO＋ハンドシェイク経由）
+---
+
+# IOボード ↔ Cursor デバッグ拡張 TCP/IP プロトコル（原案）
+
+根拠: 本ファイル。関連は `HandShake.mdc` / `retrocpu_debug.mdc` / `retrocpu_emu.mdc` / `ioboard.mdc` / `MN1613_CPUボードメモリ_IOマップ.mdc`。
+
+> **方針**
+>
+> - ペイロードは **JSON ではなくバイナリ**（実機 RP2354B のメモリ・CPU 負荷を抑える）。
+> - データ経路は常に次の形を前提にする:
+>
+> ```text
+> Cursor 拡張  ←── TCP/IP ──→  IOボード  ←── ハンドシェイク ──→  CPUボード
+> ```
+>
+> - メモリダンプ等の **読み取り** は IO が CPU へハンドシェイク問い合わせ（例: `50h` メモリ読み出し）。
+> - 大量書き込み（Intel HEX）は IO → CPU の **DMA**（HALT/RESET 時）。ハンドシェイク `51h` ではない。
+> - ブレイク設定は拡張 UI（命令 8 / アドレス 6）→ TCP → IO → ハンドシェイク `42h`/`43h` / `40h`/`41h`。
+> - ファイル名の `protpcol` は歴史的綴り。
+> - 旧 JSON/`WebSocket.mdc` は vitest 等向けの別面。**本プロトコルとは独立**（将来ブリッジ可）。
+
+---
+
+## 1. 役割分担
+
+| 端点 | 役割 |
+| --- | --- |
+| **Cursor デバッグ拡張** | TCP **クライアント**。逆アセンブル・ソース・レジスタ・メモリダンプ・BP UI（命令 8 + アドレス 6） |
+| **IO ボード** | TCP **サーバ**。フレーム解釈、DMA、ハンドシェイク起動、パネル UI（Electron または RP2354B） |
+| **CPU ボード** | ハンドシェイク応答側。RAM・CPLD 比較器・モニタ／BIOS。TCP は直接受けない |
+
+```text
++------------------+        TCP/IP         +------------------+      HSHK       +------------------+
+| Cursor 拡張      | <------------------> | IOボード          | <------------> | CPUボード         |
+| デバッグ UI      |   バイナリフレーム     | Electron / RP2354 |  40h–43h,48h,  | MN1613 / エミュ   |
+|                  |                       |                  |  49h,50h,51h…  | RAM + CPLD BP     |
++------------------+                       +------------------+                 +------------------+
+```
+
+Electron では「IO Worker ≈ 1階」「CPU Worker ≈ 2階」とし、**同じコマンド番号・同じ経路モデル**で実装する。
+
+---
+
+## 2. 輸送（TCP）
+
+| 項目 | 値 |
+| --- | --- |
+| 役割 | IO = サーバ、拡張 = クライアント |
+| 既定 | `127.0.0.1:23540`（変更可） |
+| 同時接続 | **1**（2 本目は拒否。原案） |
+| TLS | 当面なし |
+| バイト順 | **ビッグエンディアン**（ハンドシェイク／MN1613 に合わせる） |
+
+### 2.1 フレーム
+
+```text
++----------+----------+----------+----------------------+
+| magic    | ver      | flags    | length (payload)     |
+| u16 BE   | u8       | u8       | u32 BE               |
+| = 0xRC   | = 1      |          |                      |
++----------+----------+----------+----------------------+
+| msg_type | cmd      | seq      | reserved             |
+| u8       | u8       | u16 BE   | u16 BE (=0)          |
++----------+----------+----------+----------------------+
+| payload  (length バイト)                              |
++-------------------------------------------------------+
+| crc16 CCITT (optional, flags.CRC=1 のときのみ)        |
++-------------------------------------------------------+
+```
+
+| フィールド | 説明 |
+| --- | --- |
+| `magic` | `0x5243`（`'R''C'`）。不一致は切断 |
+| `ver` | プロトコル版。当面 `1` |
+| `flags` | Bit0=CRC あり / Bit1=イベント（非応答） / 他 予約 0 |
+| `length` | **payload のみ**の長さ。ヘッダ・CRC 含まず。最大 **1 MiB**（原案） |
+| `msg_type` | `1`=REQ / `2`=RES / `3`=EVT |
+| `cmd` | コマンド番号（下記） |
+| `seq` | REQ でクライアント採番。RES はエコー。EVT は 0 または単調 |
+| `crc16` | 任意。付けた場合は magic〜payload 末まで（CRC 自身除く） |
+
+ヘッダ固定長: **14 バイト**（magic〜reserved）。
+
+### 2.2 接続手順
+
+```text
+1. connect
+2. 5s 以内に CMD_HELLO (REQ)
+3. RES で能力ビット・CPU 種別
+4. 以降 REQ/RES、任意 EVT
+5. CMD_PING 推奨 30s / 無応答 60s で切断可
+```
+
+---
+
+## 3. ステータス／共通型
+
+### 3.1 RES 先頭（全コマンド共通）
+
+| オフセット | 型 | 説明 |
+| --- | ---: | --- |
+| 0 | u8 | `status` — `0x00` OK / `0x01` NG / `0x02` BUSY / `0x03` BAD_PARAM / `0x04` UNSUPPORTED / `0x05` HSHK_FAIL / `0x06` TIMEOUT |
+| 1… | | コマンド固有（OK 時）。NG 時は任意で `u8 reason` のみでも可 |
+
+### 3.2 ワードアドレス・バイト
+
+- **ワードアドレス**: MN1613 の IC/ラベル系。24bit または 32bit フィールドに載せる場合は上位ゼロ詰め。
+- **バイトアドレス**: RAM ダンプ・DMA。`byteAddr = wordAddr * 2`（MN1613）。
+- 16bit レジスタ値: BE。
+
+### 3.3 CPU レジスタブロック（`48h` 相当・固定レイアウト）
+
+ハンドシェイク CPU 状態取得の位置 01–27 をそのままパック（欠番位置も合わせる）。長さ **0x28 (40) バイト**（コマンドバイト除く本体）。TCP ではこの 40 バイトを一塊で載せる。
+
+| 相対 | 内容 |
+| ---: | --- |
+| 00–01 | R0 |
+| 02–03 | R1 |
+| … | R2,R3,R4,SP,STR,IC,CSBR,SSBR,TSR0,TSR1,OSR0,OSR1,OSR2,NPP,IISR,SBRB,ICB（`HandShake.mdc` 準拠） |
+
+詳細オフセットは `HandShake.mdc`「CPU状態取得」を正とする。
+
+---
+
+## 4. コマンド一覧（`cmd`）
+
+| cmd | 名前 | 方向 | IO→CPU 経路 | 説明 |
+| ---: | --- | --- | --- | --- |
+| `0x01` | HELLO | REQ/RES | — | 版・能力交換 |
+| `0x02` | PING | REQ/RES | — | 疎通 |
+| `0x10` | CPU_GET_STATE | REQ/RES | HSHK `48h` | レジスタ取得 |
+| `0x11` | CPU_EXEC | REQ/RES | HSHK `49h` | 実行開始（ワードアドレス） |
+| `0x12` | CPU_HALT | REQ/RES | ピン / 制御 | HALT |
+| `0x13` | CPU_RESET | REQ/RES | RESET ピン | リセット |
+| `0x14` | CPU_STEP | REQ/RES | エミュ or 将来 | 1 命令（実機は未対応可→UNSUPPORTED） |
+| `0x20` | MEM_READ | REQ/RES | HSHK `50h` | **メモリダンプ用読み出し** |
+| `0x21` | MEM_WRITE | REQ/RES | HSHK `51h` または小ブロック | 書き込み（小） |
+| `0x22` | MEM_DMA_WRITE | REQ/RES | **DMA** | HEX/一括ロード |
+| `0x30` | BP_INST_SET | REQ/RES | HSHK `42h` | 命令 BP 設定（0–7） |
+| `0x31` | BP_INST_CLR | REQ/RES | HSHK `43h` | 命令 BP 解除 |
+| `0x32` | BP_ADDR_SET | REQ/RES | HSHK `40h` | アドレス/IO BP 設定（0–5） |
+| `0x33` | BP_ADDR_CLR | REQ/RES | HSHK `41h` | アドレス/IO BP 解除 |
+| `0x34` | BP_ADDR_HIST | REQ/RES | HSHK `60h` | 履歴取得（任意） |
+| `0x40` | EVT_STOPPED | EVT | — | 停止通知（HALT/BP/UNDEF） |
+| `0x41` | EVT_LOG | EVT | — | ログ行（任意） |
+
+未定義 `cmd` → RES `UNSUPPORTED`。
+
+---
+
+## 5. コマンド詳細
+
+### 5.1 `0x01` HELLO
+
+**REQ payload**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | client_type（1=Cursor拡張） |
+| 1 | u8 | 予約 |
+| 2–5 | u32 | client_features ビットマスク |
+
+**RES payload（status の後）**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | cpu_id（1=MN1613） |
+| 1 | u8 | 予約 |
+| 2–5 | u32 | server_features |
+| 6 | u8 | max_inst_bp（=8） |
+| 7 | u8 | max_addr_bp（=6） |
+
+feature 例: Bit0=DMA / Bit1=HSHK_MEM / Bit2=STEP / Bit3=BP_HIST。
+
+### 5.2 `0x02` PING
+
+REQ: 空または `u32 client_tick`。  
+RES: `u32 server_tick_ms`。
+
+### 5.3 `0x10` CPU_GET_STATE
+
+REQ: 空。  
+RES: `status` + レジスタ 40B + `u8 exec_status`（0 idle / 1 run / 2 halt / 3 break / 4 undef）。
+
+IO はハンドシェイク **`48h`** で CPU から取得して返す。
+
+### 5.4 `0x11` CPU_EXEC
+
+**REQ**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0–3 | u32 | 実行ワードアドレス（BE） |
+
+RES: `status` のみ（開始受理）。停止は `EVT_STOPPED`。  
+IO → CPU: **`49h`**。
+
+### 5.5 `0x12` / `0x13` HALT / RESET
+
+REQ: 空。RES: `status`。ピン制御（実機）またはエミュ同等。
+
+### 5.6 `0x20` MEM_READ（メモリダンプ）
+
+拡張のメモリダンプは必ずこれを使う。
+
+**REQ**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0–3 | u32 | 開始 **バイト**アドレス |
+| 4–7 | u32 | 読み出しバイト数 `n`（1…65536 推奨上限） |
+
+**RES**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | status |
+| 1–4 | u32 | 実際に返したバイト数 `m` |
+| 5… | u8×m | データ |
+
+**IO 内部**
+
+1. 必要なら CPU を HALT
+2. ハンドシェイク **`50h`**（アドレス・バイト数）で CPU から読む
+3. 256 バイト毎チェックサム手順は `HandShake.mdc` に従い、IO が吸収。TCP 上では **生データのみ**返す（拡張はチェックサムを見ない）
+
+> 読み取りは CPU ボード RAM。IO が勝手に覗ける共有 RAM 前提にしない（実機と同じ）。
+
+### 5.7 `0x21` MEM_WRITE（小ブロック）
+
+**REQ**: `u32 byteAddr` + `u32 n` + `u8×n`。  
+IO → ハンドシェイク **`51h`**（または実装が DMA に寄せてもよいが、ダンプ対向の小書き込みは 51h 想定）。
+
+### 5.8 `0x22` MEM_DMA_WRITE（一括／HEX 展開後）
+
+**REQ**: `u32 byteAddr` + `u32 n` + `u8×n`。  
+IO → **DMA** のみ。`n` が大きい場合は複数 REQ に分割可（拡張側）。  
+Intel HEX のパースは **拡張側**でも **IO 側**でも可（原案: 拡張がバイナリ化して `0x22`）。
+
+### 5.9 `0x30` BP_INST_SET（命令ブレイク・8 本）
+
+拡張: 逆アセンブル上で設定。スロット **0–7**。
+
+**REQ**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | slot（0–7） |
+| 1 | u8 | 予約 0 |
+| 2–5 | u32 | ブレイク **ワード**アドレス（BE）。HandShake 上は 24bit 相当 |
+
+**RES**: `status`。  
+IO → CPU: **`42h`**（レイアウトは `HandShake.mdc`）。
+
+### 5.10 `0x31` BP_INST_CLR
+
+**REQ**: `u8 slot`。  
+IO → **`43h`**。
+
+### 5.11 `0x32` BP_ADDR_SET（アドレス／IO ブレイク・6 本）
+
+拡張: メモリダンプ／IO メニュー。スロット **0–5**。
+
+**REQ**（HandShake `40h` をほぼそのままパック）
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | slot（0–5） |
+| 1 | u8 | flags（Bit0 MEM/IO, Bit1 RD/WR, Bit2–4 条件, Bit5 履歴）— `HandShake.mdc` 位置02 と同じ |
+| 2 | u8 | ブレイクまでのカウント（0=シングル） |
+| 3 | u8 | 予約 |
+| 4–7 | u32 | アドレス（バイト or IO。MEM 時はバイトアドレス推奨、IO は 16bit を下位に） |
+| 8–9 | u16 | 比較データ |
+
+**RES**: `status`。  
+IO → **`40h`**。
+
+条件ビット・履歴の意味は `HandShake.mdc` / `retrocpu_debug.mdc` に従う。
+
+### 5.12 `0x33` BP_ADDR_CLR
+
+**REQ**: `u8 slot`。IO → **`41h`**。
+
+### 5.13 `0x34` BP_ADDR_HIST（任意）
+
+REQ: `u8 slot` + `u8 clear_after`（Bit0=取得後クリア）。  
+IO → **`60h`**。RES ペイロードは履歴エントリをバイナリ連結（`HandShake.mdc` の 52 バイト/件）。
+
+### 5.14 `0x40` EVT_STOPPED
+
+拡張は購読なしで常に受信（接続中）。
+
+**payload**
+
+| off | 型 | 説明 |
+| ---: | --- | --- |
+| 0 | u8 | reason（1 HALT / 2 INST_BP / 3 ADDR_BP / 4 UNDEF / 5 RESET） |
+| 1 | u8 | slot（BP 時。該当なしは 0xFF） |
+| 2–5 | u32 | IC ワードアドレス |
+| 6… | 40B | その時点のレジスタ（任意。無ければ length 短く） |
+
+IO は CPU 割り込み要因／CPLD／IISR を見て生成。レジスタは必要なら直後に `48h`。
+
+---
+
+## 6. ブレイクと UI の対応
+
+| UI（`retrocpu_debug.mdc`） | 本プロトコル | ハンドシェイク |
+| --- | --- | --- |
+| 命令ブレイク 8 か所 | `0x30` / `0x31` slot 0–7 | `42h` / `43h` |
+| メモリ／IO ブレイク 6 か所 | `0x32` / `0x33` slot 0–5 | `40h` / `41h` |
+| 履歴 | `0x34` | `60h` |
+
+拡張はスロット番号をユーザに見せてよい。IO はスロット範囲外を `BAD_PARAM`。
+
+---
+
+## 7. メモリダンプシーケンス（典型）
+
+```text
+拡張                IOボード                    CPUボード
+  | -- MEM_READ -->|                              |
+  |                | -- HSHK 50h (addr,len) ----> |
+  |                | <----- data + checksum ----- |
+  |                | （必要なら再送）              |
+  | <- RES data ---|                              |
+  |  (画面更新)    |                              |
+```
+
+連続ダンプは拡張が窓をずらし複数 `MEM_READ`。IO は同時 1 ハンドシェイクを原則とする。
+
+---
+
+## 8. エラー・切断
+
+| 状況 | 動作 |
+| --- | --- |
+| magic/ver 不正・length 超過 | 切断 |
+| HSHK 失敗 | RES `HSHK_FAIL` |
+| 実行中で DMA 不可 | いったん HALT して実行、または `BUSY` |
+| 2 本目 TCP | 拒否 |
+| 未知 cmd | `UNSUPPORTED`（切断しない） |
+
+---
+
+## 9. Electron / 実機
+
+| 環境 | TCP サーバ | ハンドシェイク先 |
+| --- | --- | --- |
+| Electron | メインプロセス | CPU Worker（MessagePort で `50h`/`42h` 相当 RPC） |
+| 実機 | RP2354B | GPIO ハンドシェイク＋DMA |
+
+拡張から見て **同じバイナリ**であること。
+
+---
+
+## 10. 未決事項
+
+1. `MEM_READ` のアドレスをバイト固定か、ワード＋バイト長か（原案はバイト）
+2. CRC を必須にするか（実機 USB ノイズ対策）
+3. EVT のレジスタ同梱を必須にするか（帯域 vs UI 遅延）
+4. STEP を実機でどう実現するか（モニタ支援が必要）
+5. `WebSocket.mdc` JSON 面を廃止するか、テスト専用に残すか
+
+---
+
+## 11. 関連文書
+
+| 文書 | 内容 |
+| --- | --- |
+| `HandShake.mdc` | `40h`–`43h`, `48h`, `49h`, `50h`, `51h`, `60h` の線上レイアウト |
+| `retrocpu_debug.mdc` | 拡張 UI・BP 種類 |
+| `retrocpu_emu.mdc` | エミュ上の IO/CPU Worker 分離 |
+| `ioboard.mdc` | 1階ハード |
+| `WebSocket.mdc` | （参考）旧 JSON API。本バイナリとは別系統 |

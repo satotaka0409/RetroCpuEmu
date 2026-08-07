@@ -14,10 +14,20 @@
 export type InputPin = [boolean, boolean, boolean];
 export type OutputPin = [boolean, boolean];
 
+/**
+ * 入力ピンを作る。
+ * @param initial 初期レベル（true=Enable）
+ * @returns [現在値, 前回値, 保留フラグ]
+ */
 export function createInputPin(initial = false): InputPin {
   return [initial, initial, false];
 }
 
+/**
+ * 出力ピンを作る。
+ * @param initial 初期レベル（true=Enable）
+ * @returns [現在値, 前回値]
+ */
 export function createOutputPin(initial = false): OutputPin {
   return [initial, initial];
 }
@@ -27,14 +37,29 @@ export function setInputLevel(pin: InputPin, enable: boolean): void {
   pin[0] = enable;
 }
 
+/**
+ * 出力ピンの現在値を更新する。
+ * @param pin 対象ピン
+ * @param enable true=Enable
+ */
 export function setOutputLevel(pin: OutputPin, enable: boolean): void {
   pin[0] = enable;
 }
 
+/**
+ * 立ち上がりエッジか判定する。
+ * @param pin 対象ピン
+ * @returns 前回 false かつ今回 true なら true
+ */
 export function risingEdge(pin: InputPin | OutputPin): boolean {
   return pin[0] && !pin[1];
 }
 
+/**
+ * 立ち下がりエッジか判定する。
+ * @param pin 対象ピン
+ * @returns 前回 true かつ今回 false なら true
+ */
 export function fallingEdge(pin: InputPin | OutputPin): boolean {
   return !pin[0] && pin[1];
 }
@@ -56,6 +81,10 @@ export function takeDeferred(pin: InputPin): boolean {
   return true;
 }
 
+/**
+ * 保留を破棄する（リセット時など）。
+ * @param pin 対象ピン
+ */
 export function clearDeferred(pin: InputPin): void {
   pin[2] = false;
 }

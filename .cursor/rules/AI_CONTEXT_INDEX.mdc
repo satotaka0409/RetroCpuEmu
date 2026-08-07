@@ -18,6 +18,8 @@
   - `.cursor/rules/emulater_code_test.mdc`
 - Electron 上 retrocpu_emu と Cursor/CLI 間の WebSocket メッセージ
   - `.cursor/rules/WebSocket.mdc`
+- コードコメント規約（JSDoc 必須）
+  - `.cursor/rules/code_comment.mdc`
 - レジスタ表示レイアウト
   - `.cursor/rules/mn1613_register.png`
 - 7セグメント表示ビット定義

@@ -8,6 +8,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 mkdirSync(join(root, "dist/electron"), { recursive: true });
 mkdirSync(join(root, "dist/renderer"), { recursive: true });
 
+/** winston は動的 require を含むためバンドルせず node_modules から解決させる */
+const nodeExternal = ["electron", "winston"];
+
 await build({
   entryPoints: [join(root, "src/electron/main.ts")],
   bundle: true,
@@ -15,7 +18,7 @@ await build({
   format: "cjs",
   target: "node20",
   outfile: join(root, "dist/electron/main.js"),
-  external: ["electron"],
+  external: nodeExternal,
   sourcemap: true,
 });
 
@@ -38,6 +41,7 @@ for (const name of ["cpu_worker", "io_worker"]) {
     format: "cjs",
     target: "node20",
     outfile: join(root, `dist/electron/${name}.js`),
+    external: nodeExternal,
     sourcemap: true,
   });
 }

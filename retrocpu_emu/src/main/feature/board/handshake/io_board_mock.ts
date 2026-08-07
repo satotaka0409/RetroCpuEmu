@@ -26,12 +26,21 @@ import { IoControlHandshake } from "../../cpu/mn1613/handhshake/handshake_ioboar
 import {
   createHandshakeBus,
   DEFAULT_TIMEOUT_MS,
+  intCauseForTimer,
   MODE,
   RESPONSE_CODE,
   waitCondition,
 } from "../../cpu/mn1613/handhshake/handshake_type";
 import { createHandshakeIoPortBridge } from "./io_port_bridge";
 import { applyLedDisplayCommand } from "../io_led";
+import {
+  IoTimer,
+  type IoTimerHandle,
+  type IoTimerScheduler,
+} from "../io_timer";
+
+/** タイマー割り込みを配送できなかったときの再試行間隔 (ms) */
+const TIMER_IRQ_RETRY_MS = 1;
 
 export type IoBoardMockLogEntry = {
   at: number;
@@ -64,8 +73,14 @@ export type IoBoardMockOptions = {
   /** ログ最大件数（既定 64） */
   maxLog?: number;
   onLog?: (entry: IoBoardMockLogEntry) => void;
+  /** タイマー割り込み（19h）の駆動スケジューラ。既定はグローバル setTimeout */
+  timerScheduler?: IoTimerScheduler;
 };
 
+/**
+ * 全消灯の LED 表示データを作る。
+ * @returns 7セグ 12 桁と砲弾 16 本が 0 のデータ
+ */
 function emptyLed(): LedDisplayData {
   return {
     sevenSeg: new Uint8Array(12),
@@ -74,7 +89,12 @@ function emptyLed(): LedDisplayData {
   };
 }
 
-function createInitialState(): IoBoardMockState {
+/**
+ * CPU→IO コマンド用の IO ボード状態の初期値を作る（モニターモード・キー入力なし）。
+ * IO ボード Worker でも同じ状態・同じ既定ハンドラを使う。
+ * @returns 新しい状態オブジェクト
+ */
+export function createIoBoardCommandState(): IoBoardMockState {
   return {
     mode: MODE.MONITOR,
     lastCpuRegs: null,
@@ -91,9 +111,13 @@ function createInitialState(): IoBoardMockState {
 
 /**
  * 状態を持つ既定 CpuToIoHandlers（モニター相手のモック挙動）。
+ * @param state 更新対象のモック状態
+ * @param timers タイマー設定 (19h) を実際に反映する IO ボードタイマー（番号 0/1 の 2 本）。
+ *   省略した場合は設定値を state に記録するだけで割り込みは発生しない
  */
 export function createDefaultCpuToIoHandlers(
   state: IoBoardMockState,
+  timers?: readonly IoTimer[],
 ): CpuToIoHandlers {
   return {
     onCpuStatusNotify(regs) {
@@ -141,7 +165,10 @@ export function createDefaultCpuToIoHandlers(
     },
     onTimerSet(params) {
       state.lastTimer = { ...params };
-      return RESPONSE_CODE.OK;
+      if (!timers) return RESPONSE_CODE.OK;
+      const target = timers[params.timerNo];
+      if (!target) return RESPONSE_CODE.NG;
+      return target.configure(params);
     },
     getAddrBreakInfo() {
       return {
@@ -192,12 +219,18 @@ export class IoBoardHandshakeMock {
   readonly bus: CpuIoSignals;
   readonly state: IoBoardMockState;
   readonly io: IoControlHandshake;
+  /**
+   * IO ボード側タイマー 2 本（ハンドシェイク 19h のタイマー番号 0 / 1）。
+   * 満了で INT_CAUSE=番号 のレベル 2 割り込みを上げる。
+   */
+  readonly timers: readonly [IoTimer, IoTimer];
 
   private readonly dispatcher: CpuToIoCommandDispatcher;
   private readonly timeoutMs: number;
   private readonly maxLog: number;
   private readonly onLog?: (entry: IoBoardMockLogEntry) => void;
   private readonly syncIrq2: boolean;
+  private readonly timerScheduler: IoTimerScheduler;
 
   private unwireIrq2: (() => void) | null = null;
   private serving = false;
@@ -205,18 +238,38 @@ export class IoBoardHandshakeMock {
   private abortServe = false;
   /** handleOneRequest / sendToCpu の直列化 */
   private busLock: Promise<void> = Promise.resolve();
+  /** 配送待ちのタイマー番号（レベル線相当なので同一番号の回数は畳む） */
+  private readonly timerIrqPending = new Set<number>();
+  private timerIrqRetry: IoTimerHandle | null = null;
 
+  /**
+   * @param options タイムアウト、差し替えハンドラ、IRQ2 連動、ログ設定、タイマースケジューラ
+   */
   constructor(options: IoBoardMockOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxLog = options.maxLog ?? 64;
     this.onLog = options.onLog;
     this.syncIrq2 = options.syncIrq2 !== false;
+    this.timerScheduler = options.timerScheduler ?? {
+      setTimeout: (cb, ms) => setTimeout(cb, ms),
+      clearTimeout: (h) => clearTimeout(h),
+    };
 
     this.bus = createHandshakeBus();
-    this.state = createInitialState();
+    this.state = createIoBoardCommandState();
     this.io = new IoControlHandshake(this.bus, this.timeoutMs);
+    this.timers = [
+      new IoTimer({
+        onExpire: () => this.requestTimerInterrupt(0),
+        scheduler: this.timerScheduler,
+      }),
+      new IoTimer({
+        onExpire: () => this.requestTimerInterrupt(1),
+        scheduler: this.timerScheduler,
+      }),
+    ];
 
-    const base = createDefaultCpuToIoHandlers(this.state);
+    const base = createDefaultCpuToIoHandlers(this.state, this.timers);
     const handlers: CpuToIoHandlers = { ...base, ...options.handlers };
     this.dispatcher = new CpuToIoCommandDispatcher(handlers);
   }
@@ -231,13 +284,65 @@ export class IoBoardHandshakeMock {
     }
   }
 
+  /** CPU の RD/WT 接続と IRQ2 連動を解除して初期状態へ戻す */
   detach(): void {
     void this.stop();
+    this.stopTimers();
     this.unwireIrq2?.();
     this.unwireIrq2 = null;
     setIoReadCallback(() => 0);
     setIoWriteCallback(() => {});
     setPins({ IRQ2: false });
+  }
+
+  /** タイマー 2 本を止め、配送待ちのタイマー割り込みも捨てる */
+  stopTimers(): void {
+    for (const t of this.timers) t.stop();
+    this.timerIrqPending.clear();
+    if (this.timerIrqRetry !== null) {
+      this.timerScheduler.clearTimeout(this.timerIrqRetry);
+      this.timerIrqRetry = null;
+    }
+  }
+
+  /**
+   * タイマー満了 1 回分の割り込み配送を要求する。
+   * 割り込み処理中／ハンドシェイク中は INT_CAUSE を壊さないよう配送を保留する。
+   * @param timerNo 満了したタイマー番号（0 または 1）
+   */
+  private requestTimerInterrupt(timerNo: number): void {
+    this.timerIrqPending.add(timerNo);
+    this.flushTimerInterrupt();
+  }
+
+  /**
+   * 保留中のタイマー割り込みを 1 件配送する。
+   * INTERRUPT_BUSY=1（CPU が割り込み処理中）または HSHK_ENA=1（転送中）の間は
+   * INT_CAUSE の取り違えを避けるため配送せず、短い間隔で再試行する。
+   * 2 本同時に満了した場合も要因が混ざらないよう 1 件ずつ配送する。
+   */
+  private flushTimerInterrupt(): void {
+    if (this.timerIrqPending.size === 0) return;
+    if (this.bus.INTERRUPT_BUSY === 1 || this.bus.HSHK_ENA === 1) {
+      this.scheduleTimerIrqRetry();
+      return;
+    }
+    const timerNo = [...this.timerIrqPending][0]!;
+    this.timerIrqPending.delete(timerNo);
+    this.bus.INT_CAUSE = intCauseForTimer(timerNo);
+    setPins({ IRQ2: true });
+    triggerInterrupt(2);
+    setPins({ IRQ2: false });
+    if (this.timerIrqPending.size > 0) this.scheduleTimerIrqRetry();
+  }
+
+  /** 配送の再試行を 1 件だけ予約する（既に予約済みなら何もしない） */
+  private scheduleTimerIrqRetry(): void {
+    if (this.timerIrqRetry !== null) return;
+    this.timerIrqRetry = this.timerScheduler.setTimeout(() => {
+      this.timerIrqRetry = null;
+      this.flushTimerInterrupt();
+    }, TIMER_IRQ_RETRY_MS);
   }
 
   /**
@@ -254,6 +359,10 @@ export class IoBoardHandshakeMock {
     });
   }
 
+  /**
+   * 受信ループを止める。receive 待ちはタイムアウトで抜けるため、
+   * テストでは短い timeoutMs を渡すこと。
+   */
   async stop(): Promise<void> {
     if (!this.serving) return;
     this.abortServe = true;
@@ -262,6 +371,10 @@ export class IoBoardHandshakeMock {
     await this.servePromise?.catch(() => undefined);
   }
 
+  /**
+   * 受信ループが動いているか。
+   * @returns start() 済みで停止していなければ true
+   */
   get isServing(): boolean {
     return this.serving;
   }
@@ -303,6 +416,11 @@ export class IoBoardHandshakeMock {
     });
   }
 
+  /**
+   * バス操作を直列化する（受信処理と送信が混ざらないようにする）。
+   * @param fn バスを使う処理
+   * @returns fn の結果
+   */
   private withBusLock<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.busLock.then(fn, fn);
     this.busLock = run.then(
@@ -312,16 +430,29 @@ export class IoBoardHandshakeMock {
     return run;
   }
 
+  /**
+   * 16進キーの押下ビットマップを差し込む（コマンド 14h の応答値）。
+   * @param columns 列 0〜7 のビットマップ。8 要素を超える分は捨てる
+   */
   setHexKeys(columns: Uint8Array | number[]): void {
     const src = columns instanceof Uint8Array ? columns : Uint8Array.from(columns);
     this.state.hexKeys.fill(0);
     this.state.hexKeys.set(src.slice(0, 8));
   }
 
+  /**
+   * PC キー入力を差し込む（コマンド 15h の応答値）。
+   * @param ascii ASCII コード
+   * @param keyCode ホスト側キーコード
+   */
   setPcKey(ascii: number, keyCode: number): void {
     this.state.pcKey = { ascii: ascii & 0xff, keyCode: keyCode & 0xff };
   }
 
+  /**
+   * 時刻取得（1ah）で返す 64bit タイマー値を設定する。
+   * @param bytes bigint なら上位バイト先頭の 8 バイトに展開、Uint8Array ならそのまま先頭 8 バイト
+   */
   setTimestamp(bytes: Uint8Array | bigint): void {
     if (typeof bytes === "bigint") {
       const out = new Uint8Array(8);
@@ -337,14 +468,23 @@ export class IoBoardHandshakeMock {
     this.state.timestamp.set(bytes.slice(0, 8));
   }
 
+  /**
+   * アドレスブレイク情報で返すブレイク番号を設定する。
+   * @param n ブレイク番号（下位 2bit のみ有効）
+   */
   setAddrBreakNo(n: number): void {
     this.state.addrBreakNo = n & 0x03;
   }
 
+  /** 記録済みの LED 表示内容を全消灯に戻す */
   clearLed(): void {
     this.state.led = emptyLed();
   }
 
+  /**
+   * REQ_0 を短いスライスで待ち、1 件ずつ処理し続ける。
+   * タイムアウトと ENA0 チェック失敗は継続、それ以外の例外は投げ直す。
+   */
   private async serveLoop(): Promise<void> {
     while (!this.abortServe) {
       try {
@@ -366,6 +506,10 @@ export class IoBoardHandshakeMock {
     }
   }
 
+  /**
+   * 通信ログを追記する（maxLog を超えたら古い順に捨てる）。
+   * @param entry 追加するログエントリ
+   */
   private pushLog(entry: IoBoardMockLogEntry): void {
     this.state.log.push(entry);
     while (this.state.log.length > this.maxLog) {

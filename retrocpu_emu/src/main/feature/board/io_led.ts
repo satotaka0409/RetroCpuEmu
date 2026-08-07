@@ -11,6 +11,10 @@ import {
   type LedDisplayData,
 } from "../cpu/mn1613/handhshake/command_cpu_to_io";
 
+/**
+ * 全消灯状態の表示データを作る。
+ * @returns 7セグ 12 桁と砲弾 16 本が全て 0 のデータ
+ */
 function emptyLed(): LedDisplayData {
   return {
     sevenSeg: new Uint8Array(LED_SEVEN_SEG_COUNT),
@@ -32,6 +36,10 @@ export function applyLedDisplayCommand(data: LedDisplayData): void {
   };
 }
 
+/**
+ * 現在のラッチ内容を返す。
+ * @returns 呼び出し側で書き換えても影響しないコピー
+ */
 export function getLedDisplay(): LedDisplayData {
   return {
     sevenSeg: _led.sevenSeg.slice(),
@@ -40,6 +48,7 @@ export function getLedDisplay(): LedDisplayData {
   };
 }
 
+/** ラッチを全消灯に戻す（リセット時・テスト用） */
 export function resetLedDisplay(): void {
   _led = emptyLed();
 }

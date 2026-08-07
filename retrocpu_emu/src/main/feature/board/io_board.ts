@@ -16,6 +16,10 @@ let _hooks: IoBoardHooks = {};
 let _cpuToIoReq = false;
 let _cpuToIoReqPrev = false;
 
+/**
+ * ティック中に呼ばれるフックを差し替える。
+ * @param hooks 割り込み要求検知・キーボード走査のコールバック
+ */
 export function setIoBoardHooks(hooks: IoBoardHooks): void {
   _hooks = hooks;
 }
@@ -25,6 +29,10 @@ export function setCpuToIoRequest(asserted: boolean): void {
   _cpuToIoReq = asserted;
 }
 
+/**
+ * IO ボードの 1 ティック分の処理。
+ * CPU→IO 要求は立ち上がりエッジでのみフックを呼ぶ。
+ */
 export function tickIoBoard(): void {
   // 2-1: レトロCPUボードからの割り込み要求監視
   if (_cpuToIoReq && !_cpuToIoReqPrev) {

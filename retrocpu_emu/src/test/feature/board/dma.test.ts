@@ -24,6 +24,12 @@ import {
   powerOnIdle,
 } from "../../../main/feature/cpu/mn1613/mn1613";
 
+/**
+ * CPU メモリからバイト列を読む（範囲外に達したら以降は 0）。
+ * @param byteAddr 開始バイトアドレス
+ * @param length 読み出すバイト数
+ * @returns 読み出したバイト列
+ */
 function readBytes(byteAddr: number, length: number): Uint8Array {
   const view = new DataView(getMemory());
   const out = new Uint8Array(length);

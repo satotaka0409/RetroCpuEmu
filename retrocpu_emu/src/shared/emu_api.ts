@@ -11,6 +11,7 @@ export type ConsoleStateWire = {
   dataWord: number;
   focus: "addr" | "data";
   halted: boolean;
+  undefInsn: boolean;
 };
 
 export type EmuSnapshotWire = {

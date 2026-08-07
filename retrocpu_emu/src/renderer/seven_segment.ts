@@ -29,6 +29,11 @@ export type SevenSegmentOpts = {
   decimalPoint?: boolean;
 };
 
+/**
+ * 7セグメント 1 桁分の要素を作る。
+ * @param opts 表示文字・色・サイズ・小数点の有無
+ * @returns セグメント要素を内包したラッパ要素
+ */
 export function createSevenSegment(opts: SevenSegmentOpts): HTMLElement {
   const color = opts.color ?? "#f00";
   const backgroundColor = opts.backgroundColor ?? "#111";
@@ -107,6 +112,12 @@ export function createSevenSegment(opts: SevenSegmentOpts): HTMLElement {
   return root;
 }
 
+/**
+ * 表示文字を指定して 7セグを更新する。
+ * @param root createSevenSegment() が返した要素
+ * @param value 表示する 1 文字（未知の文字は全消灯）
+ * @param color 点灯色
+ */
 export function setSevenSegmentValue(
   root: HTMLElement,
   value: string,

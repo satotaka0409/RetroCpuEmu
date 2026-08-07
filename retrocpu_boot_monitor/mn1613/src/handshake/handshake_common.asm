@@ -20,6 +20,7 @@
 .global gl_hshk_finalize_recv
 .global gl_hshk_recv_data
 .global gl_hshk_wait_ena_delay
+.global gl_hshk_wait_req1_1
 
 ; -------------------------------------------------------
 ; ENA=0 チェック用の待機（50us～100us ランダム近似）
@@ -143,6 +144,26 @@ hshk_req1_cont:
 	si	R1, 1, Z
 	b	hshk_req1_lp
 	mvi	R0, HSHK_NG
+	ret
+
+; -------------------------------------------------------
+; HSHK_REQ_1 == 1 になるまで待つ
+; @note 割り込みを使わず IO→CPU 依頼を待つ（BIOS の応答受信）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+gl_hshk_wait_req1_1:
+	mvwi	R1, HSHK_WAIT_MAX
+hshk_req1s_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, HSHK_REQ1_BIT, Z
+	b	hshk_req1s_ok
+	si	R1, 1, Z
+	b	hshk_req1s_lp
+	mvi	R0, HSHK_NG
+	ret
+hshk_req1s_ok:
+	mvi	R0, HSHK_OK
 	ret
 
 ; -------------------------------------------------------

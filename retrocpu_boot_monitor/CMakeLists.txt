@@ -2,7 +2,7 @@
 # 実ビルドは SDCC ツリー内の既存 Makefile を呼び出す。
 #
 # Usage:
-#   make -C cursor_expand/monitor sdcc-setup
+#   make -C retrocpu_boot_monitor sdcc-setup
 # or:
 #   cmake -S . -B build/cmake -DSDCC_SRC_DIR=$HOME/sdcc-mn1613/sdcc/build/sdcc
 #   cmake --build build/cmake --target sdcc_mn1613_tools

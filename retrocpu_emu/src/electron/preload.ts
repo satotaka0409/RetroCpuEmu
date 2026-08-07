@@ -7,6 +7,11 @@ import type { EmuSnapshotWire } from "../shared/emu_api";
 
 contextBridge.exposeInMainWorld("emuApi", {
   onSnapshot(callback: (snap: EmuSnapshotWire) => void): () => void {
+    /**
+     * IPC イベントからスナップショットだけを取り出してコールバックへ渡す。
+     * @param _event IPC イベント（未使用）
+     * @param snap 受信したスナップショット
+     */
     const handler = (_event: IpcRendererEvent, snap: EmuSnapshotWire) => {
       callback(snap);
     };

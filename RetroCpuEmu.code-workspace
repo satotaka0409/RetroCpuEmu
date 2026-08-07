@@ -5,6 +5,10 @@
       "path": "./cursor_expand/asm_editer",
     },
     {
+      "name": "retrocpu_boot_monitor",
+      "path": "./retrocpu_boot_monitor",
+    },
+    {
       "name": "retrocpu_emu",
       "path": "./retrocpu_emu",
     },

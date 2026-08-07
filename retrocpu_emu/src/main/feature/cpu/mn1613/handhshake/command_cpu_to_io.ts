@@ -63,6 +63,8 @@ export interface BeepParams {
 
 /** タイマー設定パラメータ */
 export interface TimerParams {
+  /** タイマー番号 (0 または 1)。割り込み要因もこの番号になる */
+  timerNo: number;
   /** タイマー周期 (ms)。0 で停止 */
   periodMs: number;
   /** 割り込み回数。0 で無限 */
@@ -107,7 +109,7 @@ export interface CpuToIoHandlers {
 
   /**
    * タイマー設定 (cmd=0x19): タイマー割り込み周期を設定。
-   * periodMs=0 で停止、count=0 で無限
+   * timerNo=0/1 でタイマーを選ぶ。periodMs=0 で停止、count=0 で無限
    */
   onTimerSet(params: TimerParams): number;
   /**
@@ -143,8 +145,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.LED_DISPLAY]: 15,
   /** BEEP音: cmd(1) + 周波数(2) + 長さ(2) = 5バイト */
   [CMD_CPU_TO_IO.BEEP]: 5,
-  /** タイマー設定: cmd(1) + 周期(2) + 回数(2) = 5バイト */
-  [CMD_CPU_TO_IO.TIMER_SET]: 5,
+  /** タイマー設定: cmd(1) + タイマー番号(1) + 周期(2) + 回数(2) = 6バイト */
+  [CMD_CPU_TO_IO.TIMER_SET]: 6,
   /** アドレスブレイク番号取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.ADDR_BREAK_GET]: 1,
 };
@@ -198,10 +200,22 @@ const OFS = {
 // バイト入出力ユーティリティ（内部使用）
 // ─────────────────────────────────────────────
 
+/**
+ * ビッグエンディアン 2 バイトを読む。
+ * @param buf フレームバッファ
+ * @param ofs 先頭からのバイトオフセット
+ * @returns 16bit 値
+ */
 function read16(buf: Uint8Array, ofs: number): number {
   return ((buf[ofs] & 0xff) << 8) | (buf[ofs + 1] & 0xff);
 }
 
+/**
+ * ビッグエンディアン 3 バイトを読む。
+ * @param buf フレームバッファ
+ * @param ofs 先頭からのバイトオフセット
+ * @returns 24bit 値
+ */
 function read24(buf: Uint8Array, ofs: number): number {
   return (
     ((buf[ofs] & 0xff) << 16) |
@@ -210,11 +224,23 @@ function read24(buf: Uint8Array, ofs: number): number {
   );
 }
 
+/**
+ * ビッグエンディアン 2 バイトで書く。
+ * @param buf フレームバッファ
+ * @param ofs 先頭からのバイトオフセット
+ * @param val 16bit 値
+ */
 function write16(buf: Uint8Array, ofs: number, val: number): void {
   buf[ofs] = (val >> 8) & 0xff;
   buf[ofs + 1] = val & 0xff;
 }
 
+/**
+ * ビッグエンディアン 3 バイトで書く。
+ * @param buf フレームバッファ
+ * @param ofs 先頭からのバイトオフセット
+ * @param val 24bit 値
+ */
 function write24(buf: Uint8Array, ofs: number, val: number): void {
   buf[ofs] = (val >> 16) & 0xff;
   buf[ofs + 1] = (val >> 8) & 0xff;
@@ -225,6 +251,12 @@ function write24(buf: Uint8Array, ofs: number, val: number): void {
 // フレーム解析（I/Oボード側で使用）
 // ─────────────────────────────────────────────
 
+/**
+ * CPU状態通知フレーム（cmd=0x10）からレジスタ値を取り出す。
+ * オフセットは HandShake.mdc の位置表（欠番含む）に合わせている。
+ * @param frame コマンドバイトを含む受信フレーム
+ * @returns 各レジスタ値
+ */
 function parseCpuStatusFrame(frame: Uint8Array): CpuRegisters {
   return {
     R0: reg16(read16(frame, OFS.R0)),
@@ -341,13 +373,14 @@ export function buildBeepFrame(params: BeepParams): Uint8Array {
 
 /**
  * タイマー設定フレームを構築する (cmd=0x19)。
- * periodMs=0 で停止、count=0 で無限。
+ * timerNo=0/1 でタイマーを選び、periodMs=0 で停止、count=0 で無限。
  */
 export function buildTimerSetFrame(params: TimerParams): Uint8Array {
   const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET]);
   frame[0x00] = CMD_CPU_TO_IO.TIMER_SET;
-  write16(frame, 0x01, params.periodMs); // 0x01〜0x02
-  write16(frame, 0x03, params.count); // 0x03〜0x04
+  frame[0x01] = params.timerNo & 0xff;
+  write16(frame, 0x02, params.periodMs); // 0x02〜0x03
+  write16(frame, 0x04, params.count); // 0x04〜0x05
   return frame;
 }
 /**
@@ -376,6 +409,9 @@ export function buildAddrBreakGetFrame(): Uint8Array {
  * await io.send(response);
  */
 export class CpuToIoCommandDispatcher {
+  /**
+   * @param handlers コマンドごとの処理を実装したハンドラ集合
+   */
   constructor(private readonly handlers: CpuToIoHandlers) {}
 
   /**
@@ -505,12 +541,18 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * タイマー設定 (0x19)
+   * タイマー番号は 0 / 1 のみ有効。
    * 応答: 1バイト (OK / NG)
    */
   private _handleTimerSet(frame: Uint8Array): Uint8Array {
+    const timerNo = frame[0x01]!;
+    if (timerNo !== 0 && timerNo !== 1) {
+      return new Uint8Array([RESPONSE_CODE.NG]);
+    }
     const params: TimerParams = {
-      periodMs: read16(frame, 0x01),
-      count: read16(frame, 0x03),
+      timerNo,
+      periodMs: read16(frame, 0x02),
+      count: read16(frame, 0x04),
     };
     const result = this.handlers.onTimerSet(params);
     return new Uint8Array([result]);

@@ -34,6 +34,11 @@ export type BootResult = {
   status: string;
 };
 
+/**
+ * CPU の RAM へ 1 ワード書く（範囲外は無視）。
+ * @param wordAddr ワードアドレス
+ * @param value 16bit 値
+ */
 function writeWord(wordAddr: number, value: number): void {
   const view = new DataView(getMemory());
   const off = (wordAddr & 0xffff) * 2;

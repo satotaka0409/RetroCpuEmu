@@ -1,4 +1,4 @@
-# cursor_expand/monitor — SDCC ツールチェーン＋ MN1613 モニター IHX ビルド
+# retrocpu_boot_monitor — SDCC ツールチェーン＋ MN1613 モニター IHX ビルド
 #
 # 主なターゲット:
 #   make sdcc-setup   … SDCC (sdasmn1613 / sdld) を CMake 経由で構築
@@ -10,7 +10,7 @@
 
 SHELL := /bin/bash
 
-ROOT_DIR      := $(abspath ../..)
+ROOT_DIR      := $(abspath ..)
 MONITOR_DIR   := $(abspath .)
 MN1613_DIR    := $(MONITOR_DIR)/mn1613
 SRC_DIR       := $(MN1613_DIR)/src
@@ -55,7 +55,7 @@ ASXXXX_REL    := $(OBJ_DIR)/$(TARGET_NAME).asxxxx.rel
 all: ihx
 
 help:
-	@echo "cursor_expand/monitor"
+	@echo "retrocpu_boot_monitor"
 	@echo "  make sdcc-setup     Build sdasmn1613 + sdld via CMake (or direct make)"
 	@echo "  make ihx            retrocpu_asm → asxxxx REL → sdld → Intel HEX"
 	@echo "  make clean          Remove monitor build/ artifacts"
@@ -113,6 +113,7 @@ $(BUILD_DIR):
 	@mkdir -p $@
 
 $(AMALGAM): $(ASM_ENTRY) $(SRC_DIR)/interrupt.asm $(SRC_DIR)/handshake/handshake_common.asm \
+		$(SRC_DIR)/bios/bios_timer.asm \
 		$(SRC_DIR)/interrupt_io.inc $(SRC_DIR)/handshake/handshake_io.inc \
 		$(AMALGAM_TOOL) | $(BUILD_DIR)
 	node $(AMALGAM_TOOL) $(ASM_ENTRY) -o $@

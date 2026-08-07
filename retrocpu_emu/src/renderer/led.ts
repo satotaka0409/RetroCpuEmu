@@ -42,6 +42,12 @@ const LED_TONES: Record<LedColor, LedTone> = {
   },
 };
 
+/**
+ * 消灯状態の砲弾 LED 要素を作る。
+ * @param color 発光色
+ * @param size 直径（ピクセル）
+ * @returns setLedOn() で点灯制御できる span 要素
+ */
 export function createLed(
   color: LedColor = "red",
   size = 12,
@@ -53,6 +59,11 @@ export function createLed(
   return el;
 }
 
+/**
+ * LED の点灯／消灯を切り替える。色とサイズは createLed() 時の data 属性から復元する。
+ * @param el createLed() が返した要素
+ * @param on true で点灯
+ */
 export function setLedOn(el: HTMLSpanElement, on: boolean): void {
   const color = (el.dataset.color as LedColor) || "red";
   const size = Number(el.dataset.size || 12);

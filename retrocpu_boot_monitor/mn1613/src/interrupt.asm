@@ -32,22 +32,23 @@ gl_int_handler:
 	; 割り込み処理を終了
 	lpsw    2
 
-; タイマー1割り込みハンドラー
-timer1_interrupt_handler:
+; タイマー0割り込みハンドラー
+; IOボードのタイマー（ハンドシェイク 19h で設定）満了で呼ばれる
+timer0_interrupt_handler:
 	ret
 
 ; タイマー1割り込みハンドラー
-timer2_interrupt_handler:
+timer1_interrupt_handler:
 	ret
 
 ; 割り込み要因ごとのハンドラー
 interrupt_sub_func:
 	; 割り込み要因0 タイマー0
 	.dw	0  					; CSBR=0
-	.dw	timer1_interrupt_handler
+	.dw	timer0_interrupt_handler
 	; 割り込み要因1 タイマー1
 	.dw	0  					; CSBR=0
-	.dw	timer2_interrupt_handler
+	.dw	timer1_interrupt_handler
 	; 割り込み要因2 ハンドシェイク
 	.dw	0  					; CSBR=0
 	.dw	gl_handshake_interrupt_handler

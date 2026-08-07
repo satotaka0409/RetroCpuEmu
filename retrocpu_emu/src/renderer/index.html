@@ -26,17 +26,26 @@
               <div class="led-bank-split">
                 <div class="led-group">
                   <div id="addr-bank" class="led-bank led-bank-addr"></div>
-                  <span class="led-caption">ADDRESS</span>
+                  <div class="led-group-footer">
+                    <div id="bullet-e-slot" class="focus-bullet-slot"></div>
+                    <span class="led-caption">ADDRESS</span>
+                  </div>
                 </div>
                 <div class="led-group">
-                  <div id="data-bank" class="led-bank"></div>
-                  <span class="led-caption">DATA</span>
+                  <div class="led-data-with-status">
+                    <div id="data-bank" class="led-bank"></div>
+                    <div id="status-led-col" class="status-led-col"></div>
+                  </div>
+                  <div class="led-group-footer">
+                    <div id="bullet-f-slot" class="focus-bullet-slot"></div>
+                    <span class="led-caption">DATA</span>
+                  </div>
                 </div>
               </div>
             </section>
 
             <section class="led-card">
-              <h3>Bullet LEDs (0–F)</h3>
+              <h3>Bullet LEDs (0–A)</h3>
               <div class="bullet-leds-wrap">
                 <div id="bullet-row" class="bullet-led-row"></div>
               </div>

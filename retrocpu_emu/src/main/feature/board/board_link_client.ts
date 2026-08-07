@@ -7,6 +7,8 @@ import {
   CMD_IO_TO_CPU,
   type BoardLinkRequest,
   type BoardLinkResponse,
+  type CpuToIoFrameRequest,
+  type CpuToIoFrameResponse,
 } from "./board_link";
 
 type Pending = {
@@ -14,15 +16,29 @@ type Pending = {
   reject: (err: Error) => void;
 };
 
+/** CPU→IO コマンドフレームの処理関数（IO ボード側のコマンド解釈） */
+export type CpuToIoFrameHandler = (
+  frame: Uint8Array,
+) => Uint8Array | Promise<Uint8Array>;
+
 export class BoardLinkClient {
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private port: MessagePort | null = null;
+  private onCpuFrame: CpuToIoFrameHandler | null = null;
 
+  /**
+   * CPU ボードとつながる MessagePort を接続する。既存ポートは閉じる。
+   * @param port CPU Worker と対になる MessagePort
+   */
   attach(port: MessagePort): void {
     this.port?.close();
     this.port = port;
-    port.on("message", (msg: BoardLinkResponse) => {
+    port.on("message", (msg: BoardLinkResponse | CpuToIoFrameRequest) => {
+      if (msg?.type === "cpuio:frame") {
+        void this.serveCpuFrame(port, msg);
+        return;
+      }
       if (!msg || msg.type !== "link:result") return;
       const p = this.pending.get(msg.id);
       if (!p) return;
@@ -33,6 +49,62 @@ export class BoardLinkClient {
     port.start();
   }
 
+  /**
+   * CPU→IO コマンドフレームの処理関数を登録する。
+   * 未登録のままフレームが届いた場合は NG 応答を返す。
+   * @param handler フレームを解釈して応答バイト列を返す関数
+   */
+  setCpuToIoFrameHandler(handler: CpuToIoFrameHandler | null): void {
+    this.onCpuFrame = handler;
+  }
+
+  /**
+   * 届いた CPU→IO フレームを処理して応答を返す。
+   * @param port 応答先ポート
+   * @param req 受信したフレーム転送要求
+   */
+  private async serveCpuFrame(
+    port: MessagePort,
+    req: CpuToIoFrameRequest,
+  ): Promise<void> {
+    if (!this.onCpuFrame) {
+      const res: CpuToIoFrameResponse = {
+        type: "cpuio:result",
+        id: req.id,
+        ok: false,
+        error: "cpu to io frame handler not set",
+      };
+      port.postMessage(res);
+      return;
+    }
+    try {
+      const response = await this.onCpuFrame(new Uint8Array(req.frame));
+      const copy = new Uint8Array(response.byteLength);
+      copy.set(response);
+      const ab = copy.buffer as ArrayBuffer;
+      const res: CpuToIoFrameResponse = {
+        type: "cpuio:result",
+        id: req.id,
+        ok: true,
+        response: ab,
+      };
+      port.postMessage(res, [ab]);
+    } catch (e) {
+      const res: CpuToIoFrameResponse = {
+        type: "cpuio:result",
+        id: req.id,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+      port.postMessage(res);
+    }
+  }
+
+  /**
+   * DMA で CPU ボードの RAM へ書き込む（HALT / RESET 時のみ有効）。
+   * @param byteAddr 書き込み先バイトアドレス
+   * @param data 書き込むバイト列（内部でコピーして転送する）
+   */
   async writeBytes(byteAddr: number, data: Uint8Array): Promise<void> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -48,6 +120,12 @@ export class BoardLinkClient {
     await this.send(port, req, [ab]);
   }
 
+  /**
+   * ハンドシェイク MEM_READ (0x50) でメモリを読む。
+   * @param wordAddr 読み出し開始ワードアドレス
+   * @param byteCount 読み出しバイト数
+   * @returns 読み出したバイト列
+   */
   async memReadBytes(wordAddr: number, byteCount: number): Promise<Uint8Array> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -62,6 +140,11 @@ export class BoardLinkClient {
     return new Uint8Array(data ?? new ArrayBuffer(0));
   }
 
+  /**
+   * ハンドシェイク MEM_WRITE (0x51) でメモリへ書く。
+   * @param wordAddr 書き込み開始ワードアドレス
+   * @param data 書き込むバイト列
+   */
   async memWriteBytes(wordAddr: number, data: Uint8Array): Promise<void> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -78,6 +161,10 @@ export class BoardLinkClient {
     await this.send(port, req, [ab]);
   }
 
+  /**
+   * ハンドシェイク EXEC (0x49) で指定アドレスから実行させる。
+   * @param wordAddr 実行開始ワードアドレス
+   */
   async exec(wordAddr: number): Promise<void> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -90,6 +177,10 @@ export class BoardLinkClient {
     await this.send(port, req);
   }
 
+  /**
+   * CPU の HALT ピン相当を操作する。
+   * @param halt true で停止、false で実行再開
+   */
   async setHalt(halt: boolean): Promise<void> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -97,6 +188,19 @@ export class BoardLinkClient {
     await this.send(port, req);
   }
 
+  /**
+   * CPU へ割り込みを要求する（IO ボード発の割り込み。要因は INT_CAUSE に載る）。
+   * @param level 割り込みレベル（MN1613 は 0〜2。タイマー・ハンドシェイクは 2）
+   * @param cause 割り込み要因（INT_CAUSE_CODE。タイマーは 0）
+   */
+  async raiseInterrupt(level: 0 | 1 | 2, cause: number): Promise<void> {
+    const port = this.requirePort();
+    const id = this.nextId++;
+    const req: BoardLinkRequest = { type: "cpu:irq", id, level, cause };
+    await this.send(port, req);
+  }
+
+  /** CPU にリセットパルスを送る */
   async pulseReset(): Promise<void> {
     const port = this.requirePort();
     const id = this.nextId++;
@@ -104,6 +208,13 @@ export class BoardLinkClient {
     await this.send(port, req);
   }
 
+  /**
+   * リクエストを送り、同じ id の応答が返るまで待つ。
+   * @param port 送信先ポート
+   * @param req リクエスト（id は呼び出し側で採番済み）
+   * @param transfer 所有権を移す ArrayBuffer
+   * @returns 応答に含まれるデータ（無い場合は undefined）
+   */
   private send(
     port: MessagePort,
     req: BoardLinkRequest,
@@ -119,6 +230,11 @@ export class BoardLinkClient {
     });
   }
 
+  /**
+   * 接続済みポートを返す。
+   * @returns MessagePort
+   * @throws attach() 前に呼ばれた場合
+   */
   private requirePort(): MessagePort {
     if (!this.port) throw new Error("board link port not attached");
     return this.port;

@@ -56,6 +56,10 @@ export function setMemory(buf: ArrayBufferLike): void {
   _memView = new DataView(_memory);
 }
 
+/**
+ * 現在 CPU が使っているメモリバッファを返す。
+ * @returns setMemory() で差し替えた ArrayBuffer / SharedArrayBuffer
+ */
 export function getMemory(): ArrayBufferLike {
   return _memory;
 }
@@ -381,34 +385,73 @@ export function setState(
   if (partial.ICB !== undefined) cpuRegister.ICB = partial.ICB & 0xffff;
 }
 
+/**
+ * 現在の実行状態を返す。
+ * @returns running / step / break / halted
+ */
 export function getExecStatus(): ExecStatus {
   return _execStatus;
 }
 
+/**
+ * 命令ブレイクポイントを追加する。
+ * @param addr ワードアドレス（下位 16bit のみ有効）
+ */
 export function addBreakpoint(addr: number): void {
   _breakpoints.add(addr & 0xffff);
 }
+
+/**
+ * 命令ブレイクポイントを 1 つ解除する。
+ * @param addr 追加時と同じワードアドレス
+ */
 export function removeBreakpoint(addr: number): void {
   _breakpoints.delete(addr & 0xffff);
 }
+
+/** 命令ブレイクポイントを全て解除する */
 export function clearBreakpoints(): void {
   _breakpoints.clear();
 }
+
+/**
+ * 設定済みの命令ブレイクポイント一覧を返す。
+ * @returns 内部 Set の読み取り専用ビュー（コピーではない）
+ */
 export function getBreakpoints(): ReadonlySet<number> {
   return _breakpoints;
 }
 
+/**
+ * ステップ実行モードを切り替える。
+ * 実行中に有効化すると次の命令境界で停止する。
+ * @param enable true でステップモード
+ */
 export function setStepMode(enable: boolean): void {
   _stepMode = enable;
   if (enable && _execStatus === "running") _execStatus = "step";
 }
 
+/**
+ * 停止（break / halted / step）時に呼ばれるコールバックを登録する。
+ * @param cb コールバック。null で解除
+ */
 export function setOnStopCallback(cb: OnStopCallback | null): void {
   _onStop = cb;
 }
+
+/**
+ * IN 命令のリードを外部へ委譲するコールバックを登録する。
+ * @param cb ポート番号を受け取り 16bit 値を返す関数
+ */
 export function setIoReadCallback(cb: IoReadCallback): void {
   _ioRead = cb;
 }
+
+/**
+ * OUT 命令のライトを外部へ委譲するコールバックを登録する。
+ * @param cb ポート番号と 16bit 値を受け取る関数
+ */
 export function setIoWriteCallback(cb: IoWriteCallback): void {
   _ioWrite = cb;
 }
@@ -456,6 +499,7 @@ export async function run(
     let cycles = 0;
     const BATCH = 1000;
 
+    /** BATCH 命令ずつ実行し、停止条件に当たるまで setTimeout で継続する */
     function tick(): void {
       for (let i = 0; i < BATCH; i++) {
         // HLT ピンによる停止チェック
@@ -506,11 +550,22 @@ export function halt(): void {
 // ─────────────────────────────────────────────
 // I/O アクセスラッパー（IOP フラグを自動セット）
 // ─────────────────────────────────────────────
+/**
+ * I/O リード（IOP=H / WRT=L を出しつつコールバックを呼ぶ）。
+ * @param port ポート番号
+ * @returns 読み取った 16bit 値
+ */
 function _doIoRead(port: number): number {
   setOutputLevel(_pinIOP, true);
   setOutputLevel(_pinWRT, false);
   return _ioRead(port);
 }
+
+/**
+ * I/O ライト（IOP=H / WRT=H を出しつつコールバックを呼ぶ）。
+ * @param port ポート番号
+ * @param val 書き込む 16bit 値
+ */
 function _doIoWrite(port: number, val: number): void {
   setOutputLevel(_pinIOP, true);
   setOutputLevel(_pinWRT, true);
@@ -521,6 +576,12 @@ function _doIoWrite(port: number, val: number): void {
 // 物理アドレス計算
 // physical = (segReg & 0xF) << 14 + logical  (18bit、桁上がり無視)
 // ─────────────────────────────────────────────
+/**
+ * 論理アドレスとセグメントから 18bit 物理ワードアドレスを求める。
+ * @param logAddr 論理ワードアドレス（16bit）
+ * @param seg セグメントレジスタ値（下位 4bit）
+ * @returns 物理ワードアドレス（桁上がりは捨てる）
+ */
 function _phys(logAddr: number, seg: number): number {
   return (((seg & 0xf) << 14) + (logAddr & 0xffff)) & 0x3ffff;
 }
@@ -528,33 +589,80 @@ function _phys(logAddr: number, seg: number): number {
 // ─────────────────────────────────────────────
 // メモリアクセス（ビッグエンディアン）
 // ─────────────────────────────────────────────
+/**
+ * 物理アドレスから 1 ワード読む。
+ * @param phys 物理ワードアドレス
+ * @returns 16bit 値。メモリ範囲外は 0xFFFF
+ */
 function _rdPhys(phys: number): number {
   const b = (phys & 0x3ffff) * 2;
   if (b + 1 >= _memView.byteLength) return 0xffff;
   return _memView.getUint16(b, false);
 }
 
+/**
+ * 物理アドレスへ 1 ワード書く。範囲外は無視する。
+ * @param phys 物理ワードアドレス
+ * @param val 16bit 値
+ */
 function _wrPhys(phys: number, val: number): void {
   const b = (phys & 0x3ffff) * 2;
   if (b + 1 >= _memView.byteLength) return;
   _memView.setUint16(b, val & 0xffff, false);
 }
 
+/**
+ * コードセグメント（CSBR）からの読み出し。
+ * @param la 論理ワードアドレス
+ * @returns 16bit 値
+ */
 function _rdC(la: number): number {
   return _rdPhys(_phys(la, cpuRegister.CSBR));
 }
+
+/**
+ * コードセグメント（CSBR）への書き込み。
+ * @param la 論理ワードアドレス
+ * @param v 16bit 値
+ */
 function _wrC(la: number, v: number): void {
   _wrPhys(_phys(la, cpuRegister.CSBR), v);
 }
+
+/**
+ * スタックセグメント（SSBR）からの読み出し。
+ * @param la 論理ワードアドレス
+ * @returns 16bit 値
+ */
 function _rdS(la: number): number {
   return _rdPhys(_phys(la, cpuRegister.SSBR));
 }
+
+/**
+ * スタックセグメント（SSBR）への書き込み。
+ * @param la 論理ワードアドレス
+ * @param v 16bit 値
+ */
 function _wrS(la: number, v: number): void {
   _wrPhys(_phys(la, cpuRegister.SSBR), v);
 }
+
+/**
+ * 任意セグメント指定での読み出し（TSR0/TSR1 等）。
+ * @param la 論理ワードアドレス
+ * @param seg セグメント値（下位 4bit）
+ * @returns 16bit 値
+ */
 function _rdB(la: number, seg: number): number {
   return _rdPhys(_phys(la, seg));
 }
+
+/**
+ * 任意セグメント指定での書き込み（TSR0/TSR1 等）。
+ * @param la 論理ワードアドレス
+ * @param v 16bit 値
+ * @param seg セグメント値（下位 4bit）
+ */
 function _wrB(la: number, v: number, seg: number): void {
   _wrPhys(_phys(la, seg), v);
 }
@@ -570,6 +678,11 @@ function _fetch(): number {
 // レジスタアクセス
 // RRR: 0=R0 1=R1 2=R2 3=R3/X0 4=R4/X1 5=SP 6=STR 7=IC
 // ─────────────────────────────────────────────
+/**
+ * RRR フィールドが指すレジスタを読む。
+ * @param rrr 0=R0 1=R1 2=R2 3=R3/X0 4=R4/X1 5=SP 6=STR 7=IC
+ * @returns 16bit 値
+ */
 function _gr(rrr: number): number {
   switch (rrr & 7) {
     case 0:
@@ -591,6 +704,11 @@ function _gr(rrr: number): number {
   }
 }
 
+/**
+ * RRR フィールドが指すレジスタへ書く。
+ * @param rrr 0=R0 1=R1 2=R2 3=R3/X0 4=R4/X1 5=SP 6=STR 7=IC
+ * @param v 16bit 値（上位は切り捨て）
+ */
 function _sw(rrr: number, v: number): void {
   v &= 0xffff;
   switch (rrr & 7) {
@@ -625,6 +743,11 @@ function _sw(rrr: number, v: number): void {
 function _ri(ii: number): number {
   return cpuRegister.R[(ii & 3) + 1];
 }
+/**
+ * ii フィールドが指すレジスタ（R1〜R4）へ書く。
+ * @param ii 0〜3（R1〜R4 に対応）
+ * @param v 16bit 値
+ */
 function _riSet(ii: number, v: number): void {
   cpuRegister.R[(ii & 3) + 1] = v & 0xffff;
 }
@@ -647,6 +770,13 @@ function _seg(bb: number): number {
 // 実効アドレス計算（MN1610 互換 8 モード）
 // IC はフェッチ後（次命令位置）を指す
 // ─────────────────────────────────────────────
+/**
+ * 実効アドレスを計算する（MN1610 互換 8 モード）。
+ * IC はフェッチ済みで次命令位置を指している前提。
+ * @param mmm アドレッシングモード 0〜7
+ * @param d ディスプレースメント（8bit。相対モードでは符号付き）
+ * @returns 論理ワードアドレス（16bit）
+ */
 function _ea(mmm: number, d: number): number {
   const sd = d < 0x80 ? d : d - 0x100; // 符号付き 8bit
   switch (mmm & 7) {
@@ -673,6 +803,12 @@ function _ea(mmm: number, d: number): number {
 // スキップ条件評価（kkkk: 4bit スキップコード）
 // result: 演算結果（16bit）
 // ─────────────────────────────────────────────
+/**
+ * スキップ条件を評価する。
+ * @param kkkk 4bit スキップコード
+ * @param result 判定対象の演算結果（16bit）
+ * @returns true なら次命令をスキップする
+ */
 function _skip(kkkk: number, result: number): boolean {
   const n = (result & 0x8000) !== 0;
   const z = (result & 0xffff) === 0;
@@ -756,10 +892,19 @@ function _is2Word(ir: number): boolean {
 // ─────────────────────────────────────────────
 // フラグ更新ヘルパー
 // ─────────────────────────────────────────────
+/**
+ * STR の E（拡張／キャリー）フラグを設定する。
+ * @param v true で 1、false で 0
+ */
 function _setE(v: boolean): void {
   if (v) cpuRegister.STR |= STR_E;
   else cpuRegister.STR &= ~STR_E & 0xffff;
 }
+
+/**
+ * STR の OVF（オーバーフロー）フラグを設定する。
+ * @param v true で 1、false で 0
+ */
 function _setOVF(v: boolean): void {
   if (v) cpuRegister.STR |= STR_OVF;
   else cpuRegister.STR &= ~STR_OVF & 0xffff;
@@ -804,10 +949,19 @@ function _applyEE(ee: number): void {
 // PUSH: 現在 SP に書く → SP を下げる
 // POP:  SP を上げる → 読む
 // ─────────────────────────────────────────────
+/**
+ * スタックへ 1 ワード積む（SSBR セグメント）。SP は空きスロットを指す。
+ * @param v 積む 16bit 値
+ */
 function _push(v: number): void {
   _wrS(cpuRegister.SP, v);
   cpuRegister.SP = (cpuRegister.SP - 1) & 0xffff;
 }
+
+/**
+ * スタックから 1 ワード取り出す（SSBR セグメント）。
+ * @returns 取り出した 16bit 値
+ */
 function _pop(): number {
   cpuRegister.SP = (cpuRegister.SP + 1) & 0xffff;
   return _rdS(cpuRegister.SP);
@@ -816,6 +970,11 @@ function _pop(): number {
 // ─────────────────────────────────────────────
 // 割り込み処理
 // ─────────────────────────────────────────────
+/**
+ * ペンディング中の割り込みを 1 件処理する。
+ * レベル 0 から順に見て、STR の Mx マスクが有効なものだけ受け付ける。
+ * OPSW（STR/IC）を物理 0 番地側へ退避し、NPP が指す NPSW をロードする。
+ */
 function _handleIRQ(): void {
   for (let lv = 0; lv <= 2; lv++) {
     const mask = [STR_M0, STR_M1, STR_M2][lv];
@@ -896,6 +1055,10 @@ function _fpToWords(v: number): {
   return { w0, w1, overflow: false };
 }
 
+/**
+ * DR0（R0/R1 ペア）の IBM 16進浮動小数点をデコードする。
+ * @returns JS の number
+ */
 function _fpDecode(): number {
   return _fpFromWords(cpuRegister.R[0], cpuRegister.R[1]);
 }
@@ -922,6 +1085,13 @@ function _fpFinish(kkkk: number): void {
 // ─────────────────────────────────────────────
 // LAD 演算: BCD 桁上がり補正値計算
 // ─────────────────────────────────────────────
+/**
+ * LAD 用の BCD 桁上がり補正値を求める。
+ * ニブルごとに a+b が 9 を超えたら 6 を立てる。
+ * @param a 被加算値（16bit）
+ * @param b 加算値（16bit）
+ * @returns 補正値（16bit）
+ */
 function _ladResult(a: number, b: number): number {
   let res = 0;
   for (let shift = 0; shift < 16; shift += 4) {
@@ -945,6 +1115,11 @@ function _dswp(v: number): number {
 // セグメント / 特殊 / HW レジスタアクセス
 // ─────────────────────────────────────────────
 
+/**
+ * セグメントレジスタを読む。
+ * @param bbb 0=CSBR 1=SSBR 2=TSR0 3=TSR1 4〜7=OSR0〜OSR3
+ * @returns セグメント値（4bit）
+ */
 function _getSegReg(bbb: number): number {
   switch (bbb & 7) {
     case 0:
@@ -966,6 +1141,11 @@ function _getSegReg(bbb: number): number {
   }
 }
 
+/**
+ * セグメントレジスタへ書く。CSBR（bbb=0）への直接書き込みは無視する。
+ * @param bbb 1=SSBR 2=TSR0 3=TSR1 4〜7=OSR0〜OSR3
+ * @param v セグメント値（下位 4bit のみ有効）
+ */
 function _setSegReg(bbb: number, v: number): void {
   switch (bbb & 7) {
     case 1:
@@ -993,6 +1173,11 @@ function _setSegReg(bbb: number, v: number): void {
   }
 }
 
+/**
+ * 特殊レジスタを読む。
+ * @param ppp 0=SBRB 1=ICB 2=NPP
+ * @returns レジスタ値。未定義の ppp は 0
+ */
 function _getSpecReg(ppp: number): number {
   switch (ppp & 7) {
     case 0:
@@ -1006,6 +1191,11 @@ function _getSpecReg(ppp: number): number {
   }
 }
 
+/**
+ * 特殊レジスタへ書く。未定義の ppp は無視する。
+ * @param ppp 0=SBRB(8bit) 1=ICB(16bit) 2=NPP(8bit)
+ * @param v 書き込む値
+ */
 function _setSpecReg(ppp: number, v: number): void {
   switch (ppp & 7) {
     case 0:
@@ -1020,9 +1210,20 @@ function _setSpecReg(ppp: number, v: number): void {
   }
 }
 
+/**
+ * ハードウェアレジスタを読む。実装しているのは IISR のみ。
+ * @param hhh 6=IISR。それ以外は 0 を返す
+ * @returns レジスタ値
+ */
 function _getHWReg(hhh: number): number {
   return hhh === 6 ? cpuRegister.IISR : 0;
 }
+
+/**
+ * ハードウェアレジスタへ書く。実装しているのは IISR のみ。
+ * @param hhh 6=IISR。それ以外は無視
+ * @param v 16bit 値
+ */
 function _setHWReg(hhh: number, v: number): void {
   if (hhh === 6) cpuRegister.IISR = v & 0xffff;
 }
@@ -1030,6 +1231,10 @@ function _setHWReg(hhh: number, v: number): void {
 // ─────────────────────────────────────────────
 // 命令実行本体
 // ─────────────────────────────────────────────
+/**
+ * 1 命令をフェッチ・デコード・実行する。
+ * 先頭でペンディング割り込みを処理し、未定義命令なら IISR bit15 を立てて halted にする。
+ */
 function _executeOne(): void {
   if (_pendingIRQ) _handleIRQ();
 
@@ -1071,6 +1276,7 @@ function _executeOne(): void {
   switch (op) {
     // ── 0x00: 未定義 → HALT ───────────────────────────────────────────
     case 0x00:
+      cpuRegister.IISR |= 0x8000;
       _execStatus = "halted";
       break;
 
@@ -1617,6 +1823,11 @@ function _executeOne(): void {
 // ─────────────────────────────────────────────
 // グループ 0x04 サブデコーダ
 // ─────────────────────────────────────────────
+/**
+ * オペコードグループ 0x04 のサブデコーダ（MN1613 拡張命令が集まる領域）。
+ * @param rrr 命令語のレジスタフィールド（bit10〜8）
+ * @param lo 命令語の下位 8bit
+ */
 function _exec04(rrr: number, lo: number): void {
   const b32 = (lo >>> 2) & 3;
   const b76 = (lo >>> 6) & 3; // mm
@@ -1775,6 +1986,7 @@ function _exec04(rrr: number, lo: number): void {
   }
 
   _execStatus = "halted"; // 未定義
+  cpuRegister.IISR |= 0x8000;
 }
 
 /** BR/BALR 共通: Ri の指すメモリから新しい CSBR と IC をロード */

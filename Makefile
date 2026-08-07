@@ -30,16 +30,16 @@ help:
 	@echo "  make monitor-ihx# モニター Intel HEX（retrocpu_asm + sdld）"
 
 # -------------------------------------------------------
-# cursor_expand/monitor（SDCC + IHX）
+# retrocpu_boot_monitor（SDCC + IHX）
 # -------------------------------------------------------
 sdcc-setup:
-	$(MAKE) -C cursor_expand/monitor sdcc-setup
+	$(MAKE) -C retrocpu_boot_monitor sdcc-setup
 
 monitor-ihx:
-	$(MAKE) -C cursor_expand/monitor ihx
+	$(MAKE) -C retrocpu_boot_monitor ihx
 
 monitor-clean:
-	$(MAKE) -C cursor_expand/monitor clean
+	$(MAKE) -C retrocpu_boot_monitor clean
 
 # -------------------------------------------------------
 # clean: 一度消してから作り直す前提の掃除

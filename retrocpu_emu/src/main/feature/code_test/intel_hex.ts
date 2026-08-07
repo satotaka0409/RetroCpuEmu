@@ -13,6 +13,11 @@ export type IntelHexLoadResult = {
   maxAddr: number;
 };
 
+/**
+ * レコードのチェックサムを検証する。
+ * @param bytes チェックサムを含むレコード全バイト
+ * @returns 総和の下位 8bit が 0 なら true
+ */
 function checksumOk(bytes: number[]): boolean {
   let sum = 0;
   for (const b of bytes) sum = (sum + b) & 0xff;
@@ -28,6 +33,12 @@ export function loadIntelHex(
   hexText: string,
   mem: DataView | Uint8Array,
 ): IntelHexLoadResult {
+  /**
+   * バッファへ 1 バイト書く。
+   * @param addr バイトアドレス
+   * @param v 書き込む値
+   * @throws バッファ範囲外の場合
+   */
   const writeByte = (addr: number, v: number): void => {
     if (addr < 0 || addr >= mem.byteLength) {
       throw new Error(`Intel HEX address out of range: 0x${addr.toString(16)}`);

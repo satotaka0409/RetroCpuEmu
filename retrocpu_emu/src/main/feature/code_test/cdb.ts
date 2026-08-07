@@ -66,6 +66,13 @@ export function parseCdb(cdbText: string): CdbTable {
   return { byName, symbols };
 }
 
+/**
+ * シンボルを名前で引く。
+ * @param table parseCdb() の結果
+ * @param name ラベル名
+ * @returns 見つかったシンボル
+ * @throws 未登録の場合
+ */
 export function requireSymbol(table: CdbTable, name: string): CdbSymbol {
   const s = table.byName.get(name);
   if (!s) {
