@@ -1,4 +1,7 @@
 node_modules/
 dist/
-.rel
-.lst
+*.rel
+*.lst
+*.ihx
+*.bin
+*.cdb

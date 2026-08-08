@@ -4,6 +4,8 @@ export {
   FRAMEWORK_BUILD,
   ASM_DIST,
   MONITOR_SRC,
+  MONITOR_HEX,
+  MONITOR_TEST,
   repoPath,
 } from "./repo.js";
 export {
@@ -31,6 +33,13 @@ export type {
   IoBoardHandshakeMock,
   IoBoardMockOptions,
 } from "./handshake_mock.js";
+export type { JsonTestSettings } from "./json_value.js";
+export {
+  createSessionFromSettings,
+  resolveTestSettings,
+} from "./settings_session.js";
+export { expandPlaceholders, resolveSuitePath } from "./json_suite.js";
+export { test, expect, takeUnitTests } from "./unit.js";
 export type {
   AsmCpuType,
   AsmSource,

@@ -417,6 +417,38 @@ export class IoBoardHandshakeMock {
   }
 
   /**
+   * IO→CPU を送り、同一トランザクションで CPU→IO 応答を受け取る。
+   * 41h（送信＋NG 1B）や 48h（送信＋レジスタ列＋OK）向け。
+   * @param toCpu IO→CPU バイト列
+   * @param fromCpu CPU→IO で待つバイト数
+   * @param thenToCpu 応答後の追加 IO→CPU（48h の OK/NG など）
+   * @returns CPU→IO で受け取ったバイト
+   */
+  exchangeWithCpu(
+    toCpu: Uint8Array,
+    fromCpu: number,
+    thenToCpu?: Uint8Array,
+  ): Promise<Uint8Array> {
+    return this.withBusLock(async () => {
+      this.pushLog({
+        at: Date.now(),
+        dir: "io_to_cpu",
+        cmd: toCpu[0] ?? 0,
+        frame: toCpu.slice(),
+      });
+      const reply = await this.io.sendReceive(toCpu, fromCpu, thenToCpu);
+      this.pushLog({
+        at: Date.now(),
+        dir: "cpu_to_io",
+        cmd: toCpu[0] ?? 0,
+        frame: toCpu.slice(),
+        response: reply.slice(),
+      });
+      return reply;
+    });
+  }
+
+  /**
    * バス操作を直列化する（受信処理と送信が混ざらないようにする）。
    * @param fn バスを使う処理
    * @returns fn の結果

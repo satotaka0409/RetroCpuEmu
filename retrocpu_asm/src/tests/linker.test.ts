@@ -394,4 +394,37 @@ TABLE2:
     // _WORK は NOLOAD なのでイメージ末尾に出ない
     assert.equal(linked.image.length, 8);
   });
+
+  test("_CODE から _DATA ラベル、_DATA から _CODE ラベルを絶対ワードにする", () => {
+    const rel = writeRel(
+      assemble(`
+	.area	_CODE		(REL,CON)
+	.globl	MAIN
+MAIN:
+	H
+HANDLER:
+	RET
+	MVWI	R3, #TAB
+	.area	_DATA		(REL,CON)
+TAB:
+	.dw	0
+	.dw	HANDLER
+`),
+      "MAIN",
+    );
+    assert.match(rel, /#_DATA:0000/i);
+    assert.match(rel, /#_CODE:0001/i);
+
+    const linked = linkRelTexts([rel]);
+    const codeWords = 4;
+    const codeBytes = codeWords * 2;
+    const tabWord = codeWords;
+    const handlerWord = 1;
+    const mvwiImmOff = 3 * 2;
+    assert.equal(linked.image[mvwiImmOff], (tabWord >> 8) & 0xff);
+    assert.equal(linked.image[mvwiImmOff + 1], tabWord & 0xff);
+    const dwHandlerOff = codeBytes + 2;
+    assert.equal(linked.image[dwHandlerOff], (handlerWord >> 8) & 0xff);
+    assert.equal(linked.image[dwHandlerOff + 1], handlerWord & 0xff);
+  });
 });

@@ -10,6 +10,7 @@
 	.global gl_int_handler
 	.global gl_main
 	.global gl_rnd_init
+	.global gl_main_loop
 
 ; --- _WORK: BIOS 乱数（bios_common.asm） ---
 GL_RND_DEFAULT_SEED	.equ	0x1234
@@ -34,6 +35,12 @@ GL_RND_DEFAULT_SEED	.equ	0x1234
 
 	.area	_CODE		(REL,CON)
 gl_main:
+; COLD START
+	b	_reset
+gl_main_loop:
+; HOT START
+	b	_main_loop
+_reset:
 ;	スタック初期化
 	mvwi	SP, #STACK_TOP
 ; NPP=1（リセット互換。SETS で特殊レジスタへ）
@@ -45,7 +52,9 @@ gl_main:
 	mvwi	R0, #GL_RND_DEFAULT_SEED
 	bald	gl_rnd_init
 ;       HALT
+_main_loop:
 	h
+	b	_main_loop
 
 ; --- INT0 割り込みハンドラ ---
 int0_handler:

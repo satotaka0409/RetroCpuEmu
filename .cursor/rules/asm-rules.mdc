@@ -15,7 +15,7 @@ globs: "*.asm", "*.s", "*.inc", "*.h", "*.mn1613", "*.mn1610"
 - **`.asm` はインクルードしない**。定数・ポート定義だけ `.inc` / `.h` に置く。
   `.asm` はファイルごとにアセンブルし、`mn1613link` で `.rel` を結合する。
   参照側も定義側も `.globl` / `.global` で宣言する（未定義＋`.globl` → 外部 Ref）。
-- アセンブラの結合テストは `retrocpu_test_framework`（仕様: `test_framework.mdc`）。TypeScript から `call`。ドライバ専用 `.asm` は置かない。
+- アセンブラの結合テストは `retrocpu_test_framework`（仕様: `test_framework.mdc`）。JSON スートから `call`。ドライバ専用 `.asm` は置かない。
 
 ### アドレッシングモードの記述は、sdasに準ずるものとする
 

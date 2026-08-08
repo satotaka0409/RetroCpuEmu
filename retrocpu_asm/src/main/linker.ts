@@ -82,13 +82,22 @@ export function orderModulesMainFirst(modules: RelModule[]): RelModule[] {
 function resolveOperand(
   op: RelocOperand,
   defs: Map<string, number>,
-  areaWordBase: number,
+  patchWordBase: number,
+  modAreaBase: Map<string, number>,
+  mi: number,
 ): number {
   if (op.kind === "const") {
     return op.value & 0xffff;
   }
   if (op.kind === "word") {
-    return (areaWordBase + op.value) & 0xffff;
+    let wordBase = patchWordBase;
+    if (op.area) {
+      const b = modAreaBase.get(`${mi}\0${canonicalAreaName(op.area)}`);
+      if (b !== undefined) {
+        wordBase = Math.trunc(b / 2);
+      }
+    }
+    return (wordBase + op.value) & 0xffff;
   }
   const byteAddr: number | undefined = defs.get(op.name);
   if (byteAddr === undefined) {
@@ -181,8 +190,20 @@ export function linkModules(modules: RelModule[]): LinkResult {
       const areaName = canonicalAreaName(r.area ?? "_CODE");
       const base = modAreaBase.get(`${mi}\0${areaName}`) ?? 0;
       const areaWordBase = Math.trunc(base / 2);
-      const left = resolveOperand(r.left, globalDefs, areaWordBase);
-      const right = resolveOperand(r.right, globalDefs, areaWordBase);
+      const left = resolveOperand(
+        r.left,
+        globalDefs,
+        areaWordBase,
+        modAreaBase,
+        mi,
+      );
+      const right = resolveOperand(
+        r.right,
+        globalDefs,
+        areaWordBase,
+        modAreaBase,
+        mi,
+      );
       const wordDiff = (left - right) & 0xffff;
       const absAddr = base + r.byteAddr;
       while (imageBytes.length < absAddr + 2) imageBytes.push(0);

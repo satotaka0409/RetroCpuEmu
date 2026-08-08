@@ -7,10 +7,10 @@ import {
   setMemory,
   setPins,
   setState,
-} from "@emu/main/feature/cpu/mn1613/mn1613";
-import { loadIntelHex } from "@emu/main/feature/code_test/intel_hex";
-import { parseCdb, type CdbTable } from "@emu/main/feature/code_test/cdb";
-import type { CdbSymbol } from "@emu/main/feature/code_test/types";
+} from "../../retrocpu_emu/src/main/feature/cpu/mn1613/mn1613.js";
+import { loadIntelHex } from "../../retrocpu_emu/src/main/feature/code_test/intel_hex.js";
+import { parseCdb, type CdbTable } from "../../retrocpu_emu/src/main/feature/code_test/cdb.js";
+import type { CdbSymbol } from "../../retrocpu_emu/src/main/feature/code_test/types.js";
 import {
   assembleToHexCdb,
   defaultHexCdbPaths,
@@ -270,6 +270,10 @@ export class Mn1613AsmSession {
     }
     this.writeWord(sp, this.returnStubWordAddr);
     sp = u16(sp - 1);
+    if (options.retl) {
+      this.writeWord(sp, getState().CSBR & 0xf);
+      sp = u16(sp - 1);
+    }
     setState({ SP: sp });
 
     const preCallSp = getState().SP;

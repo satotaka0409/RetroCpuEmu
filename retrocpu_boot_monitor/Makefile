@@ -2,6 +2,7 @@
 #
 # 主なターゲット:
 #   make ihx          … 各 .asm → .rel → mn1613link → Intel HEX + CDB
+#   make test         … mn1613/test の結合テスト（テストフレームワーク経由）
 #   make sdcc-setup   … SDCC (sdasmn1613 / sdld) を CMake 経由で構築（任意）
 #   make clean        … ビルド成果物を削除
 #
@@ -61,17 +62,24 @@ INC_DEPS := \
 	$(SRC_DIR)/interrupt_io.inc \
 	$(SRC_DIR)/handshake/handshake_io.inc
 
-.PHONY: all help sdcc-setup retrocpu-asm-build ihx assemble link clean clean-sdcc
+.PHONY: all help sdcc-setup retrocpu-asm-build ihx assemble link test clean clean-sdcc
 
 all: ihx
 
 help:
 	@echo "retrocpu_boot_monitor"
 	@echo "  make ihx            各 .asm → .rel → mn1613link → Intel HEX + CDB"
+	@echo "  make test           mn1613/test 結合テスト（テストフレームワーク）"
 	@echo "  make sdcc-setup     Build sdasmn1613 + sdld via CMake (optional)"
 	@echo "  make clean          Remove monitor build/ artifacts"
 	@echo ""
 	@echo "SDCC_SRC_DIR=$(SDCC_SRC_DIR)"
+
+# -------------------------------------------------------
+# 結合テスト（retrocpu_test_framework。このプロジェクトの test のみ）
+# -------------------------------------------------------
+test:
+	npm test
 
 # -------------------------------------------------------
 # 1. SDCC 環境（任意）

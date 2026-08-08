@@ -11,95 +11,84 @@ HEX / CDB 成果物のハーネスは別系統（`emulater_code_test.mdc` / `ret
 
 ## 目的
 
-MN1613 の `.asm` を **TypeScript のテストからアセンブル／リンクし、エミュレータ上でサブルーチン呼び出し**して検証する。
+MN1613 の `.asm` を **アセンブル／リンクし、エミュレータ上でサブルーチン呼び出し**して検証する。
 
-ドライバ専用 `.asm`（入口＋引数書き込み＋`H`）は置かない。BIOS と同じ呼び出し規約で TS が `call` する。
+ドライバ専用 `.asm`（入口＋引数書き込み＋`H`）は置かない。BIOS と同じ呼び出し規約でランナーが `call` する。
 
 | 項目           | 内容                                                                        |
 | :------------- | :-------------------------------------------------------------------------- |
 | 対象 CPU       | 当面 **MN1613**（アセンブル CPU 指定は `mn1610` / `mn1613` / `tms9995` 可） |
 | アセンブラ     | `retrocpu_asm`（`dist/` 必須。`npm test` がビルドする）                     |
 | エミュ         | `retrocpu_emu` の MN1613 コア＋ IO ハンドシェイクモック                     |
-| テストランナー | Vitest（`retrocpu_test_framework`）                                         |
+| テストランナー | **独自ランナー**（Vitest は使わない）。`*_test.ts` + `test()` / `expect()` |
 
 ## 原則
 
 1. **`.asm` は `.include` しない**。定数・ポートは `.inc` / `.h` のみ。各 `.asm` は個別アセンブルしリンカで結合する（`asm-rules.mdc`）。フレームワークは `.asm` / `.s` / `.mn1610` / `.mn1613` / `.tms9995` の include をエラーにする。
-2. **ドライバ `.asm` を書かない**。引数は TS の `registers` / `stack` で渡す。
+2. **ドライバ `.asm` を書かない**。引数は `call({ registers, stack })` で渡す。
 3. **第1引数 = `R0` / 第2引数 = `R1` / 第3引数以降はスタック**。戻り値は `R0`。`R2`–`R4` は callee-saved（被試験側が PUSH/POP）。
-4. \*\*Intel hex ファイルと.cdbファイルを読み込む。読み込むファイルは、テストコードに書いておく。
-5. **`call()` はメモリと IO ピンを消さない**。`gl_rnd_init` の種やハンドシェイク状態は連続 `call` 間で残る。
-6. 被試験ラベルは **`.global` / `.globl`**。`call` はリンク済みグローバルのみ解決する（大文字小文字無視）。
+4. **Intel HEX・CDB・CPU は各 `*_test.ts` の `JsonTestSettings` に書く**。`createSessionFromSettings` が初期化する。
+5. **1 asm = 1 `*_test.ts`。** `src/foo/bar.asm` → `test/foo/bar_test.ts`。
+6. **`call()` はメモリと IO ピンを消さない**。`gl_rnd_init` の種やハンドシェイク状態は連続 `call` 間で残る。
+7. 被試験ラベルは **`.global` / `.globl`**。`call` はリンク済みグローバルのみ解決する（大文字小文字無視）。
+8. **テストはプロジェクトをまたがない。** フレームワーク単体は `retrocpu_test_framework/test/`、BIOS／asm 結合は `retrocpu_boot_monitor/mn1613/test/`。各プロジェクトの `npm test` はその配下だけを回す。
 
 ## 処理フロー
 
 ```
 .asm (+ .inc) → expandIncludes → assemble → writeRel → linkRelTexts
-        → メモリへロード → TS call(label) → RET → 戻りスタブ H → 検証
+        → HEX + CDB → JsonTestSettings 初期化 → gl_main → HALT → call → RET → 戻りスタブ H → 検証
 ```
 
 1. 各ソースの `.include` を展開（`.inc` / `.h` のみ）
-2. `retrocpu_asm` でアセンブル、リンクし IntelHEXファイルと .cdbファイルを生成
-3. テストケースごとに gl_main をエミュレータで実行して、HALT状態になってからテストを実行する
-4. 初期化処理が必要なら、Typescriptコードで初期化しておく
-5. レジスタ設定、スタックへの引数設定などは、Typescriptで行える。アセンブラのサブルーチン呼び出しもTypescriptで行う。
-6. 被試験が `RET` するとスタブで HALT。
-7. 検証に関しては、レジスタ値、スタックにある値、ラベルのメモリ値で判定する。
+2. `retrocpu_asm` でアセンブル、リンクし Intel HEX と CDB を生成（`JsonTestSettings.sources` があるとき）
+3. `JsonTestSettings` の CPU / HEX / CDB / `initLabel` でセッションを初期化
+4. テストケースごとに HEX 再ロード → `gl_main` を HALT まで実行 → `call` / 検証
+5. 被試験が `RET` するとスタブで HALT
+6. 検証はレジスタ・スタック・ラベルメモリ・（任意）ハンドシェイクモック
+7. 結合テストは asm と同列・**1 対 1**（`src` / `test`）。例:
+   `.../src/handshake/handshake_main.asm` → `.../test/handshake/handshake_main_test.ts`
+   `.../src/handshake/handshake_timer.asm` → `.../test/handshake/handshake_timer_test.ts`
+   `JsonTestSettings` + `createSessionFromSettings` で HEX/CDB/CPU を初期化する。
+   RETL 戻り（割り込みハンドラ）は `call(..., { retl: true })`。
 
-## ハンドシェイク IO モック
+## テストの置き場（プロジェクトごと）
 
-ハンドシェイクなどのIO周りは、エミュレータに対して、モックを呼び出せる仕組みを作って、それでエミュレートと
-値の検証ができる仕組みを用意する
+テストプログラムはプロジェクトをまたがない。
 
-### セッション
+| プロジェクト | 置き場 | 内容 |
+| :--- | :--- | :--- |
+| `retrocpu_test_framework` | `test/*.unit.ts`（fixture は `test/fixtures/`） | フレームワーク単体。モニタ `.asm` は使わない |
+| `retrocpu_boot_monitor` | `mn1613/test/**/*_test.ts` | BIOS／asm 結合。**1 asm = 1 TS** |
 
-```ts
-const HEX_FILE = path.join(FRAMEWORK_BUILD, "bios_timer.ihx");
-const CDB_FILE = path.join(FRAMEWORK_BUILD, "bios_timer.cdb");
-const INIT_LABEL = "gl_main";
+**1 asm = 1 `*_test.ts`。** `src/` と `test/` でパスとベース名を揃える。
 
-assembleToHexCdb({ sources, hexFile: HEX_FILE, cdbFile: CDB_FILE });
+| asm | テスト |
+| :--- | :--- |
+| `src/bios/bios_common.asm` | `test/bios/bios_common_test.ts` |
+| `src/handshake/handshake_timer.asm` | `test/handshake/handshake_timer_test.ts` |
+| `src/handshake/handshake_main.asm` | `test/handshake/handshake_main_test.ts` |
 
-const session = createMn1613AsmSession({
-  hexFile: HEX_FILE,
-  cdbFile: CDB_FILE,
-  initLabel: INIT_LABEL,
-});
-mock = attachHandshakeMock({ syncIrq2: false });
-await session.runInit(); // gl_main → HALT
+HEX / CDB / CPU は `mn1613_mon_settings.ts` の `JsonTestSettings` に書く。パスのプレースホルダ: `${MONITOR_SRC}` `${MONITOR_HEX}` `${FRAMEWORK_BUILD}` `${REPO_ROOT}`。
 
-const r = await session.call("gl_bios_timer_set", {
-  registers: { R0: 1, R1: 100, R2: 0x2222, R3: 0x3333, R4: 0x4444 },
-  stack: [3],
-});
-session.expectRegisters({ R0: 0x00, R2: 0x2222 });
-session.expectStackWork({ from: "preCallSp", offset: 2, words: [3] });
-```
+## ユニットテスト
 
-| API                                         | 内容                                                           |
-| :------------------------------------------ | :------------------------------------------------------------- |
-| `assembleToHexCdb(opts)`                    | アセンブル＋リンクし Intel HEX / CDB をファイルへ書く          |
-| `createMn1613AsmSession(opts)`              | HEX/CDB をロード（`sources` があれば先に生成）                 |
-| `session.runInit()`                         | `initLabel`（既定 `gl_main`）を HALT まで実行                  |
-| `session.call(label, opts)`                 | `.global` ラベルを BALD 相当で実行                             |
-| `session.reload()`                          | HEX 再ロード＋ CPU reset＋スタブ再設置                         |
-| `session.wordAddr(name)` / `getSymbol`      | CDB グローバルのワード／バイトアドレス                         |
-| `session.readWord` / `writeWord`            | ワード BE 読み書き                                             |
-| `session.expectRegisters`                   | レジスタ検証                                                   |
-| `session.expectMemoryWords`                 | 絶対ワード検証                                                 |
-| `session.expectLabelWords`                  | ラベル位置のメモリ検証                                         |
-| `session.expectStackWork`                   | スタック検証（`preCallSp` 基準）                               |
-| `assembleAndLink(opts)`                     | リンクまで（ファイル未書き出し）                               |
-| `expandIncludes` / `expandIncludesFromFile` | `.inc` 展開（`.asm` は拒否）                                   |
-| `attachHandshakeMock(opts)`                 | IO モック attach                                               |
-| `MONITOR_SRC` / `FRAMEWORK_BUILD` / `repoPath` | ブートモニタ src / 成果物出力 / リポジトリ相対パス          |
+置き場: `retrocpu_test_framework/test/*.unit.ts`  
+`src/unit.ts` の `test` / `expect` のみ使う（Vitest 禁止）。
 
-### ソース指定
+## セッション API（ランナー内部・拡張用）
 
-| 形                              | 用途                                                           |
-| :------------------------------ | :------------------------------------------------------------- |
-| `{ file: path, module?: name }` | ファイル。モジュール名省略時はファイル名（拡張子なし・大文字） |
-| `{ text, module, fromDir? }`    | インライン。`fromDir` は `.include` 基準                       |
+| API                                              | 内容                                                  |
+| :----------------------------------------------- | :---------------------------------------------------- |
+| `assembleToHexCdb(opts)`                         | アセンブル＋リンクし Intel HEX / CDB をファイルへ書く |
+| `createMn1613AsmSession(opts)`                   | HEX/CDB をロード（`sources` があれば先に生成）        |
+| `session.runInit()`                              | `initLabel`（既定 `gl_main`）を HALT まで実行         |
+| `session.call(label, opts)`                      | `.global` ラベルを BALD 相当で実行                    |
+| `session.reload()`                               | HEX 再ロード＋ CPU reset＋スタブ再設置                |
+| `session.expectRegisters`                        | レジスタ検証                                          |
+| `session.expectMemoryWords` / `expectLabelWords` | メモリ検証                                            |
+| `session.expectStackWork`                        | スタック検証（`preCallSp` 基準）                      |
+| `attachHandshakeMock(opts)`                      | IO モック attach                                      |
 
 ### `CallResult`
 
@@ -110,37 +99,42 @@ session.expectStackWork({ from: "preCallSp", offset: 2, words: [3] });
 | `preCallSp`                                                 | 引数＋戻り PUSH 直後の空き SP       |
 | `entryWordAddr`                                             | 入口ワード                          |
 
-## テストの書き方
-
-- 置き場: `retrocpu_test_framework/test/*.test.ts`
-- 被試験は `retrocpu_boot_monitor/mn1613/src/` の本番 `.asm` をリンクする（テスト専用入口は作らない）
-- IntelHEXファイル、.cdbファイル、gl_mainなどのCPU初期化ルーチンのラベルをファイルに記述する
-- タイムアウト: ハンドシェイク待ちは vitest の `it(..., 20000)` を目安にする
-- JSDoc: `retrocpu_test_framework` の実装・テストヘルパは `code_comment.mdc` に従う
-
 ## ファイル配置
 
 ```
 retrocpu_test_framework/
   src/
     index.ts              公開 API
+    cli.ts                独自ランナー
+    json_suite.ts         パス・プレースホルダ展開
+    json_value.ts         JsonTestSettings
+    unit.ts / assert.ts   ユニットテスト API
     types.ts              共通型
     expand_includes.ts    .inc 展開（.asm 拒否）
     hex_cdb.ts            イメージ → Intel HEX / Def → CDB
     assemble_link.ts      assemble + REL + link + HEX/CDB 出力
     mn1613_session.ts     HEX/CDB ロード / runInit / call / expect*
     handshake_mock.ts     IO ボードモック
-    repo.ts               REPO_ROOT / MONITOR_SRC / FRAMEWORK_BUILD
+    repo.ts               REPO_ROOT / MONITOR_SRC / MONITOR_HEX / FRAMEWORK_BUILD
   test/
-    expand_includes.test.ts
-    hex_cdb.test.ts
-    assemble_link.test.ts
-    bios_timer.test.ts    19h 結合テスト（参考実装）
+    *.unit.ts             フレームワーク単体（Vitest 禁止）
+    fixtures/             単体用の最小 .asm（モニタは使わない）
   package.json
-  vitest.config.ts
+
+retrocpu_boot_monitor/
+  package.json            npm test → mn1613/test のみ
+  mn1613/
+    src/bios/bios_common.asm
+    test/bios/bios_common_test.ts               乱数（1 対 1）
+    src/handshake/handshake_timer.asm
+    test/handshake/handshake_timer_test.ts     19h（1 対 1）
+    src/handshake/handshake_main.asm
+    test/handshake/handshake_main_test.ts      IO→CPU（1 対 1）
 ```
 
 ## 実行
+
+フレームワーク単体:
 
 ```bash
 cd retrocpu_test_framework
@@ -148,16 +142,236 @@ npm install
 npm test
 ```
 
-`npm test` は先に `retrocpu_asm` をビルドする。未ビルドのまま `assembleAndLink` するとエラー。
+BIOS／asm 結合（モニタ側）:
+
+```bash
+cd retrocpu_boot_monitor
+npm test
+```
+
+フレームワークの `npm test` は先に `retrocpu_asm` をビルドし、**自プロジェクトの `test/` だけ**を回す。未ビルドのまま `assembleAndLink` するとエラー。
+
+モニタの `npm test` はランナーに `mn1613/test` を渡す。引数でファイル／ディレクトリも可: `tsx ../retrocpu_test_framework/src/cli.ts mn1613/test/handshake/`
 
 ## HEX / CDB との役割分担
 
-| 系統                 | 入力            | 用途                                     |
-| :------------------- | :-------------- | :--------------------------------------- |
-| **本フレームワーク** | `.asm` → HEX + CDB | BIOS／モニタの結合テスト（テストに HEX/CDB パスを書く） |
-| `code_test`（emu）   | Intel HEX + CDB | 既にリンクした成果物・C 出力の検証       |
+| 系統                 | 入力               | 用途                                                   |
+| :------------------- | :----------------- | :----------------------------------------------------- |
+| **本フレームワーク** | `.asm` → HEX + CDB | BIOS／モニタの結合テスト（`JsonTestSettings` に HEX/CDB/CPU を書く） |
+| `code_test`（emu）   | Intel HEX + CDB    | 既にリンクした成果物・C 出力の検証                     |
 
 アセンブラの回帰は本フレームワークを使う。HEX ロード経路の検証は `emulater_code_test.mdc`。
+
+---
+
+# 使い方
+
+Vitest は使わない。各プロジェクトの `npm test` が独自ランナーを回す（**そのプロジェクトの test だけ**）。
+
+## どの形式で書くか
+
+| 形式 | 置き場 | 向いていること |
+| :--- | :--- | :--- |
+| **TS 結合テスト** | **モニタ** `mn1613/test/`。**1 asm = 1 `*_test.ts`**（例: `handshake_timer.asm` → `handshake_timer_test.ts`） | BIOS／asm の検証。`JsonTestSettings` + `call` / `expect*` / IO モック |
+| **ユニット** | **フレームワーク** `test/*.unit.ts` | フレームワーク自身（`.inc` 展開、HEX/CDB 生成など）。エミュ `call` はしない。モニタ `.asm` は使わない |
+
+実行:
+
+- `cd retrocpu_test_framework && npm test` … `test/*.unit.ts` のみ
+- `cd retrocpu_boot_monitor && npm test` … `mn1613/test/**/*_test.ts` のみ
+
+---
+
+## 設定ファイルの書き方
+
+HEX / CDB / CPU / ソースは **`JsonTestSettings` に書く**。`createSessionFromSettings` が初期化時にアセンブルしてセッションを作る。
+
+パス内のプレースホルダ: `${MONITOR_SRC}` `${MONITOR_HEX}` `${FRAMEWORK_BUILD}` `${REPO_ROOT}`
+
+### TS 設定（`JsonTestSettings`）
+
+モニタ側 `*_test.ts` ではオブジェクトで同じ情報を書く。`createSessionFromSettings(settings)` がアセンブルしてセッションを返す（`runInit` は呼ばない）。
+
+```ts
+import { createSessionFromSettings } from "../../../../retrocpu_test_framework/src/index.js";
+import { mn1613MonSettings } from "../mn1613_mon_settings.js";
+
+const session = createSessionFromSettings(mn1613MonSettings);
+```
+
+モニタ結合テストは Makefile と同じ `mn1613_mon.ihx` / `.cdb`（`${MONITOR_HEX}`）を使う。ソース一覧は `mn1613/test/mn1613_mon_settings.ts`。
+
+| キー | 意味 |
+| :--- | :--- |
+| `name` / `cpu` / `hexFile` / `cdbFile` / `initLabel` / `sourceRoot` / `sources` | HEX/CDB/CPU とリンクソース |
+| `beforeTest` / `afterTest` / `beforeEachTest` / `afterEachTest` | **任意の関数**。ランナーは自動では呼ばない。自分で `await testSettings.beforeEachTest?.()` する |
+
+`initLabel: null` なら `runInit()` は何もしない（MAIN スタブだけの部分リンクなど）。
+
+---
+
+## テストメソッドの書き方
+
+### TS の 1 ケース
+
+`test` / `expect` は `retrocpu_test_framework/src/unit.ts` だけ使う（Vitest 禁止）。
+
+典型パターン（ケースごとに reload → モック → `runInit` → 本体 → detach）:
+
+```ts
+import {
+  attachHandshakeMock,
+  createSessionFromSettings,
+  expect,
+  test,
+  type IoBoardHandshakeMock,
+  type Mn1613AsmSession,
+} from "../../../../retrocpu_test_framework/src/index.js";
+
+const session = createSessionFromSettings(testSettings);
+
+async function withCase(
+  fn: (s: Mn1613AsmSession, mock: IoBoardHandshakeMock) => Promise<void>,
+): Promise<void> {
+  session.reload();
+  const mock = attachHandshakeMock({ syncIrq2: false, timeoutMs: 5000 });
+  try {
+    await session.runInit();
+    await fn(session, mock);
+  } finally {
+    await mock.stop();
+    mock.detach();
+  }
+}
+
+test("41h はペイロードを読み NG を返す", async () => {
+  await withCase(async (s, mock) => {
+    // call + 検証
+  });
+});
+```
+
+#### `session.call`
+
+```ts
+await session.call("gl_bios_timer_set", {
+  registers: { R0: 1, R1: 100, R2: 0x2222, R3: 0x3333, R4: 0x4444 },
+  stack: [3],
+});
+```
+
+| オプション | 意味 |
+| :--- | :--- |
+| `registers` | 未指定の R0–R4 は 0。STR / CSBR / SSBR / SP は指定時のみ |
+| `stack` | 戻りアドレスより前に PUSH するワード。第3引数は `[count]` |
+| `retl` | `true` なら BALR/RETL（IC のあと CSBR も積む）。割り込みハンドラ用。既定は BALD/RET |
+| `resetCpu` | `true` ならレジスタだけ `reset()`（メモリ・IO は維持） |
+
+`call` はメモリと IO ピンを消さない。連続 `call` で RNG 種やハンドシェイク状態は残る。ケースを独立させるなら `reload()`（HEX 再ロード＋CPU reset）。
+
+ラベルは **`.global` / `.globl`** のみ。大文字小文字無視。
+
+#### ハンドシェイク
+
+**CPU→IO**（BIOS が送る 19h など）:
+
+```ts
+await Promise.all([
+  session.call("gl_bios_timer_set", { registers: { R0: 1, R1: 100 }, stack: [3] }),
+  mock.handleOneRequest(),
+]);
+```
+
+**IO→CPU**（割り込みハンドラが受ける 40h–60h など）:
+
+1. `mock.exchangeWithCpu(toCpu, fromCpuLen, thenToCpu?)` を先に始める  
+2. `HSHK_REQ_1 === 1` になってから `call(..., { retl: true })`（ENA0 競合回避）  
+3. 戻りは CPU→IO で受け取ったバイト列
+
+```ts
+const io = mock.exchangeWithCpu(Uint8Array.from([0x41, 0x00]), 1);
+// REQ_1 待ち
+await session.call("gl_handshake_interrupt_handler", {
+  retl: true,
+  registers: { R2: 0x2222, R3: 0x3333, R4: 0x4444 },
+});
+const reply = await io; // 例: [0x01] NG
+```
+
+参考: `retrocpu_boot_monitor/mn1613/test/handshake/handshake_main_test.ts`
+
+---
+
+## 検証のやり方
+
+失敗すると例外 → そのケース FAIL。指定したキー／フィールドだけ見る（部分一致）。
+
+### TS: セッションの expect*
+
+```ts
+session.expectRegisters({ R0: 0, R2: 0x2222, R4: 0x4444 });
+session.expectStackWork({ from: "preCallSp", offset: 2, words: [3] });
+session.expectLabelWords("GL_SOME_BUF", [0x1234, 0]);
+session.expectMemoryWords(0x0100, [1, 2]);
+```
+
+`expectRegisters` は直近 `call` の結果、無ければ現在の CPU 状態。`runInit` 直後の SP などもこれで見る。
+
+その他: `session.wordAddr("GL_MAIN")` / `getSymbol` / `readWord` / `writeWord` / `writeLabelWords`
+
+### TS: `expect()`（ユニット API）
+
+```ts
+expect(reply.length).toBe(0);
+expect(Array.from(reply)).toEqual([0x01]);
+expect(hex).toContain(":10001000");
+expect(hex).not.toContain(":10000000");
+expect(addr).toBeGreaterThanOrEqual(0x0200);
+expect(sym).toBeDefined();
+expect(() => expandIncludes('\t.include "x.asm"\n', dir)).toThrow(/Cannot \.include/);
+```
+
+| マッチャ | 意味 |
+| :--- | :--- |
+| `toBe` | `Object.is` |
+| `toEqual` | 深い等価 |
+| `toContain` / `not.toContain` | 文字列または配列 |
+| `toBeGreaterThanOrEqual` | 数値 |
+| `toBeDefined` / `toBeTruthy` | |
+| `toThrow(RegExp?)` | `expect(() => fn()).toThrow(...)` |
+
+### TS: IO モック
+
+```ts
+expect(mock.state.lastTimer).toEqual({ timerNo: 1, periodMs: 100, count: 3 });
+expect(mock.timers[0].running).toBe(false);
+expect(mock.timers[1].running).toBe(true);
+expect(mock.timers[1].getState().periodMs).toBe(100);
+expect(mock.timers[1].getState().count).toBe(3);
+```
+
+`getState()` は `{ running, periodMs, count, remaining, fired }`。`running` はゲッタでも取れる。
+
+| モック API | 用途 |
+| :--- | :--- |
+| `handleOneRequest()` | CPU→IO 1 フレーム受信＋応答 |
+| `exchangeWithCpu(toCpu, fromCpu, thenToCpu?)` | IO→CPU 送信＋同一 ENA で CPU→IO 受信（48h は `thenToCpu` で OK/NG） |
+| `sendToCpu(data)` | IO→CPU のみ（CPU からの応答バイトが無いとき） |
+| `stop()` / `detach()` | ケース終了時。`withCase` の `finally` で呼ぶ |
+
+---
+
+## よくある失敗
+
+| 症状 | 原因の目安 |
+| :--- | :--- |
+| `CDB symbol not found` | ラベルが `.global` でない／リンクしていない `.asm` |
+| `did not return to stub` | `RET` ルーチンなのに `retl: true`、またはその逆。未定義命令で別 IC へ |
+| `handshake ENA0 check failed` | IO→CPU で CPU `call` が先。`REQ_1===1` を待ってから `call` |
+| `timeout` | `handleOneRequest` / `exchangeWithCpu` のバイト数が仕様と違う |
+| `Intel HEX がありません` | 設定の `hexFile` と `sources` が空、またはパスのプレースホルダミス |
+
+---
 
 ## 関連
 

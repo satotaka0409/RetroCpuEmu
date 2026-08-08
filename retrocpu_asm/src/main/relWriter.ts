@@ -31,6 +31,9 @@ function hex4(v: number): string {
 function formatRelocOperand(op: RelocOperand): string {
   if (op.kind === "symbol") return op.name;
   if (op.kind === "const") return `=${hex4(op.value)}`;
+  if (op.area) {
+    return `#${canonicalAreaName(op.area)}:${hex4(op.value)}`;
+  }
   return `#${hex4(op.value)}`;
 }
 

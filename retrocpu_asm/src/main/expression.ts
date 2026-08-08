@@ -16,7 +16,11 @@ function toRelocOperand(
   if (info.kind === "external") {
     return { kind: "symbol", name };
   }
-  return { kind: "word", value: info.value & 0xffff };
+  return {
+    kind: "word",
+    value: info.value & 0xffff,
+    area: info.area ? info.area.trim().toUpperCase() : undefined,
+  };
 }
 
 /**
@@ -82,7 +86,7 @@ export function matchAbsAddrReloc(
   const area = info.area ? info.area.trim().toUpperCase() : "";
   if (area !== "_CODE" && area !== "_DATA") return null;
   return {
-    left: { kind: "word", value: info.value & 0xffff },
+    left: { kind: "word", value: info.value & 0xffff, area },
     right: { kind: "const", value: 0 },
   };
 }

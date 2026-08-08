@@ -31,7 +31,7 @@ export interface RelModule {
 
 /**
  * W レコードのオペランド文字列をパースする。
- * @param token - シンボル名、#XXXX（領域内ワード）、=XXXX（絶対定数）
+ * @param token - シンボル名、#XXXX / #_DATA:XXXX（領域内ワード）、=XXXX（絶対定数）
  * @return RelocOperand
  */
 function parseRelocOperand(token: string): RelocOperand {
@@ -39,7 +39,16 @@ function parseRelocOperand(token: string): RelocOperand {
     return { kind: "const", value: Number.parseInt(token.slice(1), 16) & 0xffff };
   }
   if (token.startsWith("#")) {
-    return { kind: "word", value: Number.parseInt(token.slice(1), 16) & 0xffff };
+    const rest = token.slice(1);
+    const colon = rest.indexOf(":");
+    if (colon >= 0) {
+      return {
+        kind: "word",
+        area: canonicalAreaName(rest.slice(0, colon)),
+        value: Number.parseInt(rest.slice(colon + 1), 16) & 0xffff,
+      };
+    }
+    return { kind: "word", value: Number.parseInt(rest, 16) & 0xffff };
   }
   return { kind: "symbol", name: token.toUpperCase() };
 }
@@ -151,7 +160,7 @@ export function parseRel(text: string): RelModule {
 
     if (line.startsWith("W ")) {
       const m = line.match(
-        /^W\s+([0-9A-Fa-f]+)\s+(=[0-9A-Fa-f]+|#[0-9A-Fa-f]+|[A-Za-z_.$][A-Za-z0-9_.$]*)-(=[0-9A-Fa-f]+|#[0-9A-Fa-f]+|[A-Za-z_.$][A-Za-z0-9_.$]*)$/i,
+        /^W\s+([0-9A-Fa-f]+)\s+(=[0-9A-Fa-f]+|#(?:[A-Za-z_][A-Za-z0-9_]*:)?[0-9A-Fa-f]+|[A-Za-z_.$][A-Za-z0-9_.$]*)-(=[0-9A-Fa-f]+|#(?:[A-Za-z_][A-Za-z0-9_]*:)?[0-9A-Fa-f]+|[A-Za-z_.$][A-Za-z0-9_.$]*)$/i,
       );
       if (!m) throw new Error(`Invalid W record: ${line}`);
       relocs.push({

@@ -21,6 +21,18 @@ export const MONITOR_SRC = path.join(
   "retrocpu_boot_monitor/mn1613/src",
 );
 
+/** retrocpu_boot_monitor/build/hex（mn1613_mon.ihx / .cdb） */
+export const MONITOR_HEX = path.join(
+  REPO_ROOT,
+  "retrocpu_boot_monitor/build/hex",
+);
+
+/** retrocpu_boot_monitor/mn1613/test（asm と同列のテスト） */
+export const MONITOR_TEST = path.join(
+  REPO_ROOT,
+  "retrocpu_boot_monitor/mn1613/test",
+);
+
 /**
  * リポジトリ相対パスを絶対パスにする。
  * @param rel RetroCpuEmu からの相対パス

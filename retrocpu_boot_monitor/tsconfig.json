@@ -12,15 +12,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "types": ["node"],
-    "baseUrl": "../retrocpu_test_framework",
-    "paths": {
-      "@emu/*": ["../retrocpu_emu/src/*"],
-      "@asm/*": ["../retrocpu_asm/src/main/*"]
-    }
+    "typeRoots": ["../retrocpu_test_framework/node_modules/@types"]
   },
-  "include": [
-    "../retrocpu_test_framework/src/**/*.ts",
-    "../retrocpu_test_framework/test/**/*.ts",
-    "../retrocpu_boot_monitor/mn1613/test/**/*.ts"
-  ]
+  "include": ["mn1613/test/**/*.ts"]
 }

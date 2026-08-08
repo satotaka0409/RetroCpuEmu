@@ -2,8 +2,8 @@ import {
   createIoBoardHandshakeMock,
   type IoBoardHandshakeMock,
   type IoBoardMockOptions,
-} from "@emu/main/feature/board/handshake/io_board_mock";
-import type { IoTimerHandle, IoTimerScheduler } from "@emu/main/feature/board/io_timer";
+} from "../../retrocpu_emu/src/main/feature/board/handshake/io_board_mock.js";
+import type { IoTimerHandle, IoTimerScheduler } from "../../retrocpu_emu/src/main/feature/board/io_timer.js";
 
 /**
  * タイマー満了を起こさないスケジューラ（19h 設定の検証専用）。

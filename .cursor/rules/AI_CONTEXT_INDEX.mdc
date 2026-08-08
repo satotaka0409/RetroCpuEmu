@@ -15,7 +15,7 @@
 - 1階ボードと2階ボードのハンドシェイク仕様
   - `.cursor/rules/HandShake.md`
 - MN1613 アセンブラ成果物のエミュレータ検証
-  - `.cursor/rules/test_framework.mdc`（`.asm` を TS から assemble+link+call）
+  - `.cursor/rules/test_framework.mdc`（`*_test.ts` 独自ランナー。`.asm` → HEX/CDB → call。1 asm = 1 TS）
   - 実装: `retrocpu_test_framework/`
   - HEX / CDB: `.cursor/rules/emulater_code_test.mdc`
     / `retrocpu_emu/src/main/feature/code_test/`

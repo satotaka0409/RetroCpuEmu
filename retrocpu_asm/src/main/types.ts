@@ -29,7 +29,7 @@ export type SymbolInfoTable = Map<string, SymbolInfo>;
  */
 export type RelocOperand =
   | { kind: "symbol"; name: string }
-  | { kind: "word"; value: number }
+  | { kind: "word"; value: number; /** オフセットの属する領域。省略時はパッチ先領域 */ area?: string }
   | { kind: "const"; value: number };
 
 /**

@@ -98,6 +98,11 @@ export type CallOptions = {
    * 既定 false。
    */
   resetCpu?: boolean;
+  /**
+   * true なら BALR/RETL 相当で戻る（IC のあと CSBR も積む）。
+   * `gl_handshake_interrupt_handler` など割り込みサブルーチン用。既定 false（BALD/RET）。
+   */
+  retl?: boolean;
 };
 
 /** call の結果 */

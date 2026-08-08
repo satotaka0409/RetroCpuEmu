@@ -1,0 +1,10 @@
+{
+  "name": "retrocpu-boot-monitor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MN1613 ブートモニタ／BIOS",
+  "scripts": {
+    "test": "npm --prefix ../retrocpu_test_framework run build:asm && ../retrocpu_test_framework/node_modules/.bin/tsx ../retrocpu_test_framework/src/cli.ts mn1613/test",
+    "typecheck": "../retrocpu_test_framework/node_modules/.bin/tsc -p tsconfig.json --noEmit"
+  }
+}

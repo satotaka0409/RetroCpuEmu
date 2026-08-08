@@ -33,6 +33,30 @@ export class IoControlHandshake {
   }
 
   /**
+   * IO→CPU を送ったあと同一 ENA セッションで CPU→IO 応答を受け取る。
+   * 48h のように応答後に IO→CPU を足す場合は `thenToCpu` を使う。
+   * @param toCpu IO→CPU 先頭バイト列（コマンド含む）
+   * @param fromCpu CPU→IO で待つバイト数（0 なら受信しない）
+   * @param thenToCpu 応答後に追加する IO→CPU（省略可）
+   * @returns CPU→IO で受け取ったバイト列
+   */
+  async sendReceive(
+    toCpu: Uint8Array,
+    fromCpu: number,
+    thenToCpu?: Uint8Array,
+  ): Promise<Uint8Array> {
+    await this.initiateSend();
+    await this.transferBytesToCpu(toCpu);
+    const reply =
+      fromCpu > 0 ? await this.receiveBytesFromCpu(fromCpu) : new Uint8Array(0);
+    if (thenToCpu && thenToCpu.length > 0) {
+      await this.transferBytesToCpu(thenToCpu);
+    }
+    await this.finalizeSend();
+    return reply;
+  }
+
+  /**
    * CPU→IO 方向のフレームを受け取る（転送長が既知の場合）。
    * @param length 受信バイト数
    * @returns 受信バイト列
