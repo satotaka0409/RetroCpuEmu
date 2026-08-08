@@ -15,7 +15,7 @@ MN1613 アセンブラを **Intel HEX + CDB 経由でエミュレータ検証**�
 | 本リポジトリ | `npm test` | `test/*.unit.ts`（フレームワーク単体） |
 | `retrocpu_boot_monitor` | `cd ../retrocpu_boot_monitor && npm test` | `mn1613/test/**/*_test.ts`（BIOS／asm） |
 
-BIOS／asm は **1 asm = 1 TS**（`src/handshake/handshake_timer.asm` → `test/handshake/handshake_timer_test.ts`）。HEX / CDB は `mn1613_mon.ihx`（`mn1613_mon_settings.ts`）。
+BIOS／asm は **1 asm = 1 TS**（`src/handshake/handshake_timer.asm` → `test/handshake/handshake_timer_test.ts`）。HEX / CDB は `mn1613_mon.ihx`（`mn1613_mon_settings.ts`）。IO が必要なら設定の `ioMock`（`mn1613MonHandshakeSettings`）。
 
 ## 実行
 

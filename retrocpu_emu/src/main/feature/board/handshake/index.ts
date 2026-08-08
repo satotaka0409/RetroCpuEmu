@@ -16,6 +16,7 @@ export {
   createHandshakeIoPortBridge,
   IO_PORT,
   HSHK_CTRL_BIT,
+  type HandshakeIoPortBridge,
 } from "./io_port_bridge";
 export {
   IoBoardHandshakeMock,

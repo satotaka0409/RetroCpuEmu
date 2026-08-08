@@ -55,6 +55,22 @@ function lfsrStep(seed: number): number {
 }
 
 /**
+ * 種から LFSR を count 歩進め、各歩の乱数値を返す。
+ * @param seed 初期種（16bit）
+ * @param count 歩数
+ * @returns 各歩の乱数値（長さ count）
+ */
+function lfsrSequence(seed: number, count: number): number[] {
+  const out: number[] = [];
+  let x = seed;
+  for (let i = 0; i < count; i += 1) {
+    x = lfsrStep(x);
+    out.push(x);
+  }
+  return out;
+}
+
+/**
  * ゼロページの種を読む。
  * @param s セッション
  * @returns 16bit 種
@@ -98,22 +114,19 @@ test("gl_get_rnd は M系列 1 歩と一致し種も更新する", async () => {
   });
 });
 
-test("gl_get_rnd を連続呼び出ししてもソフトモデルと一致し 0 にならない", async () => {
+test("gl_get_rnd を 100 回呼び、TS 側 LFSR とすべて一致する", async () => {
   await withCase(async (s) => {
     await s.call("gl_rnd_init", {
-      registers: { ...BASE_REGS, R0: 0xace1 },
+      registers: { ...BASE_REGS, R0: GL_RND_DEFAULT_SEED },
     });
-    let seed = 0xace1;
-    const seen = new Set<number>();
-    for (let i = 0; i < 64; i += 1) {
-      seed = lfsrStep(seed);
+    const expected = lfsrSequence(GL_RND_DEFAULT_SEED, 100);
+    const actual: number[] = [];
+    for (let i = 0; i < 100; i += 1) {
       const r = await s.call("gl_get_rnd", { registers: { ...BASE_REGS } });
-      expect(r.registers.R[0]).toBe(seed);
-      expect(readSeed(s)).toBe(seed);
-      expect(seed).toBeGreaterThanOrEqual(1);
-      seen.add(seed);
+      actual.push(r.registers.R[0]!);
     }
-    expect(seen.size).toBe(64);
+    expect(actual).toEqual(expected);
+    expect(readSeed(s)).toBe(expected[99]);
   });
 });
 

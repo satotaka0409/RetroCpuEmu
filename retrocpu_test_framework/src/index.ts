@@ -28,10 +28,12 @@ export {
 export {
   attachHandshakeMock,
   createInertTimerScheduler,
+  withFrameworkIoMockDefaults,
 } from "./handshake_mock.js";
 export type {
   IoBoardHandshakeMock,
   IoBoardMockOptions,
+  CodeTestIoMockEntry,
 } from "./handshake_mock.js";
 export type { JsonTestSettings } from "./json_value.js";
 export {

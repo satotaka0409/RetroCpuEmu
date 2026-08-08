@@ -23,10 +23,10 @@ CPU コア API は `feature/cpu/mn1613/mn1613.ts`。
 
 ## 成果物の入力
 
-| 入力 | 説明 |
-|------|------|
+| 入力                         | 説明                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------- |
 | Intel HEX（`.ihx` / `.hex`） | プログラム／データのロード。レコード種別 00（データ）と 01（EOF）を必須対応 |
-| SDCC CDB（`.cdb`） | ラベル／シンボルのアドレス解決。最低限 `L:`（リンク）レコードを解決する |
+| SDCC CDB（`.cdb`）           | ラベル／シンボルのアドレス解決。最低限 `L:`（リンク）レコードを解決する     |
 
 ### アドレス単位（MN1613）
 
@@ -48,7 +48,9 @@ CPU コア API は `feature/cpu/mn1613/mn1613.ts`。
    - 戻りスタブ（`H` 命令）のワードアドレスを PUSH
    - レジスタを設定
    - `IC = ラベルのワードアドレス` で `run`
-7. スタブで HALT したらレジスタ・メモリ・スタックワークを検証
+7. IO を叩いたり読んだりする場合は、**設定 JSON の `ioMock` エントリ**で RD/WT をモックへ差し替える。
+   エントリが 1 件以上あればエミュレータの `setIoReadCallback` / `setIoWriteCallback` をキックする（無ければ既定 RD=`0xFFFF`）。
+8. スタブで HALT したらレジスタ・メモリ・スタックワークを検証
 
 ### 呼び出し規約（ミドルウェア側）
 
@@ -61,11 +63,11 @@ MN1613 の `BAL`/`BALD` と同様、**戻り先ワードアドレスをスタッ
 
 例: `stack: [A]` のとき（初期 SP=`FFFF`）
 
-| アドレス | 内容 |
-|----------|------|
-| FFFF | A |
-| FFFE | 戻りスタブ |
-| FFFD | 空き ← `preCallSp` |
+| アドレス | 内容               |
+| -------- | ------------------ |
+| FFFF     | A                  |
+| FFFE     | 戻りスタブ         |
+| FFFD     | 空き ← `preCallSp` |
 
 - `expectStackWork({ from: "preCallSp", offset: 1, words: [stub] })`
 - `expectStackWork({ from: "preCallSp", offset: 2, words: [A] })`
@@ -76,10 +78,14 @@ MN1613 の `BAL`/`BALD` と同様、**戻り先ワードアドレスをスタッ
 import { createMn1613CodeTest } from "../main/feature/code_test";
 
 const t = createMn1613CodeTest({
-  stackInit: 0xffff,       // 省略可
-  returnStubAddr: 0x17fe,  // ワード。省略可。ここに H を置く
+  stackInit: 0xffff, // 省略可
+  returnStubAddr: 0x17fe, // ワード。省略可。ここに H を置く
   maxCycles: 100_000,
+  ioMock: [{ type: "port", port: "0x24", read: "0x00AB" }],
 });
+
+// または設定 JSON / オブジェクトから起こす（ioMock があればキック）
+const t2 = createMn1613CodeTestFromSettings("code_test.json");
 
 t.loadIntelHex(hexText);
 t.loadCdb(cdbText);
@@ -105,21 +111,55 @@ t.expectStackWork({ from: "preCallSp", offset: 0, words: [0x1111] });
 
 ### `call` オプション
 
-| フィールド | 意味 |
-|------------|------|
-| `registers` | `R0`–`R4`, `STR`, `CSBR`, `SSBR` など（部分指定） |
-| `stack` | 呼び出し前に PUSH するワード列（戻りアドレスより前） |
+| フィールド  | 意味                                                 |
+| ----------- | ---------------------------------------------------- |
+| `registers` | `R0`–`R4`, `STR`, `CSBR`, `SSBR` など（部分指定）    |
+| `stack`     | 呼び出し前に PUSH するワード列（戻りアドレスより前） |
 
 ### 検証
 
-| API | 内容 |
-|-----|------|
-| 戻り値（レジスタ） | `expectRegisters` / `call` の戻り `registers` |
-| 所定メモリ | `expectMemoryWords` / `expectMemoryBytes`（ワード or バイトアドレス指定を明示） |
-| ラベル先 | `expectLabelWords` / `expectLabelBytes` |
-| スタックワーク | `expectStackWork`（`preCallSp` 基準のオフセット、または絶対ワードアドレス） |
+| API                | 内容                                                                            |
+| ------------------ | ------------------------------------------------------------------------------- |
+| 戻り値（レジスタ） | `expectRegisters` / `call` の戻り `registers`                                   |
+| 所定メモリ         | `expectMemoryWords` / `expectMemoryBytes`（ワード or バイトアドレス指定を明示） |
+| ラベル先           | `expectLabelWords` / `expectLabelBytes`                                         |
+| スタックワーク     | `expectStackWork`（`preCallSp` 基準のオフセット、または絶対ワードアドレス）     |
 
 不一致時は例外（メッセージに期待値／実際値／アドレスを含める）。
+
+### 設定 JSON と IO モック
+
+`createMn1613CodeTestFromSettings(path | object)` が読む JSON。`ioMock` が無い／空なら IO は触らない。
+
+```json
+{
+  "hexFile": "add.ihx",
+  "cdbFile": "add.cdb",
+  "maxCycles": 100000,
+  "zeroPage": { "0x10": "0x1234" },
+  "ioMock": [
+    { "type": "handshake", "timeoutMs": 5000, "syncIrq2": false },
+    { "type": "port", "port": "0x30", "read": "0x00FF" },
+    { "type": "port", "port": "0x24", "read": ["0x11", "0x22"] }
+  ]
+}
+```
+
+| フィールド | 内容 |
+| :--- | :--- |
+| `hexFile` / `cdbFile` | パス。JSON ファイル基準の相対パス可。`hexText` / `cdbText` でインラインも可 |
+| `stackInit` / `returnStubWordAddr` / `maxCycles` / `memoryBytes` | ハーネスオプション（数値は `"0x…"` 可） |
+| `zeroPage` | ワードアドレス → ワード値（ロード後に書く） |
+| `ioMock` | モックエントリ配列。あれば RD/WT を差し替え |
+
+| `ioMock[].type` | 内容 |
+| :--- | :--- |
+| `handshake` | 1階 IO ボードハンドシェイクモックを attach（0x20–0x24）。`timeoutMs` / `syncIrq2`（既定 false）/ `start`（既定 false＝`handleOneRequest` をテスト側で並行） |
+| `port`（省略可） | 指定ポートの RD 固定値またはキュー。WT は `ioMock.writes` に記録。`read` 配列は読むたびに進め、尽きたら最後を繰り返す |
+
+port エントリは handshake より優先（同じポートを上書きできる）。WT 検証は `expectIoWrites([{ port, value }])`。使い終わったら `detachIoMock()`。
+
+アセンブラ結合テスト（`retrocpu_test_framework`）も同じ `ioMock` 配列を `JsonTestSettings.ioMock` に書く。`createSessionFromSettings` / `reload` がキックする。ハンドシェイク用の既定は `mn1613MonHandshakeSettings`。
 
 ## ファイル配置
 
@@ -133,6 +173,8 @@ retrocpu_emu/src/main/feature/code_test/
   intel_hex.ts
   cdb.ts
   mn1613_harness.ts
+  io_mock.ts
+  settings.ts
 retrocpu_emu/src/test/feature/code_test/
   *.test.ts
 ```

@@ -90,6 +90,11 @@ export interface AssemblyResult {
   /** `.area` ごとのサイズ（リンク順に並べる） */
   areas: AreaInfo[];
   sourceLines: SourceLine[];
+  /**
+   * `.ds` / `.blkw` 行の先頭ロケーション（行番号 → アドレス）。
+   * LST 用。イメージには出さない（MN161x: ワード / TMS: バイト）。
+   */
+  storageAddrs: Map<number, number>;
   /** アセンブル対象 CPU */
   cpuType: CpuType;
   /**

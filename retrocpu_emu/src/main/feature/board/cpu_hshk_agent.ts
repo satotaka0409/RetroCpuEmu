@@ -1,11 +1,10 @@
 /**
- * CPU ボード側のハンドシェイク代行（CPU→IO コマンドの取り込みと応答）
+ * CPU Worker 上のハンドシェイク橋（MN1613 の IO ポート ↔ IO Worker RPC）
  * 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc（IO 0020〜0024）
  *
- * 実機では線でつながった 1階ボードが IO ポートの向こう側に居る。
- * エミュレータでは CPU ボード Worker がその線側を受け持ち、
- * ビットレベルのハンドシェイクでフレームを組み立ててから
- * IO ボード Worker へ転送し、返ってきた応答をそのまま線へ流す。
+ * CPU 側プロトコルはアセンブラ（handshake_common.asm）。本クラスは
+ * IoControlHandshake で REQ_0 を受け、フレームを IO Worker へ転送し、
+ * 応答を同じ線へ返す。Worker 間で GPIO を共有できないための橋。
  */
 
 import { CPU_PAYLOAD_REMAINING_SIZE } from "../cpu/mn1613/handhshake/command_cpu_to_io";

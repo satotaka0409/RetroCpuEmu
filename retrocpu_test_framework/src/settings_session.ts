@@ -28,6 +28,7 @@ export function resolveTestSettings(
   initLabel: string | null;
   cpu: JsonTestSettings["cpu"];
   sources: AsmSource[];
+  ioMock: JsonTestSettings["ioMock"];
 } {
   const hexFile = resolveSuitePath(settings.hexFile, fromDir);
   const cdbFile = resolveSuitePath(settings.cdbFile, fromDir);
@@ -42,12 +43,13 @@ export function resolveTestSettings(
     initLabel: settings.initLabel,
     cpu: settings.cpu,
     sources,
+    ioMock: settings.ioMock,
   };
 }
 
 /**
  * JSON/TS 設定からアセンブルし、HEX/CDB をロードしたセッションを作る。
- * `runInit()` は呼ばない（モック attach 後に呼ぶ）。
+ * `runInit()` は呼ばない。`ioMock` があれば reload 時に RD/WT をキックする。
  * @param settings テスト設定
  * @param fromDir 相対パス基準
  * @returns ロード済みセッション
@@ -70,5 +72,6 @@ export function createSessionFromSettings(
     cdbFile: resolved.cdbFile,
     initLabel: resolved.initLabel,
     cpu: resolved.cpu,
+    ioMock: resolved.ioMock,
   });
 }

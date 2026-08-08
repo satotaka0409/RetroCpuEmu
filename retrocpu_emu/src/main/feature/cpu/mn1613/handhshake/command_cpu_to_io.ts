@@ -1,36 +1,29 @@
 /**
- * CPU -> I/O ボード方向コマンド処理
+ * CPU → I/O ボード方向コマンド（I/O ボード側）
  *
- * HandShake.md「### レトロCPUボード -> 制御・I/Oボード」の
- * 全コマンドを実装する。
+ * HandShake.mdc「### レトロCPUボード -> 制御・I/Oボード」。
+ * フレーム構築・線上の送受信は CPU ボードのアセンブラ
+ * （retrocpu_boot_monitor/mn1613/src/handshake/）が行う。
  *
- * ■ 役割分担
- *   CPUボード側  : build~Frame() でフレームを構築 → RetroCpuHandshake.send() で送信
- *   I/Oボード側  : IoControlHandshake.receive() で受信 → CpuToIoCommandDispatcher.dispatch()
- *                  → IoControlHandshake.send() で応答を返す
+ * I/O ボード側は受信フレームを CpuToIoCommandDispatcher.dispatch() し、
+ * IoControlHandshake.send() で応答を返す。
  *
- * ■ 受信フロー例（I/Oボード側）
+ * ■ 受信フロー例
  *   const frame = await io.receiveFramed(
  *     (cmd) => CPU_PAYLOAD_REMAINING_SIZE[cmd] ?? 0,
  *   );
  *   const response = dispatcher.dispatch(frame);
  *   await io.send(response);
  *
- * ■ フレームバイトレイアウト（位置はHanshake.mdの位置列に準拠）
- *   SP / STR / OSR2 は仕様上3バイト（24bit）扱い。
+ * ■ フレームバイトレイアウト（位置は HandShake.mdc の位置列に準拠）
+ *   SP / STR / OSR2 は仕様上 3 バイト（24bit）扱い。
  *   BEEP / タイマーの位置列は仕様書にずれがあるため、本実装では
- *   データ長の説明（16bit指定）を優先し cmd+2+2 = 5バイトとした。
+ *   データ長の説明（16bit 指定）を優先し cmd+2+2 = 5 バイトとした。
  */
 
-import {
-  CpuRegisters,
-  fromReg16,
-  fromReg24,
-  reg16,
-  reg24,
-} from "../mn1613registers";
+import { CpuRegisters, reg16, reg24 } from "../mn1613registers";
 export type { CpuRegisters };
-export { reg16, reg24, fromReg16, fromReg24 };
+export { reg16, reg24 };
 import { CMD_CPU_TO_IO, MODE, RESPONSE_CODE } from "./handshake_type";
 
 // ─────────────────────────────────────────────
@@ -174,7 +167,6 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
 
 /** CPU状態通知フレーム内の各フィールドのバイトオフセット */
 const OFS = {
-  CMD: 0x00, // 1バイト: コマンド (0x10)
   R0: 0x01, // 2バイト: R0 H,L
   R1: 0x03, // 2バイト
   R2: 0x05,
@@ -224,29 +216,6 @@ function read24(buf: Uint8Array, ofs: number): number {
   );
 }
 
-/**
- * ビッグエンディアン 2 バイトで書く。
- * @param buf フレームバッファ
- * @param ofs 先頭からのバイトオフセット
- * @param val 16bit 値
- */
-function write16(buf: Uint8Array, ofs: number, val: number): void {
-  buf[ofs] = (val >> 8) & 0xff;
-  buf[ofs + 1] = val & 0xff;
-}
-
-/**
- * ビッグエンディアン 3 バイトで書く。
- * @param buf フレームバッファ
- * @param ofs 先頭からのバイトオフセット
- * @param val 24bit 値
- */
-function write24(buf: Uint8Array, ofs: number, val: number): void {
-  buf[ofs] = (val >> 16) & 0xff;
-  buf[ofs + 1] = (val >> 8) & 0xff;
-  buf[ofs + 2] = val & 0xff;
-}
-
 // ─────────────────────────────────────────────
 // フレーム解析（I/Oボード側で使用）
 // ─────────────────────────────────────────────
@@ -281,115 +250,6 @@ function parseCpuStatusFrame(frame: Uint8Array): CpuRegisters {
   };
 }
 
-// ─────────────────────────────────────────────
-// フレーム構築（CPUボード側で使用）
-// ─────────────────────────────────────────────
-
-/**
- * CPU状態通知フレームを構築する (cmd=0x10)。
- * RetroCpuHandshake.send() に渡す Uint8Array を返す。
- */
-export function buildCpuStatusFrame(regs: CpuRegisters): Uint8Array {
-  const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.CPU_STATUS_NOTIFY]);
-  frame[OFS.CMD] = CMD_CPU_TO_IO.CPU_STATUS_NOTIFY;
-  write16(frame, OFS.R0, fromReg16(regs.R0));
-  write16(frame, OFS.R1, fromReg16(regs.R1));
-  write16(frame, OFS.R2, fromReg16(regs.R2));
-  write16(frame, OFS.R3, fromReg16(regs.R3));
-  write16(frame, OFS.R4, fromReg16(regs.R4));
-  write24(frame, OFS.SP, fromReg24(regs.SP));
-  write24(frame, OFS.STR, fromReg24(regs.STR));
-  write16(frame, OFS.IC, fromReg16(regs.IC));
-  write16(frame, OFS.CSBR, fromReg16(regs.CSBR));
-  write16(frame, OFS.SSBR, fromReg16(regs.SSBR));
-  write16(frame, OFS.TSR0, fromReg16(regs.TSR0));
-  write16(frame, OFS.TSR1, fromReg16(regs.TSR1));
-  write16(frame, OFS.OSR0, fromReg16(regs.OSR0));
-  frame[OFS.OSR1] = fromReg16(regs.OSR1) & 0xff;
-  write24(frame, OFS.OSR2, fromReg24(regs.OSR2));
-  frame[OFS.NPP_WORD] = fromReg16(regs.NPP) & 0xff; // H: NPP
-  frame[OFS.NPP_WORD + 1] = 0x00; // L: 0
-  frame[OFS.IISR_WORD] = 0x00; // H: 0
-  frame[OFS.IISR_WORD + 1] = fromReg16(regs.IISR) & 0xff; // L: IISR
-  frame[OFS.SBRB_WORD] = 0x00; // H: 0
-  frame[OFS.SBRB_WORD + 1] = fromReg16(regs.SBRB) & 0xff; // L: SBRB
-  write16(frame, OFS.ICB, fromReg16(regs.ICB));
-  return frame;
-}
-
-/**
- * モード設定フレームを構築する (cmd=0x11)。
- * @param mode MODE.MONITOR(0) または MODE.FREE(1)
- */
-export function buildModeSetFrame(mode: 0 | 1): Uint8Array {
-  return new Uint8Array([CMD_CPU_TO_IO.MODE_SET, mode]);
-}
-
-/**
- * 16進キー入力取得フレームを構築する (cmd=0x14)。
- * フリーモード時のみ有効。
- */
-export function buildHexKeyGetFrame(): Uint8Array {
-  return new Uint8Array([CMD_CPU_TO_IO.HEX_KEY_GET]);
-}
-
-/**
- * PCキー入力取得フレームを構築する (cmd=0x15)。
- */
-export function buildPcKeyGetFrame(): Uint8Array {
-  return new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET]);
-}
-
-/**
- * LED表示依頼フレームを構築する (cmd=0x16)。
- * フリーモード時のみ有効。
- * @param data sevenSeg は必ず length=12 の Uint8Array
- */
-export function buildLedDisplayFrame(data: LedDisplayData): Uint8Array {
-  if (data.sevenSeg.length !== LED_SEVEN_SEG_COUNT) {
-    throw new RangeError(
-      `sevenSeg must be exactly ${LED_SEVEN_SEG_COUNT} bytes, got ${data.sevenSeg.length}`,
-    );
-  }
-  const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]);
-  frame[0x00] = CMD_CPU_TO_IO.LED_DISPLAY;
-  frame.set(data.sevenSeg, 0x01); // 0x01〜0x0C
-  frame[0x0d] = data.bulletLed0_7 & 0xff;
-  frame[0x0e] = data.bulletLed8_F & 0xff;
-  return frame;
-}
-
-/**
- * BEEP音フレームを構築する (cmd=0x18)。
- * モード問わず使用可。frequencyHz=0 で停止、durationMs=0 で無限。
- */
-export function buildBeepFrame(params: BeepParams): Uint8Array {
-  const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]);
-  frame[0x00] = CMD_CPU_TO_IO.BEEP;
-  write16(frame, 0x01, params.frequencyHz); // 0x01〜0x02
-  write16(frame, 0x03, params.durationMs); // 0x03〜0x04
-  return frame;
-}
-
-/**
- * タイマー設定フレームを構築する (cmd=0x19)。
- * timerNo=0/1 でタイマーを選び、periodMs=0 で停止、count=0 で無限。
- */
-export function buildTimerSetFrame(params: TimerParams): Uint8Array {
-  const frame = new Uint8Array(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET]);
-  frame[0x00] = CMD_CPU_TO_IO.TIMER_SET;
-  frame[0x01] = params.timerNo & 0xff;
-  write16(frame, 0x02, params.periodMs); // 0x02〜0x03
-  write16(frame, 0x04, params.count); // 0x04〜0x05
-  return frame;
-}
-/**
- * アドレスブレイク番号取得フレームを構築する (cmd=0x1a)。
- * I/O ボードからの応答にはブレイク番号 + 64bit タイムスタンプ + ステータス (10バイト)が含まれる。
- */
-export function buildAddrBreakGetFrame(): Uint8Array {
-  return new Uint8Array([CMD_CPU_TO_IO.ADDR_BREAK_GET]);
-}
 // ─────────────────────────────────────────────
 // I/Oボード側コマンドディスパッチャ
 // ─────────────────────────────────────────────

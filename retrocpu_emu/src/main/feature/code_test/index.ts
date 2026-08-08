@@ -6,11 +6,20 @@
 export { createMn1613CodeTest, Mn1613CodeTest, readWord, writeWord, readBytes, writeBytes } from "./mn1613_harness";
 export { loadIntelHex, wordsToIntelHex } from "./intel_hex";
 export { parseCdb, requireSymbol } from "./cdb";
+export { CodeTestIoMock, parseJsonInt, parseJsonNumber, resetDefaultIoCallbacks } from "./io_mock";
+export {
+  createMn1613CodeTestFromSettings,
+  loadCodeTestSettingsFile,
+  parseCodeTestSettings,
+} from "./settings";
 export type {
   CallOptions,
   CallRegisters,
   CallResult,
   CdbSymbol,
+  CodeTestIoMockEntry,
+  CodeTestIoWriteLog,
+  CodeTestSettings,
   Mn1613CodeTestOptions,
   StackWorkExpect,
 } from "./types";

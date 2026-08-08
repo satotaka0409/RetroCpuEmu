@@ -4,6 +4,7 @@
  */
 
 import type { CPURegister } from "../cpu/mn1613/mn1613";
+import type { IoTimerScheduler } from "../board/io_timer";
 
 /** 呼び出し時に設定できるレジスタ（部分） */
 export type CallRegisters = {
@@ -48,6 +49,70 @@ export type Mn1613CodeTestOptions = {
   maxCycles?: number;
   /** メモリバイト数。既定 512KB（256K ワード） */
   memoryBytes?: number;
+  /**
+   * 設定があれば RD/WT を IO モックへ差し替える（emulater_code_test.mdc §7）。
+   * `type: "handshake"` で 1階ボードモック、`type: "port"` でポート単位の固定値。
+   */
+  ioMock?: CodeTestIoMockEntry[];
+};
+
+/**
+ * ポートモックへの 1 回の WT 記録。
+ * @see CodeTestIoMock.writes
+ */
+export type CodeTestIoWriteLog = {
+  /** IO ポート番号（16bit） */
+  port: number;
+  /** 書き込んだ 16bit 値 */
+  value: number;
+};
+
+/**
+ * 設定 JSON の IO モック 1 エントリ。
+ * handshake は 1 件まで。port は RD 固定値／キューと WT 記録。
+ */
+export type CodeTestIoMockEntry =
+  | {
+      type: "handshake";
+      /** 各信号待ちのタイムアウト ms（既定は IO モック側） */
+      timeoutMs?: number;
+      /** HSHK_REQ_1 を IRQ2 に連動（既定 false。コードテストはポーリング想定） */
+      syncIrq2?: boolean;
+      /** true なら CPU→IO 受信ループを start() する（既定 false） */
+      start?: boolean;
+      /** タイマー駆動。省略時はグローバル setTimeout（テストでは inert を渡す） */
+      timerScheduler?: IoTimerScheduler;
+    }
+  | {
+      type?: "port";
+      /** IO ポート番号（10進 / `"0x24"` / `"0b…"`） */
+      port: number | string;
+      /**
+       * RD の戻り。数値なら毎回同じ。配列なら読むたびに次へ進み、尽きたら最後を繰り返す。
+       * 省略時は handshake または既定 `0xFFFF` にフォールバック。
+       */
+      read?: number | string | Array<number | string>;
+    };
+
+/**
+ * HEX / CDB ハーネスを JSON から起こす設定。
+ * `ioMock` があればエミュレータの RD/WT コールバックをキックする。
+ */
+export type CodeTestSettings = {
+  hexFile?: string;
+  cdbFile?: string;
+  /** ファイルの代わりにインライン Intel HEX */
+  hexText?: string;
+  /** ファイルの代わりにインライン CDB */
+  cdbText?: string;
+  stackInit?: number | string;
+  returnStubWordAddr?: number | string;
+  maxCycles?: number | string;
+  memoryBytes?: number | string;
+  /** ゼロページ（ワードアドレス文字列 → ワード値） */
+  zeroPage?: Record<string, number | string>;
+  /** 1 件以上あれば IO モックをアタッチ */
+  ioMock?: CodeTestIoMockEntry[];
 };
 
 export type StackWorkExpect = {

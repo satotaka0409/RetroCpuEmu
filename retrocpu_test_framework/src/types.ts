@@ -3,6 +3,8 @@
  * 根拠: .cursor/rules/test_framework.mdc
  */
 
+import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/main/feature/code_test/types.js";
+
 /** retrocpu_asm が扱う CPU */
 export type AsmCpuType = "mn1610" | "mn1613" | "tms9995";
 
@@ -175,4 +177,9 @@ export type Mn1613SessionOptions = {
   maxCycles?: number;
   /** メモリバイト数。既定 0x20000（64K ワード） */
   memoryBytes?: number;
+  /**
+   * IO モック（emulater_code_test.mdc §7）。
+   * 1 件以上なら create / reload で RD/WT をキックする。
+   */
+  ioMock?: CodeTestIoMockEntry[];
 };

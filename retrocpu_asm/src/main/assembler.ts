@@ -444,16 +444,22 @@ function emitWord(
  * @param symbols - 定義済みシンボルテーブル
  * @param symbolInfos - シンボル情報表
  * @param cpuType - CPUの種別
- * @return エンコード済みワードとリロケーションと領域サイズ
+ * @return エンコード済みワードとリロケーションと領域サイズと `.ds` 行アドレス
  */
 function pass2(
   lines: ParsedLine[],
   symbols: SymbolTable,
   symbolInfos: SymbolInfoTable,
   cpuType: CpuType,
-): { words: EmittedWord[]; relocs: WordDiffReloc[]; areas: AreaInfo[] } {
+): {
+  words: EmittedWord[];
+  relocs: WordDiffReloc[];
+  areas: AreaInfo[];
+  storageAddrs: Map<number, number>;
+} {
   const words: EmittedWord[] = [];
   const relocs: WordDiffReloc[] = [];
+  const storageAddrs: Map<number, number> = new Map();
   const areas: AreaContext = createAreaContext();
   const byteMode = cpuType === "tms9995";
   const addrStep = byteMode ? 2 : 1;
@@ -482,6 +488,7 @@ function pass2(
     }
 
     if (op === ".DS" || op === ".BLKW") {
+      storageAddrs.set(line.lineNo, areaPc(areas));
       setAreaPc(
         areas,
         areaPc(areas) + evalStorageReserve(line, symbols, false, cpuType),
@@ -582,7 +589,7 @@ function pass2(
     setAreaPc(areas, pc + ws.length * addrStep);
   }
 
-  return { words, relocs, areas: snapshotAreas(areas) };
+  return { words, relocs, areas: snapshotAreas(areas), storageAddrs };
 }
 
 /**
@@ -608,7 +615,12 @@ export function assemble(
     globlNames,
     symbolAreas,
   );
-  const { words, relocs, areas } = pass2(parsed, symbols, symbolInfos, cpuType);
+  const { words, relocs, areas, storageAddrs } = pass2(
+    parsed,
+    symbols,
+    symbolInfos,
+    cpuType,
+  );
   return {
     words,
     symbols,
@@ -616,6 +628,7 @@ export function assemble(
     relocs,
     areas,
     sourceLines,
+    storageAddrs,
     cpuType,
     addressUnit: cpuType === "tms9995" ? "byte" : "word",
   };

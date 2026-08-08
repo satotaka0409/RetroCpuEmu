@@ -17,10 +17,13 @@ import {
 } from "../cpu/mn1613/mn1613";
 import { parseCdb, requireSymbol, type CdbTable } from "./cdb";
 import { loadIntelHex } from "./intel_hex";
+import { CodeTestIoMock, resetDefaultIoCallbacks } from "./io_mock";
 import type {
   CallOptions,
   CallRegisters,
   CallResult,
+  CodeTestIoMockEntry,
+  CodeTestIoWriteLog,
   Mn1613CodeTestOptions,
   StackWorkExpect,
 } from "./types";
@@ -176,17 +179,58 @@ export class Mn1613CodeTest {
   private cdb: CdbTable = { byName: new Map(), symbols: [] };
   private lastResult: CallResult | null = null;
   private lastPreCallSp = 0;
+  private attachedIoMock: CodeTestIoMock | null = null;
 
   /**
-   * @param opts スタック初期値、戻りスタブ位置、最大サイクル数、メモリサイズ
+   * @param opts スタック初期値、戻りスタブ位置、最大サイクル数、メモリサイズ、ioMock
    */
   constructor(opts: Mn1613CodeTestOptions = {}) {
     this.stackInit = opts.stackInit ?? DEFAULT_STACK;
     this.returnStubWordAddr = opts.returnStubWordAddr ?? DEFAULT_STUB;
     this.maxCycles = opts.maxCycles ?? DEFAULT_MAX_CYCLES;
     const memBytes = opts.memoryBytes ?? DEFAULT_MEM_BYTES;
+    resetDefaultIoCallbacks();
     setMemory(new ArrayBuffer(memBytes));
     this.resetCpu();
+    if (opts.ioMock && opts.ioMock.length > 0) {
+      this.applyIoMock(opts.ioMock);
+    }
+  }
+
+  /** アタッチ中の IO モック。未設定なら null */
+  get ioMock(): CodeTestIoMock | null {
+    return this.attachedIoMock;
+  }
+
+  /**
+   * 設定 JSON の ioMock をエミュ RD/WT に差し替える。既にあれば先に外す。
+   * @param entries モックエントリ（handshake / port）
+   * @returns アタッチ済みモック
+   */
+  applyIoMock(entries: CodeTestIoMockEntry[]): CodeTestIoMock {
+    const prev = this.attachedIoMock;
+    this.attachedIoMock = null;
+    if (prev?.handshake) {
+      prev.handshake.detach();
+    }
+    resetDefaultIoCallbacks();
+    const mock = new CodeTestIoMock(entries);
+    mock.attach();
+    this.attachedIoMock = mock;
+    return mock;
+  }
+
+  /**
+   * IO モックを外し、RD/WT を既定に戻す。
+   */
+  async detachIoMock(): Promise<void> {
+    const mock = this.attachedIoMock;
+    this.attachedIoMock = null;
+    if (mock) {
+      await mock.detach();
+    } else {
+      resetDefaultIoCallbacks();
+    }
   }
 
   /** CPU／ブレークをリセットし、SP と戻りスタブを初期化する */
@@ -416,6 +460,32 @@ export class Mn1613CodeTest {
     const start = (base + spec.offset) & 0xffff;
     const actual = spec.words.map((_, i) => readWord(start + i));
     assertWords(`stack@preCallSp+${spec.offset}`, actual, spec.words);
+  }
+
+  /**
+   * IO モックが記録した WT 列を検証する。
+   * @param expected 期待する port / value（先頭から一致）
+   * @throws ioMock 未設定、または列が一致しない場合
+   */
+  expectIoWrites(expected: CodeTestIoWriteLog[]): void {
+    if (!this.attachedIoMock) {
+      throw new Error("expectIoWrites: ioMock is not attached");
+    }
+    const actual = this.attachedIoMock.writes;
+    if (actual.length !== expected.length) {
+      throw new Error(
+        `ioWrites: length ${actual.length} !== ${expected.length}`,
+      );
+    }
+    for (let i = 0; i < expected.length; i += 1) {
+      const a = actual[i]!;
+      const e = expected[i]!;
+      if ((a.port & 0xffff) !== (e.port & 0xffff) || (a.value & 0xffff) !== (e.value & 0xffff)) {
+        throw new Error(
+          `ioWrites[${i}]: expected port=0x${hex4(e.port)} value=0x${hex4(e.value)}, got port=0x${hex4(a.port)} value=0x${hex4(a.value)}`,
+        );
+      }
+    }
   }
 }
 

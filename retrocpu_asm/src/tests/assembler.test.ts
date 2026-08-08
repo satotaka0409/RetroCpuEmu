@@ -756,6 +756,46 @@ describe("assembler: LST ファイル出力", () => {
     assert.ok(lst.includes("LOOP:"), "label LOOP");
     assert.ok(lst.includes("RESULT:"), "label RESULT");
   });
+
+  test(".ds / .blkw 行にロケーションアドレスが出る（オペコードは出ない）", () => {
+    const lst = writeLst(
+      assemble(`
+	.area	_SYS_PAGE0		(ABS,NOLOAD)
+	.org	0x0008
+GL_RND_SEED:	.ds	1
+		.ds	1
+	.area	_WORK		(REL,NOLOAD)
+BUF:	.ds	2
+X:	.blkw	1
+`),
+    );
+    assert.match(lst, /^0008\s+GL_RND_SEED:\t\.ds\t1/m);
+    assert.match(lst, /^0009\s+\.ds\t1/m);
+    assert.match(lst, /^0000\s+BUF:\t\.ds\t2/m);
+    assert.match(lst, /^0002\s+X:\t\.blkw\t1/m);
+    const dsLine = lst.split("\n").find((l) => l.includes("GL_RND_SEED"));
+    assert.ok(dsLine, "GL_RND_SEED 行がある");
+    assert.ok(
+      !/^0008 [0-9A-F]{4}/.test(dsLine!),
+      `.ds 行にオペコードが出てはいけない: ${dsLine}`,
+    );
+  });
+
+  test("TMS9995 の LST でも .ds / .blkw にバイトアドレスが出る", () => {
+    const lst = writeLst(
+      assemble(
+        `
+	.area	_WORK
+	.org	>8300
+A:	.blkw	1
+B:	.ds	2
+`,
+        "tms9995",
+      ),
+    );
+    assert.match(lst, /^8300\s+A:\t\.blkw\t1/m);
+    assert.match(lst, /^8302\s+B:\t\.ds\t2/m);
+  });
 });
 
 // ─── INCLUDE ──────────────────────────────────────────────────────────────────

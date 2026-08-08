@@ -84,11 +84,12 @@ HEX / CDB / CPU は `mn1613_mon_settings.ts` の `JsonTestSettings` に書く。
 | `createMn1613AsmSession(opts)`                   | HEX/CDB をロード（`sources` があれば先に生成）        |
 | `session.runInit()`                              | `initLabel`（既定 `gl_main`）を HALT まで実行         |
 | `session.call(label, opts)`                      | `.global` ラベルを BALD 相当で実行                    |
-| `session.reload()`                               | HEX 再ロード＋ CPU reset＋スタブ再設置                |
+| `session.reload()`                               | HEX 再ロード＋CPU reset＋スタブ再設置。`ioMock` があれば RD/WT を付け直す |
 | `session.expectRegisters`                        | レジスタ検証                                          |
 | `session.expectMemoryWords` / `expectLabelWords` | メモリ検証                                            |
 | `session.expectStackWork`                        | スタック検証（`preCallSp` 基準）                      |
-| `attachHandshakeMock(opts)`                      | IO モック attach                                      |
+| `session.requireHandshakeMock()`                 | `ioMock` の handshake モック（無ければ例外）          |
+| `attachHandshakeMock(opts)`                      | 互換 API。新規は `JsonTestSettings.ioMock`            |
 
 ### `CallResult`
 
@@ -204,6 +205,7 @@ const session = createSessionFromSettings(mn1613MonSettings);
 | キー | 意味 |
 | :--- | :--- |
 | `name` / `cpu` / `hexFile` / `cdbFile` / `initLabel` / `sourceRoot` / `sources` | HEX/CDB/CPU とリンクソース |
+| `ioMock` | 任意。1 件以上なら `createSessionFromSettings` / `reload` で RD/WT をキック（`emulater_code_test.mdc` §7。`handshake` / `port`） |
 | `beforeTest` / `afterTest` / `beforeEachTest` / `afterEachTest` | **任意の関数**。ランナーは自動では呼ばない。自分で `await testSettings.beforeEachTest?.()` する |
 
 `initLabel: null` なら `runInit()` は何もしない（MAIN スタブだけの部分リンクなど）。
@@ -216,31 +218,29 @@ const session = createSessionFromSettings(mn1613MonSettings);
 
 `test` / `expect` は `retrocpu_test_framework/src/unit.ts` だけ使う（Vitest 禁止）。
 
-典型パターン（ケースごとに reload → モック → `runInit` → 本体 → detach）:
+典型パターン（設定に `ioMock` → ケースごとに `reload` がキック → `runInit` → 本体）:
 
 ```ts
 import {
-  attachHandshakeMock,
   createSessionFromSettings,
   expect,
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,
 } from "../../../../retrocpu_test_framework/src/index.js";
+import { mn1613MonHandshakeSettings } from "../mn1613_mon_settings.js";
 
-const session = createSessionFromSettings(testSettings);
+const session = createSessionFromSettings(mn1613MonHandshakeSettings);
 
 async function withCase(
   fn: (s: Mn1613AsmSession, mock: IoBoardHandshakeMock) => Promise<void>,
 ): Promise<void> {
   session.reload();
-  const mock = attachHandshakeMock({ syncIrq2: false, timeoutMs: 5000 });
   try {
     await session.runInit();
-    await fn(session, mock);
+    await fn(session, session.requireHandshakeMock());
   } finally {
-    await mock.stop();
-    mock.detach();
+    await session.detachIoMock();
   }
 }
 

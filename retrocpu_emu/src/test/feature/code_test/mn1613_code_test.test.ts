@@ -3,12 +3,18 @@
  * 根拠: .cursor/rules/emulater_code_test.mdc
  */
 
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   createMn1613CodeTest,
+  createMn1613CodeTestFromSettings,
   parseCdb,
+  parseCodeTestSettings,
   readWord,
   wordsToIntelHex,
+  type Mn1613CodeTest,
 } from "../../../main/feature/code_test";
 
 describe("intel hex + cdb", () => {
@@ -73,5 +79,108 @@ describe("Mn1613CodeTest.call", () => {
     // preCallSp = FFFD; +1 = return stub word; +2 = 0x55aa
     t.expectStackWork({ from: "preCallSp", offset: 2, words: [0x55aa] });
     expect(readWord(0xffff)).toBe(0x55aa);
+  });
+});
+
+describe("Mn1613CodeTest.ioMock", () => {
+  let harness: Mn1613CodeTest | undefined;
+
+  afterEach(async () => {
+    await harness?.detachIoMock();
+    harness = undefined;
+  });
+
+  it("ioMock が無ければ RD は既定 0xFFFF", async () => {
+    // RD R0, 0x24; RET
+    const hex = wordsToIntelHex(0x1800, [0x1824, 0x2003]);
+    harness = createMn1613CodeTest();
+    harness.loadIntelHex(hex);
+    harness.loadCdb("L:G$rdio$0$0:3000\n");
+    await harness.call("rdio");
+    harness.expectRegisters({ R0: 0xffff });
+  });
+
+  it("port モックの RD 固定値が R0 に入る", async () => {
+    const hex = wordsToIntelHex(0x1800, [0x1824, 0x2003]);
+    harness = createMn1613CodeTest({
+      ioMock: [{ type: "port", port: "0x24", read: "0x00AB" }],
+    });
+    harness.loadIntelHex(hex);
+    harness.loadCdb("L:G$rdio$0$0:3000\n");
+    await harness.call("rdio");
+    harness.expectRegisters({ R0: 0x00ab });
+  });
+
+  it("port モックの read 配列は読むたびに進む", async () => {
+    // RD R0, 0x24; RD R1, 0x24; RET
+    const hex = wordsToIntelHex(0x1800, [0x1824, 0x1924, 0x2003]);
+    harness = createMn1613CodeTest({
+      ioMock: [{ type: "port", port: "0x24", read: ["0x11", "0x22"] }],
+    });
+    harness.loadIntelHex(hex);
+    harness.loadCdb("L:G$rd2$0$0:3000\n");
+    await harness.call("rd2");
+    harness.expectRegisters({ R0: 0x11, R1: 0x22 });
+  });
+
+  it("WT は ioMock.writes に残り expectIoWrites できる", async () => {
+    // MVI R0, #0x5A; WT R0, 0x23; RET
+    const hex = wordsToIntelHex(0x1800, [0x085a, 0x1023, 0x2003]);
+    harness = createMn1613CodeTest({
+      ioMock: [{ type: "port", port: "0x23" }],
+    });
+    harness.loadIntelHex(hex);
+    harness.loadCdb("L:G$wtio$0$0:3000\n");
+    await harness.call("wtio");
+    harness.expectIoWrites([{ port: 0x23, value: 0x5a }]);
+  });
+
+  it("handshake エントリをキックすると HSHK_CTRL が 0 で読める", async () => {
+    // RD R0, 0x22; RET
+    const hex = wordsToIntelHex(0x1800, [0x1822, 0x2003]);
+    harness = createMn1613CodeTest({
+      ioMock: [{ type: "handshake", timeoutMs: 1000, syncIrq2: false }],
+    });
+    harness.loadIntelHex(hex);
+    harness.loadCdb("L:G$rdctrl$0$0:3000\n");
+    await harness.call("rdctrl");
+    harness.expectRegisters({ R0: 0 });
+    expect(harness.ioMock?.handshake).toBeTruthy();
+  });
+
+  it("設定 JSON ファイルの ioMock でハーネスがキックされる", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "code-test-io-"));
+    try {
+      const hex = wordsToIntelHex(0x1800, [0x1824, 0x2003]);
+      fs.writeFileSync(path.join(dir, "rd.ihx"), hex);
+      fs.writeFileSync(path.join(dir, "rd.cdb"), "L:G$rdio$0$0:3000\n");
+      const jsonPath = path.join(dir, "settings.json");
+      fs.writeFileSync(
+        jsonPath,
+        JSON.stringify({
+          hexFile: "rd.ihx",
+          cdbFile: "rd.cdb",
+          ioMock: [{ type: "port", port: "0x24", read: "0x00C3" }],
+        }),
+      );
+      harness = createMn1613CodeTestFromSettings(jsonPath);
+      await harness.call("rdio");
+      harness.expectRegisters({ R0: 0x00c3 });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("parseCodeTestSettings は ioMock 配列を受け付ける", () => {
+    const s = parseCodeTestSettings({
+      hexFile: "a.ihx",
+      ioMock: [
+        { type: "handshake", timeoutMs: "0x1388", syncIrq2: false },
+        { type: "port", port: "0x30", read: [1, "0x02"] },
+      ],
+    });
+    expect(s.ioMock).toHaveLength(2);
+    expect(s.ioMock?.[0]).toMatchObject({ type: "handshake", timeoutMs: 0x1388 });
+    expect(s.ioMock?.[1]).toMatchObject({ type: "port", port: "0x30" });
   });
 });

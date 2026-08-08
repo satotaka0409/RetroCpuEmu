@@ -26,7 +26,13 @@ export function writeLst(result: AssemblyResult): string {
   for (const src of result.sourceLines) {
     const lineWords: EmittedWord[] = byLine.get(src.lineNo) ?? [];
     if (lineWords.length === 0) {
-      out.push(`          ${src.text}`);
+      const loc: number | undefined = result.storageAddrs.get(src.lineNo);
+      if (loc !== undefined) {
+        // 命令行は `AAAA VVVV  text`（11桁）。アドレスだけ同じ列に揃える。
+        out.push(`${hex4(loc)}       ${src.text}`);
+      } else {
+        out.push(`          ${src.text}`);
+      }
       continue;
     }
 

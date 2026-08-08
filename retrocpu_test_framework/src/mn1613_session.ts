@@ -11,10 +11,14 @@ import {
 import { loadIntelHex } from "../../retrocpu_emu/src/main/feature/code_test/intel_hex.js";
 import { parseCdb, type CdbTable } from "../../retrocpu_emu/src/main/feature/code_test/cdb.js";
 import type { CdbSymbol } from "../../retrocpu_emu/src/main/feature/code_test/types.js";
+import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/main/feature/code_test/types.js";
+import { CodeTestIoMock, resetDefaultIoCallbacks } from "../../retrocpu_emu/src/main/feature/code_test/io_mock.js";
+import type { IoBoardHandshakeMock } from "../../retrocpu_emu/src/main/feature/board/handshake/io_board_mock.js";
 import {
   assembleToHexCdb,
   defaultHexCdbPaths,
 } from "./assemble_link.js";
+import { withFrameworkIoMockDefaults } from "./handshake_mock.js";
 import type {
   CallOptions,
   CallRegisters,
@@ -127,14 +131,16 @@ export class Mn1613AsmSession {
   readonly returnStubWordAddr: number;
   readonly maxCycles: number;
   readonly memoryBytes: number;
+  private readonly ioMockEntries: CodeTestIoMockEntry[] | undefined;
   private cdb: CdbTable;
   private lastResult: CallResult | null = null;
   private lastPreCallSp = 0;
+  private attachedIoMock: CodeTestIoMock | null = null;
 
   /**
    * @param hexFile Intel HEX パス
    * @param cdbFile CDB パス
-   * @param options 初期化ラベル・スタック・スタブ
+   * @param options 初期化ラベル・スタック・スタブ・ioMock
    */
   constructor(
     hexFile: string,
@@ -149,11 +155,75 @@ export class Mn1613AsmSession {
     this.returnStubWordAddr = options.returnStubWordAddr ?? DEFAULT_RETURN_STUB;
     this.maxCycles = options.maxCycles ?? DEFAULT_MAX_CYCLES;
     this.memoryBytes = options.memoryBytes ?? DEFAULT_MEMORY_BYTES;
+    this.ioMockEntries =
+      options.ioMock && options.ioMock.length > 0 ? options.ioMock : undefined;
     this.cdb = parseCdb(fs.readFileSync(cdbFile, "utf8"));
+  }
+
+  /** アタッチ中の ioMock。未設定なら null */
+  get ioMock(): CodeTestIoMock | null {
+    return this.attachedIoMock;
+  }
+
+  /**
+   * ioMock の handshake モック。無ければ null。
+   * @returns 1階ボードモック
+   */
+  get handshakeMock(): IoBoardHandshakeMock | null {
+    return this.attachedIoMock?.handshake ?? null;
+  }
+
+  /**
+   * handshake モックが必須のテスト用。
+   * @returns 1階ボードモック
+   * @throws ioMock に handshake が無い
+   */
+  requireHandshakeMock(): IoBoardHandshakeMock {
+    const mock = this.handshakeMock;
+    if (!mock) {
+      throw new Error(
+        "ioMock handshake is not attached (set JsonTestSettings.ioMock)",
+      );
+    }
+    return mock;
+  }
+
+  /**
+   * 設定の ioMock を RD/WT に差し替える。既にあれば付け直す。
+   */
+  applyIoMock(): void {
+    if (this.attachedIoMock?.handshake) {
+      this.attachedIoMock.handshake.detach();
+    } else if (this.attachedIoMock) {
+      resetDefaultIoCallbacks();
+    }
+    this.attachedIoMock = null;
+    if (!this.ioMockEntries || this.ioMockEntries.length === 0) {
+      return;
+    }
+    const mock = new CodeTestIoMock(
+      withFrameworkIoMockDefaults(this.ioMockEntries),
+    );
+    mock.attach();
+    this.attachedIoMock = mock;
+  }
+
+  /**
+   * IO モックを外し、RD/WT を既定に戻す。
+   */
+  async detachIoMock(): Promise<void> {
+    const mock = this.attachedIoMock;
+    this.attachedIoMock = null;
+    if (mock) {
+      await mock.detach();
+    } else {
+      resetDefaultIoCallbacks();
+    }
   }
 
   /**
    * HEX をメモリへ再ロードし、戻りスタブ（H）を書く。CPU は reset。
+   * `ioMock` があれば RD/WT を付け直す（emulater_code_test.mdc §7）。
    */
   reload(): void {
     const buf = new ArrayBuffer(this.memoryBytes);
@@ -173,6 +243,7 @@ export class Mn1613AsmSession {
     this.writeReturnStub();
     this.lastResult = null;
     this.lastPreCallSp = 0;
+    this.applyIoMock();
   }
 
   /** 戻り先に `H`（0x2000）を書く。 */
@@ -382,7 +453,7 @@ export class Mn1613AsmSession {
 
 /**
  * HEX / CDB をロードしたセッションを作る。`sources` があれば先にアセンブルして書き出す。
- * `runInit()` は呼ばない（テストごとに mock attach 後へ）。
+ * `runInit()` は呼ばない。`ioMock` があれば `reload()` で RD/WT をキックする。
  * @param options hex/cdb パス、任意で sources と initLabel
  * @returns ロード済みセッション
  */

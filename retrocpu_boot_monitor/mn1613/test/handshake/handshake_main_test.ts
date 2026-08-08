@@ -3,14 +3,13 @@
  * 根拠: HandShake.mdc / boot_monitor.mdc / test_framework.mdc
  */
 import {
-  attachHandshakeMock,
   createSessionFromSettings,
   expect,
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,
 } from "../../../../retrocpu_test_framework/src/index.js";
-import { mn1613MonSettings } from "../mn1613_mon_settings.js";
+import { mn1613MonHandshakeSettings } from "../mn1613_mon_settings.js";
 
 const BASE_REGS = {
   R2: 0x2222,
@@ -18,23 +17,23 @@ const BASE_REGS = {
   R4: 0x4444,
 } as const;
 
-const session: Mn1613AsmSession = createSessionFromSettings(mn1613MonSettings);
+const session: Mn1613AsmSession = createSessionFromSettings(
+  mn1613MonHandshakeSettings,
+);
 
 /**
- * gl_main 済み＋モック付きで 1 ケースを実行する。
+ * gl_main 済み＋ ioMock handshake で 1 ケースを実行する。
  * @param fn 本体（session / mock 利用可）
  */
 async function withCase(
   fn: (s: Mn1613AsmSession, mock: IoBoardHandshakeMock) => Promise<void>,
 ): Promise<void> {
   session.reload();
-  const mock = attachHandshakeMock({ syncIrq2: false, timeoutMs: 5000 });
   try {
     await session.runInit();
-    await fn(session, mock);
+    await fn(session, session.requireHandshakeMock());
   } finally {
-    await mock.stop();
-    mock.detach();
+    await session.detachIoMock();
   }
 }
 

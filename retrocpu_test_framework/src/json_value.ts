@@ -1,13 +1,15 @@
 /**
  * テスト設定の型
- * 根拠: test_framework.mdc
+ * 根拠: test_framework.mdc / emulater_code_test.mdc §7
  */
 
+import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/main/feature/code_test/types.js";
 import type { AsmCpuType } from "./types.js";
 
 /**
  * HEX / CDB / CPU / ソースのテスト設定。
  * `createSessionFromSettings` が初期化時にアセンブルしてセッションを作る。
+ * `ioMock` があれば RD/WT をキックする（emulater_code_test.mdc）。
  */
 export type JsonTestSettings = {
   /** テスト名 */
@@ -27,6 +29,11 @@ export type JsonTestSettings = {
     file: string;
     module?: string;
   }[];
+  /**
+   * IO モックエントリ。1 件以上ならセッション作成／reload で RD/WT を差し替える。
+   * `{ type: "handshake" }` / `{ type: "port", port, read }`（emulater_code_test.mdc）
+   */
+  ioMock?: CodeTestIoMockEntry[];
   /** テスト前処理 */
   beforeTest?: () => Promise<void> | void;
   /** テスト後処理 */
