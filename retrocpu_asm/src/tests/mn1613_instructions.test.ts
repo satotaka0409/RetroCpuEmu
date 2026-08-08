@@ -111,12 +111,12 @@ describe("MN1613 命令: MVWR（ワード間接転送）", () => {
 });
 
 describe("MN1613 命令: MVWI（ワード即値転送）", () => {
-  test("MVWI R0, 0x1234   word1=0x7807, word2=0x1234", () =>
-    assert.deepEqual(asm2("        MVWI R0, 0x1234"), [0x7807, 0x1234]));
-  test("MVWI R1, 0x5678   word1=0x7907", () =>
-    assert.deepEqual(asm2("        MVWI R1, 0x5678"), [0x7907, 0x5678]));
-  test("MVWI R0, 0x1234, Z skip=Z=4", () =>
-    assert.deepEqual(asm2("        MVWI R0, 0x1234, Z"), [0x7847, 0x1234]));
+  test("MVWI R0, #0x1234   word1=0x7807, word2=0x1234", () =>
+    assert.deepEqual(asm2("        MVWI R0, #0x1234"), [0x7807, 0x1234]));
+  test("MVWI R1, #0x5678   word1=0x7907", () =>
+    assert.deepEqual(asm2("        MVWI R1, #0x5678"), [0x7907, 0x5678]));
+  test("MVWI R0, #0x1234, Z skip=Z=4", () =>
+    assert.deepEqual(asm2("        MVWI R0, #0x1234, Z"), [0x7847, 0x1234]));
 });
 
 describe("MN1613 命令: MVBR（バイト間接転送）", () => {
@@ -164,12 +164,12 @@ describe("MN1613 命令: AWR（ワード間接加算）", () => {
 });
 
 describe("MN1613 命令: AWI（ワード即値加算）", () => {
-  test("AWI R0, 0x0010    word1=0x580F, word2=0x0010", () =>
-    assert.deepEqual(asm2("        AWI R0, 0x0010"), [0x580f, 0x0010]));
-  test("AWI R1, 0x0020    word1=0x590F", () =>
-    assert.deepEqual(asm2("        AWI R1, 0x0020"), [0x590f, 0x0020]));
-  test("AWI R0, 0x0010, M skip=M=2", () =>
-    assert.deepEqual(asm2("        AWI R0, 0x0010, M"), [0x582f, 0x0010]));
+  test("AWI R0, #0x0010    word1=0x580F, word2=0x0010", () =>
+    assert.deepEqual(asm2("        AWI R0, #0x0010"), [0x580f, 0x0010]));
+  test("AWI R1, #0x0020    word1=0x590F", () =>
+    assert.deepEqual(asm2("        AWI R1, #0x0020"), [0x590f, 0x0020]));
+  test("AWI R0, #0x0010, M skip=M=2", () =>
+    assert.deepEqual(asm2("        AWI R0, #0x0010, M"), [0x582f, 0x0010]));
 });
 
 describe("MN1613 命令: SWR（ワード間接減算）", () => {
@@ -180,10 +180,10 @@ describe("MN1613 命令: SWR（ワード間接減算）", () => {
 });
 
 describe("MN1613 命令: SWI（ワード即値減算）", () => {
-  test("SWI R0, 0x0010    word1=0x5807", () =>
-    assert.deepEqual(asm2("        SWI R0, 0x0010"), [0x5807, 0x0010]));
-  test("SWI R1, 0x0020    word1=0x5907", () =>
-    assert.deepEqual(asm2("        SWI R1, 0x0020"), [0x5907, 0x0020]));
+  test("SWI R0, #0x0010    word1=0x5807", () =>
+    assert.deepEqual(asm2("        SWI R0, #0x0010"), [0x5807, 0x0010]));
+  test("SWI R1, #0x0020    word1=0x5907", () =>
+    assert.deepEqual(asm2("        SWI R1, #0x0020"), [0x5907, 0x0020]));
 });
 
 // CWR/CWI/CBR/CBI
@@ -195,14 +195,14 @@ describe("MN1613 命令: CWR / CWI / CBR / CBI（比較系）", () => {
   test("CWR R0, (R2)  ii=1", () =>
     assert.equal(asm1("        CWR R0, (R2)"), 0x5709));
   // CWI: op5(10,ddd,skip,0x0F) | IM16
-  test("CWI R0, 0x00FF word1=0x500F", () =>
-    assert.deepEqual(asm2("        CWI R0, 0x00FF"), [0x500f, 0x00ff]));
+  test("CWI R0, #0x00FF word1=0x500F", () =>
+    assert.deepEqual(asm2("        CWI R0, #0x00FF"), [0x500f, 0x00ff]));
   // CBR: op5(10,7,0,ii)
   test("CBR R0, (R1)  op5(10,7,0,0x00)", () =>
     assert.equal(asm1("        CBR R0, (R1)"), 0x5700));
   // CBI: op5(10,ddd,skip,0x07) | IM16
-  test("CBI R0, 0x00FF word1=0x5007", () =>
-    assert.deepEqual(asm2("        CBI R0, 0x00FF"), [0x5007, 0x00ff]));
+  test("CBI R0, #0x00FF word1=0x5007", () =>
+    assert.deepEqual(asm2("        CBI R0, #0x00FF"), [0x5007, 0x00ff]));
 });
 
 // ─── 拡張演算命令 ─────────────────────────────────────────────────────────────
@@ -279,10 +279,10 @@ describe("MN1613 命令: LADR / LADI（BCD補正値ロード）", () => {
   test("LADR R0, (R2)    ii=1", () =>
     assert.equal(asm1("        LADR R0, (R2)"), 0x6f01));
   // LADI: op5(13,ddd,skip,0x07) | IM16
-  test("LADI R0, 0x1234  word1=0x6807", () =>
-    assert.deepEqual(asm2("        LADI R0, 0x1234"), [0x6807, 0x1234]));
-  test("LADI R1, 0x5678  word1=0x6907", () =>
-    assert.deepEqual(asm2("        LADI R1, 0x5678"), [0x6907, 0x5678]));
+  test("LADI R0, #0x1234  word1=0x6807", () =>
+    assert.deepEqual(asm2("        LADI R0, #0x1234"), [0x6807, 0x1234]));
+  test("LADI R1, #0x5678  word1=0x6907", () =>
+    assert.deepEqual(asm2("        LADI R1, #0x5678"), [0x6907, 0x5678]));
 });
 
 // ─── 論理演算（レジスタ間接・即値） ──────────────────────────────────────────
@@ -298,10 +298,10 @@ describe("MN1613 命令: ANDR / ANDI（AND系）", () => {
     assert.equal(asm1("        ANDR R0, (R2)"), 0x6f09));
   test("ANDR R0, (R1), Z  skip=Z", () =>
     assert.equal(asm1("        ANDR R0, (R1), Z"), 0x6f48));
-  test("ANDI R0, 0xF0F0   word1=0x680F", () =>
-    assert.deepEqual(asm2("        ANDI R0, 0xF0F0"), [0x680f, 0xf0f0]));
-  test("ANDI R1, 0xF0F0   word1=0x690F", () =>
-    assert.deepEqual(asm2("        ANDI R1, 0xF0F0"), [0x690f, 0xf0f0]));
+  test("ANDI R0, #0xF0F0   word1=0x680F", () =>
+    assert.deepEqual(asm2("        ANDI R0, #0xF0F0"), [0x680f, 0xf0f0]));
+  test("ANDI R1, #0xF0F0   word1=0x690F", () =>
+    assert.deepEqual(asm2("        ANDI R1, #0xF0F0"), [0x690f, 0xf0f0]));
 });
 
 describe("MN1613 命令: ORR / ORI（OR系）", () => {
@@ -309,10 +309,10 @@ describe("MN1613 命令: ORR / ORI（OR系）", () => {
     assert.equal(asm1("        ORR R0, (R1)"), 0x6708));
   test("ORR R0, (R2)      ii=1", () =>
     assert.equal(asm1("        ORR R0, (R2)"), 0x6709));
-  test("ORI R0, 0x0F0F    word1=0x600F", () =>
-    assert.deepEqual(asm2("        ORI R0, 0x0F0F"), [0x600f, 0x0f0f]));
-  test("ORI R1, 0x0F0F    word1=0x610F", () =>
-    assert.deepEqual(asm2("        ORI R1, 0x0F0F"), [0x610f, 0x0f0f]));
+  test("ORI R0, #0x0F0F    word1=0x600F", () =>
+    assert.deepEqual(asm2("        ORI R0, #0x0F0F"), [0x600f, 0x0f0f]));
+  test("ORI R1, #0x0F0F    word1=0x610F", () =>
+    assert.deepEqual(asm2("        ORI R1, #0x0F0F"), [0x610f, 0x0f0f]));
 });
 
 describe("MN1613 命令: EORR / EORI（EOR系）", () => {
@@ -320,10 +320,10 @@ describe("MN1613 命令: EORR / EORI（EOR系）", () => {
     assert.equal(asm1("        EORR R0, (R1)"), 0x6700));
   test("EORR R0, (R2)     ii=1", () =>
     assert.equal(asm1("        EORR R0, (R2)"), 0x6701));
-  test("EORI R0, 0x5555   word1=0x6007", () =>
-    assert.deepEqual(asm2("        EORI R0, 0x5555"), [0x6007, 0x5555]));
-  test("EORI R1, 0xAAAA   word1=0x6107", () =>
-    assert.deepEqual(asm2("        EORI R1, 0xAAAA"), [0x6107, 0xaaaa]));
+  test("EORI R0, #0x5555   word1=0x6007", () =>
+    assert.deepEqual(asm2("        EORI R0, #0x5555"), [0x6007, 0x5555]));
+  test("EORI R1, #0xAAAA   word1=0x6107", () =>
+    assert.deepEqual(asm2("        EORI R1, #0xAAAA"), [0x6107, 0xaaaa]));
 });
 
 // ─── 浮動小数点演算命令 ───────────────────────────────────────────────────────
@@ -576,10 +576,10 @@ describe("MN1613 命令: CPYH / SETH（HW制御レジスタ⇔汎用レジスタ
 describe("MN1613 2語命令: pass1 PC計算の正確性", () => {
   test("2語命令は2ワード分PCを消費フラベルアドレスが正しい", () => {
     // LD R0, 0   : addr 0 (word1), addr 1 (word2=AD16)  → 2語
-    // MVWI R1, 0 : addr 2 (word1), addr 3 (word2=IM16)  → 2語
+    // MVWI R1, #0 : addr 2 (word1), addr 3 (word2=IM16)  → 2語
     // TARGET:    : addr 4
     const result = assemble(
-      "        .org 0\n        LD R0, 0\n        MVWI R1, 0\nTARGET: H\n",
+      "        .org 0\n        LD R0, 0\n        MVWI R1, #0\nTARGET: H\n",
     );
     assert.equal(
       result.symbols.get("TARGET"),
@@ -602,11 +602,11 @@ describe("MN1613 2語命令: pass1 PC計算の正確性", () => {
 
   test("1語命令と混在してもラベルが正しい", () => {
     // H          : addr 0  (1語)
-    // AWI R0, 0  : addr 1, addr 2  (2語)
+    // AWI R0, #0  : addr 1, addr 2  (2語)
     // H          : addr 3  (1語)
     // AFTER:     : addr 4
     const result = assemble(
-      "        .org 0\n        H\n        AWI R0, 0\n        H\nAFTER: H\n",
+      "        .org 0\n        H\n        AWI R0, #0\n        H\nAFTER: H\n",
     );
     assert.equal(result.symbols.get("AFTER"), 4);
   });

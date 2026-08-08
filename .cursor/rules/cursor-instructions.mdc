@@ -13,6 +13,7 @@ alwaysApply: true
 - MN1613のピン配置や信号に関する作業では、必ず `.github/MN1613_pin.md` を確認する。
 - TMS9995 のピン・バス・CRU に関する作業では、必ず `.cursor/rules/TMS9995_hardware.mdc` を確認する。
 - ハンドシェイクやボード間通信に関する作業では、必ず `.github/HandShake.md` を確認する。
+- アセンブラを TypeScript からエミュで検証する作業では、必ず `.cursor/rules/test_framework.mdc` を確認する。
 - 7セグ表示やレジスタ表示のUI実装では、必要に応じて `.github/seven_segment_bit_map.svg` と `.github/mn1613_register.png` を参照する。
 - 仕様が曖昧な場合は、実装前に「どの文書を根拠にするか」を回答で明示する。
 

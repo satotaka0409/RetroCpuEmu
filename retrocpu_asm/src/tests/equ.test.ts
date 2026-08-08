@@ -77,7 +77,7 @@ describe(".equ 式と依存", () => {
   });
 
   test("MVI 即値に .equ", () => {
-    const r = assemble("IMM .equ 0x55\n        .org 0\n        MVI R0, IMM\n");
+    const r = assemble("IMM .equ 0x55\n        .org 0\n        MVI R0, #IMM\n");
     assert.equal(r.symbols.get("IMM"), 0x55);
     assert.equal(r.words[0].value & 0xff, 0x55);
   });

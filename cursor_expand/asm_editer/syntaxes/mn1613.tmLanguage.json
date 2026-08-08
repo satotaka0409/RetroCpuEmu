@@ -25,7 +25,7 @@
       "patterns": [
         {
           "name": "keyword.control.directive.mn1613asm",
-          "match": "(?i)\\.(org|equ|word|area|globl|global|include|macro|endm|rept|irp|irpc|mexit|end)\\b|^\\s*(?:EQU|DW|ORG|INCLUDE|MACRO|ENDM|REPT|IRP|IRPC|MEXIT|END|GLOBL|GLOBAL|AREA)\\b"
+          "match": "(?i)\\.(org|equ|word|ds|blkw|blkb|dw|area|globl|global|include|macro|endm|rept|irp|irpc|mexit|end)\\b|^\\s*(?:EQU|DW|DS|BLKW|BLKB|ORG|INCLUDE|MACRO|ENDM|REPT|IRP|IRPC|MEXIT|END|GLOBL|GLOBAL|AREA)\\b"
         }
       ]
     },

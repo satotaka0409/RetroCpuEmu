@@ -1,0 +1,168 @@
+---
+alwaysApply: true
+description: MN1613 アセンブラを TypeScript からアセンブル／リンクしエミュレータで検証するテストフレームワーク仕様
+---
+
+# アセンブラテストフレームワーク
+
+根拠: 本ファイル。実装は `retrocpu_test_framework/`。  
+呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。  
+HEX / CDB 成果物のハーネスは別系統（`emulater_code_test.mdc` / `retrocpu_emu/src/main/feature/code_test/`）。
+
+## 目的
+
+MN1613 の `.asm` を **TypeScript のテストからアセンブル／リンクし、エミュレータ上でサブルーチン呼び出し**して検証する。
+
+ドライバ専用 `.asm`（入口＋引数書き込み＋`H`）は置かない。BIOS と同じ呼び出し規約で TS が `call` する。
+
+| 項目           | 内容                                                                        |
+| :------------- | :-------------------------------------------------------------------------- |
+| 対象 CPU       | 当面 **MN1613**（アセンブル CPU 指定は `mn1610` / `mn1613` / `tms9995` 可） |
+| アセンブラ     | `retrocpu_asm`（`dist/` 必須。`npm test` がビルドする）                     |
+| エミュ         | `retrocpu_emu` の MN1613 コア＋ IO ハンドシェイクモック                     |
+| テストランナー | Vitest（`retrocpu_test_framework`）                                         |
+
+## 原則
+
+1. **`.asm` は `.include` しない**。定数・ポートは `.inc` / `.h` のみ。各 `.asm` は個別アセンブルしリンカで結合する（`asm-rules.mdc`）。フレームワークは `.asm` / `.s` / `.mn1610` / `.mn1613` / `.tms9995` の include をエラーにする。
+2. **ドライバ `.asm` を書かない**。引数は TS の `registers` / `stack` で渡す。
+3. **第1引数 = `R0` / 第2引数 = `R1` / 第3引数以降はスタック**。戻り値は `R0`。`R2`–`R4` は callee-saved（被試験側が PUSH/POP）。
+4. \*\*Intel hex ファイルと.cdbファイルを読み込む。読み込むファイルは、テストコードに書いておく。
+5. **`call()` はメモリと IO ピンを消さない**。`gl_rnd_init` の種やハンドシェイク状態は連続 `call` 間で残る。
+6. 被試験ラベルは **`.global` / `.globl`**。`call` はリンク済みグローバルのみ解決する（大文字小文字無視）。
+
+## 処理フロー
+
+```
+.asm (+ .inc) → expandIncludes → assemble → writeRel → linkRelTexts
+        → メモリへロード → TS call(label) → RET → 戻りスタブ H → 検証
+```
+
+1. 各ソースの `.include` を展開（`.inc` / `.h` のみ）
+2. `retrocpu_asm` でアセンブル、リンクし IntelHEXファイルと .cdbファイルを生成
+3. テストケースごとに gl_main をエミュレータで実行して、HALT状態になってからテストを実行する
+4. 初期化処理が必要なら、Typescriptコードで初期化しておく
+5. レジスタ設定、スタックへの引数設定などは、Typescriptで行える。アセンブラのサブルーチン呼び出しもTypescriptで行う。
+6. 被試験が `RET` するとスタブで HALT。
+7. 検証に関しては、レジスタ値、スタックにある値、ラベルのメモリ値で判定する。
+
+## ハンドシェイク IO モック
+
+ハンドシェイクなどのIO周りは、エミュレータに対して、モックを呼び出せる仕組みを作って、それでエミュレートと
+値の検証ができる仕組みを用意する
+
+### セッション
+
+```ts
+const HEX_FILE = path.join(FRAMEWORK_BUILD, "bios_timer.ihx");
+const CDB_FILE = path.join(FRAMEWORK_BUILD, "bios_timer.cdb");
+const INIT_LABEL = "gl_main";
+
+assembleToHexCdb({ sources, hexFile: HEX_FILE, cdbFile: CDB_FILE });
+
+const session = createMn1613AsmSession({
+  hexFile: HEX_FILE,
+  cdbFile: CDB_FILE,
+  initLabel: INIT_LABEL,
+});
+mock = attachHandshakeMock({ syncIrq2: false });
+await session.runInit(); // gl_main → HALT
+
+const r = await session.call("gl_bios_timer_set", {
+  registers: { R0: 1, R1: 100, R2: 0x2222, R3: 0x3333, R4: 0x4444 },
+  stack: [3],
+});
+session.expectRegisters({ R0: 0x00, R2: 0x2222 });
+session.expectStackWork({ from: "preCallSp", offset: 2, words: [3] });
+```
+
+| API                                         | 内容                                                           |
+| :------------------------------------------ | :------------------------------------------------------------- |
+| `assembleToHexCdb(opts)`                    | アセンブル＋リンクし Intel HEX / CDB をファイルへ書く          |
+| `createMn1613AsmSession(opts)`              | HEX/CDB をロード（`sources` があれば先に生成）                 |
+| `session.runInit()`                         | `initLabel`（既定 `gl_main`）を HALT まで実行                  |
+| `session.call(label, opts)`                 | `.global` ラベルを BALD 相当で実行                             |
+| `session.reload()`                          | HEX 再ロード＋ CPU reset＋スタブ再設置                         |
+| `session.wordAddr(name)` / `getSymbol`      | CDB グローバルのワード／バイトアドレス                         |
+| `session.readWord` / `writeWord`            | ワード BE 読み書き                                             |
+| `session.expectRegisters`                   | レジスタ検証                                                   |
+| `session.expectMemoryWords`                 | 絶対ワード検証                                                 |
+| `session.expectLabelWords`                  | ラベル位置のメモリ検証                                         |
+| `session.expectStackWork`                   | スタック検証（`preCallSp` 基準）                               |
+| `assembleAndLink(opts)`                     | リンクまで（ファイル未書き出し）                               |
+| `expandIncludes` / `expandIncludesFromFile` | `.inc` 展開（`.asm` は拒否）                                   |
+| `attachHandshakeMock(opts)`                 | IO モック attach                                               |
+| `MONITOR_SRC` / `FRAMEWORK_BUILD` / `repoPath` | ブートモニタ src / 成果物出力 / リポジトリ相対パス          |
+
+### ソース指定
+
+| 形                              | 用途                                                           |
+| :------------------------------ | :------------------------------------------------------------- |
+| `{ file: path, module?: name }` | ファイル。モジュール名省略時はファイル名（拡張子なし・大文字） |
+| `{ text, module, fromDir? }`    | インライン。`fromDir` は `.include` 基準                       |
+
+### `CallResult`
+
+| フィールド                                                  | 内容                                |
+| :---------------------------------------------------------- | :---------------------------------- |
+| `status`                                                    | `run` 終了状態（成功時 `"halted"`） |
+| `registers.R[0..4]` / `SP` / `STR` / `IC` / `CSBR` / `SSBR` | 停止時                              |
+| `preCallSp`                                                 | 引数＋戻り PUSH 直後の空き SP       |
+| `entryWordAddr`                                             | 入口ワード                          |
+
+## テストの書き方
+
+- 置き場: `retrocpu_test_framework/test/*.test.ts`
+- 被試験は `retrocpu_boot_monitor/mn1613/src/` の本番 `.asm` をリンクする（テスト専用入口は作らない）
+- IntelHEXファイル、.cdbファイル、gl_mainなどのCPU初期化ルーチンのラベルをファイルに記述する
+- タイムアウト: ハンドシェイク待ちは vitest の `it(..., 20000)` を目安にする
+- JSDoc: `retrocpu_test_framework` の実装・テストヘルパは `code_comment.mdc` に従う
+
+## ファイル配置
+
+```
+retrocpu_test_framework/
+  src/
+    index.ts              公開 API
+    types.ts              共通型
+    expand_includes.ts    .inc 展開（.asm 拒否）
+    hex_cdb.ts            イメージ → Intel HEX / Def → CDB
+    assemble_link.ts      assemble + REL + link + HEX/CDB 出力
+    mn1613_session.ts     HEX/CDB ロード / runInit / call / expect*
+    handshake_mock.ts     IO ボードモック
+    repo.ts               REPO_ROOT / MONITOR_SRC / FRAMEWORK_BUILD
+  test/
+    expand_includes.test.ts
+    hex_cdb.test.ts
+    assemble_link.test.ts
+    bios_timer.test.ts    19h 結合テスト（参考実装）
+  package.json
+  vitest.config.ts
+```
+
+## 実行
+
+```bash
+cd retrocpu_test_framework
+npm install
+npm test
+```
+
+`npm test` は先に `retrocpu_asm` をビルドする。未ビルドのまま `assembleAndLink` するとエラー。
+
+## HEX / CDB との役割分担
+
+| 系統                 | 入力            | 用途                                     |
+| :------------------- | :-------------- | :--------------------------------------- |
+| **本フレームワーク** | `.asm` → HEX + CDB | BIOS／モニタの結合テスト（テストに HEX/CDB パスを書く） |
+| `code_test`（emu）   | Intel HEX + CDB | 既にリンクした成果物・C 出力の検証       |
+
+アセンブラの回帰は本フレームワークを使う。HEX ロード経路の検証は `emulater_code_test.mdc`。
+
+## 関連
+
+- 呼び出し規約・`.area` / `.include`: `asm-rules.mdc`
+- BIOS エントリ: `boot_monitor.mdc`
+- ハンドシェイク線・コマンド: `HandShake.mdc`
+- メモリ／IO マップ: `MN1613_CPUボードメモリ_IOマップ.mdc`
+- HEX/CDB ハーネス: `emulater_code_test.mdc`

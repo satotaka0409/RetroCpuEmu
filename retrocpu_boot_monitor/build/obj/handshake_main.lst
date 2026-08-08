@@ -1,0 +1,333 @@
+          ; handshake_main.asm
+          ; IO→CPU ハンドシェイク割り込み（INT_CAUSE=2）
+          ; 根拠: HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」
+          ;
+          ; gl_int_handler から BALR で呼ばれるので、戻りは RETL。
+          ; 受理 → コマンド 1 バイト受信 → テーブルで分岐 → finalize。
+          
+          ; ハンドシェイク用IOポート定義（CPUボード視点）
+          ; 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc
+          ;
+          ; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
+          ; interrupt_io.inc と共有。二重 .equ を避けるため include する。
+          ; memmap.inc は .org を含むのでここからは include しない（各 .asm を個別アセンブルしてリンクする）。
+          ; 割り込み関連 IO ポート定義
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          
+          INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+          INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+          
+          ; 割り込み要因番号
+          INT_CAUSE_TIMER0	.equ	0
+          INT_CAUSE_TIMER1	.equ	1
+          INT_CAUSE_HSHK		.equ	2
+          
+          
+          ; ゼロページ _SYS_PAGE0（0x0008=GL_RND_SEED は bios_common.asm）
+          GL_HSHK_RECV_DATA	.equ	0x0009
+          
+          ; 制御信号ポート（同一アドレス、ビットで区別）
+          HSHK_CTRL	.equ	0x22
+          ; Bit0  HSHK_ENA（処理中／依頼受理）
+          ; Bit1  HSHK_DENA
+          ; Bit2  HSHK_DACK
+          ; Bit3  HSHK_REQ_0（CPU→IO 要求・CPU出力）
+          ; Bit4  HSHK_REQ_1（IO→CPU 要求・CPU入力／ポーリング）
+          
+          HSHK_IN_DATA	.equ	0x23	; CPU→IO データ Bit0-7
+          HSHK_OUT_DATA	.equ	0x24	; IO→CPU データ Bit0-7
+          
+          ; ビットマスク（LSB=Bit0）
+          HSHK_ENA_BIT	.equ	0x01
+          HSHK_DENA_BIT	.equ	0x02
+          HSHK_DACK_BIT	.equ	0x04
+          HSHK_REQ0_BIT	.equ	0x08
+          HSHK_REQ1_BIT	.equ	0x10
+          
+          ; INT_CAUSE_HSHK は interrupt_io.inc 側の定義を使用
+          
+          HSHK_OK		.equ	0x00
+          HSHK_NG		.equ	0x01
+          
+          ; CPU→IO コマンド（HandShake.mdc「コマンド概要」）
+          HSHK_CMD_TIMER_SET	.equ	0x19
+          
+          ; IO→CPU コマンド（HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」）
+          HSHK_CMD_BREAK_MEM_IO_SET	.equ	0x40
+          HSHK_CMD_BREAK_MEM_IO_CLR	.equ	0x41
+          HSHK_CMD_BREAK_INST_SET		.equ	0x42
+          HSHK_CMD_BREAK_INST_CLR		.equ	0x43
+          HSHK_CMD_CPU_STATUS_GET		.equ	0x48
+          HSHK_CMD_EXEC			.equ	0x49
+          HSHK_CMD_MEM_READ		.equ	0x50
+          HSHK_CMD_MEM_WRITE		.equ	0x51
+          HSHK_CMD_IO_READ		.equ	0x52
+          HSHK_CMD_IO_WRITE		.equ	0x53
+          HSHK_CMD_BREAK_HIST_GET		.equ	0x60
+          HSHK_CMD_IO_BASE		.equ	0x40
+          HSHK_CMD_IO_LAST		.equ	0x60
+          HSHK_CMD_IO_LIMIT		.equ	0x61
+          
+          ; IO→CPU コマンド後の残り受信バイト（cmd 除く）
+          HSHK_IRQ_PAY_40		.equ	9
+          HSHK_IRQ_PAY_41		.equ	1
+          HSHK_IRQ_PAY_42		.equ	5
+          HSHK_IRQ_PAY_43		.equ	1
+          HSHK_IRQ_PAY_49		.equ	4
+          HSHK_IRQ_STATUS_BYTES	.equ	0x28
+          
+          ; ENA=0 チェック: 最大10回
+          HSHK_ENA0_RETRY	.equ	10
+          HSHK_DELAY_50US	.equ	25
+          HSHK_DELAY_SPAN_MASK	.equ	0x1f
+          HSHK_WAIT_MAX	.equ	0xffff
+          
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_handshake_interrupt_handler
+          	.global gl_hshk_accept_request
+          	.global gl_hshk_recv_byte
+          	.global gl_hshk_finalize_recv
+          	.global gl_hshk_send_byte
+          
+          ; -------------------------------------------------------
+          ; レベル2割り込み: ハンドシェイク要因
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_handshake_interrupt_handler:
+0000 2617  	bald	gl_hshk_accept_request
+0001 0000 
+0002 7908  	mv	R1, R0
+0003 7807  	mvwi	R0, #HSHK_OK
+0004 0000 
+0005 5148  	c	R1, R0, Z
+0006 CF1C  	b	hshk_irq_fail_accept
+          
+0007 2617  	bald	gl_hshk_recv_byte
+0008 0000 
+0009 7908  	mv	R1, R0
+000A 7807  	mvwi	R0, #HSHK_OK
+000B 0000 
+000C 5148  	c	R1, R0, Z
+000D CF16  	b	hshk_irq_fail_recv
+          
+000E C009  	l	R0, *GL_HSHK_RECV_DATA
+000F 680F  	andi	R0, #0x00ff
+0010 00FF 
+0011 502F  	cwi	R0, #HSHK_CMD_IO_BASE, M
+0012 0040 
+0013 CF01  	b	hshk_irq_ge_base
+0014 CF0B  	b	hshk_irq_fin
+          hshk_irq_ge_base:
+0015 503F  	cwi	R0, #HSHK_CMD_IO_LIMIT, PZ
+0016 0061 
+0017 CF01  	b	hshk_irq_dispatch
+0018 CF07  	b	hshk_irq_fin
+          
+          hshk_irq_dispatch:
+0019 5807  	swi	R0, #HSHK_CMD_IO_BASE
+001A 0040 
+001B 200D  	sl	R0, RE
+001C 7B07  	mvwi	X0, #hshk_irq_cmd_tab
+001D 0000 
+001E 5B08  	a	X0, R0
+001F 2716  	balr	(R3)
+          
+          hshk_irq_fin:
+0020 2617  	bald	gl_hshk_finalize_recv
+0021 0000 
+0022 3F07  	retl
+          hshk_irq_fail_accept:
+0023 3F07  	retl
+          
+          hshk_irq_fail_recv:
+0024 2617  	bald	gl_hshk_finalize_recv
+0025 0000 
+0026 3F07  	retl
+          
+          ; -------------------------------------------------------
+          ; R0 バイト受信して捨てる
+          ; @param R0 - バイト数
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_irq_recv_n:
+0027 2201  	push	R2
+0028 7A08  	mv	R2, R0
+          hshk_irq_rn_lp:
+0029 784A  	mv	R0, R2, Z
+002A CF02  	b	hshk_irq_rn_go
+002B 2202  	pop	R2
+002C 2003  	ret
+          hshk_irq_rn_go:
+002D 2617  	bald	gl_hshk_recv_byte
+002E 0000 
+002F 4201  	si	R2, #1
+0030 CFF8  	b	hshk_irq_rn_lp
+          
+          ; -------------------------------------------------------
+          ; 0 を R0 バイト送る
+          ; @param R0 - バイト数
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_irq_send_zeros:
+0031 2201  	push	R2
+0032 7A08  	mv	R2, R0
+          hshk_irq_sz_lp:
+0033 784A  	mv	R0, R2, Z
+0034 CF02  	b	hshk_irq_sz_go
+0035 2202  	pop	R2
+0036 2003  	ret
+          hshk_irq_sz_go:
+0037 6000  	eor	R0, R0
+0038 2617  	bald	gl_hshk_send_byte
+0039 0000 
+003A 4201  	si	R2, #1
+003B CFF7  	b	hshk_irq_sz_lp
+          
+          ; -------------------------------------------------------
+          ; 未実装コマンド（ペイロードは読まず NG も返さない）
+          ; -------------------------------------------------------
+          hshk_irq_unknown:
+003C 3F07  	retl
+          
+          ; 40h メモリ/IOブレイク設定
+          hshk_irq_40:
+003D 7807  	mvwi	R0, #HSHK_IRQ_PAY_40
+003E 0009 
+003F 2617  	bald	hshk_irq_recv_n
+0040 0027 
+0041 7807  	mvwi	R0, #HSHK_NG
+0042 0001 
+0043 2617  	bald	gl_hshk_send_byte
+0044 0000 
+0045 3F07  	retl
+          
+          ; 41h メモリ/IOブレイク解除
+          hshk_irq_41:
+0046 7807  	mvwi	R0, #HSHK_IRQ_PAY_41
+0047 0001 
+0048 2617  	bald	hshk_irq_recv_n
+0049 0027 
+004A 7807  	mvwi	R0, #HSHK_NG
+004B 0001 
+004C 2617  	bald	gl_hshk_send_byte
+004D 0000 
+004E 3F07  	retl
+          
+          ; 42h 命令ブレイク設定
+          hshk_irq_42:
+004F 7807  	mvwi	R0, #HSHK_IRQ_PAY_42
+0050 0005 
+0051 2617  	bald	hshk_irq_recv_n
+0052 0027 
+0053 7807  	mvwi	R0, #HSHK_NG
+0054 0001 
+0055 2617  	bald	gl_hshk_send_byte
+0056 0000 
+0057 3F07  	retl
+          
+          ; 43h 命令ブレイク解除
+          hshk_irq_43:
+0058 7807  	mvwi	R0, #HSHK_IRQ_PAY_43
+0059 0001 
+005A 2617  	bald	hshk_irq_recv_n
+005B 0027 
+005C 7807  	mvwi	R0, #HSHK_NG
+005D 0001 
+005E 2617  	bald	gl_hshk_send_byte
+005F 0000 
+0060 3F07  	retl
+          
+          ; 48h CPU状態取得（中身は cpu_status.asm へ移す想定。今は 0 埋め）
+          hshk_irq_48:
+0061 7807  	mvwi	R0, #HSHK_IRQ_STATUS_BYTES
+0062 0028 
+0063 2617  	bald	hshk_irq_send_zeros
+0064 0031 
+0065 2617  	bald	gl_hshk_recv_byte
+0066 0000 
+0067 3F07  	retl
+          
+          ; 49h 実行指示
+          hshk_irq_49:
+0068 7807  	mvwi	R0, #HSHK_IRQ_PAY_49
+0069 0004 
+006A 2617  	bald	hshk_irq_recv_n
+006B 0027 
+006C 7807  	mvwi	R0, #HSHK_NG
+006D 0001 
+006E 2617  	bald	gl_hshk_send_byte
+006F 0000 
+0070 3F07  	retl
+          
+          	.area	_DATA		(REL,CON)
+          ; IO→CPU コマンド 0x40–0x60（1 エントリ = CSBR + ハンドラ、BALR 用）
+          hshk_irq_cmd_tab:
+0000 0000  	.dw	0
+0001 003D  	.dw	hshk_irq_40			; 40
+0002 0000  	.dw	0
+0003 0046  	.dw	hshk_irq_41			; 41
+0004 0000  	.dw	0
+0005 004F  	.dw	hshk_irq_42			; 42
+0006 0000  	.dw	0
+0007 0058  	.dw	hshk_irq_43			; 43
+0008 0000  	.dw	0
+0009 003C  	.dw	hshk_irq_unknown		; 44
+000A 0000  	.dw	0
+000B 003C  	.dw	hshk_irq_unknown		; 45
+000C 0000  	.dw	0
+000D 003C  	.dw	hshk_irq_unknown		; 46
+000E 0000  	.dw	0
+000F 003C  	.dw	hshk_irq_unknown		; 47
+0010 0000  	.dw	0
+0011 0061  	.dw	hshk_irq_48			; 48
+0012 0000  	.dw	0
+0013 0068  	.dw	hshk_irq_49			; 49
+0014 0000  	.dw	0
+0015 003C  	.dw	hshk_irq_unknown		; 4A
+0016 0000  	.dw	0
+0017 003C  	.dw	hshk_irq_unknown		; 4B
+0018 0000  	.dw	0
+0019 003C  	.dw	hshk_irq_unknown		; 4C
+001A 0000  	.dw	0
+001B 003C  	.dw	hshk_irq_unknown		; 4D
+001C 0000  	.dw	0
+001D 003C  	.dw	hshk_irq_unknown		; 4E
+001E 0000  	.dw	0
+001F 003C  	.dw	hshk_irq_unknown		; 4F
+0020 0000  	.dw	0
+0021 003C  	.dw	hshk_irq_unknown		; 50
+0022 0000  	.dw	0
+0023 003C  	.dw	hshk_irq_unknown		; 51
+0024 0000  	.dw	0
+0025 003C  	.dw	hshk_irq_unknown		; 52
+0026 0000  	.dw	0
+0027 003C  	.dw	hshk_irq_unknown		; 53
+0028 0000  	.dw	0
+0029 003C  	.dw	hshk_irq_unknown		; 54
+002A 0000  	.dw	0
+002B 003C  	.dw	hshk_irq_unknown		; 55
+002C 0000  	.dw	0
+002D 003C  	.dw	hshk_irq_unknown		; 56
+002E 0000  	.dw	0
+002F 003C  	.dw	hshk_irq_unknown		; 57
+0030 0000  	.dw	0
+0031 003C  	.dw	hshk_irq_unknown		; 58
+0032 0000  	.dw	0
+0033 003C  	.dw	hshk_irq_unknown		; 59
+0034 0000  	.dw	0
+0035 003C  	.dw	hshk_irq_unknown		; 5A
+0036 0000  	.dw	0
+0037 003C  	.dw	hshk_irq_unknown		; 5B
+0038 0000  	.dw	0
+0039 003C  	.dw	hshk_irq_unknown		; 5C
+003A 0000  	.dw	0
+003B 003C  	.dw	hshk_irq_unknown		; 5D
+003C 0000  	.dw	0
+003D 003C  	.dw	hshk_irq_unknown		; 5E
+003E 0000  	.dw	0
+003F 003C  	.dw	hshk_irq_unknown		; 5F
+0040 0000  	.dw	0
+0041 003C  	.dw	hshk_irq_unknown		; 60
+          

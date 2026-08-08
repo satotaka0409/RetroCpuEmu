@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { detectArchitecture } from "../cpu/registry";
 import { parseAsmLine, type SymbolIndex } from "../symbols/index";
+import { findIdentRangesInLine } from "../symbols/occurrences";
 
 /**
  * アセンブリ診断（未定義ラベル / 未知命令）。
@@ -43,6 +44,7 @@ export class AsmDiagnostics {
       if (
         parsed.kind === "unknown" &&
         parsed.mnemonic &&
+        !parsed.mnemonic.startsWith(".") &&
         parsed.mnemonicStart !== undefined &&
         parsed.mnemonicEnd !== undefined
       ) {
@@ -68,26 +70,25 @@ export class AsmDiagnostics {
 
       for (const name of parsed.refs) {
         if (this.index.has(name)) continue;
-        // オペランド側の出現位置を優先（行頭ラベルと同名でも誤らないよう後ろから探す）
-        const upper = line.text.toUpperCase();
-        let idx = upper.indexOf(name);
-        if (idx < 0) continue;
-        // ニーモニックより後にあればそちらを採用
-        if (
-          parsed.mnemonicEnd !== undefined &&
-          idx < parsed.mnemonicEnd
-        ) {
-          const later = upper.indexOf(name, parsed.mnemonicEnd);
-          if (later >= 0) idx = later;
-        }
-        const range = new vscode.Range(lineNo, idx, lineNo, idx + name.length);
-        const d = new vscode.Diagnostic(
-          range,
-          `未定義ラベル: ${name}`,
-          vscode.DiagnosticSeverity.Error,
+        // 単語境界付き（`0b11100000` 内の B11100000 を拾わない）
+        let ranges = findIdentRangesInLine(
+          line.text,
+          name,
+          parsed.mnemonicEnd ?? 0,
         );
-        d.source = "mn1613asm";
-        diagnostics.push(d);
+        if (ranges.length === 0) {
+          ranges = findIdentRangesInLine(line.text, name, 0);
+        }
+        for (const r of ranges) {
+          const range = new vscode.Range(lineNo, r.start, lineNo, r.end);
+          const d = new vscode.Diagnostic(
+            range,
+            `未定義ラベル: ${name}`,
+            vscode.DiagnosticSeverity.Error,
+          );
+          d.source = "mn1613asm";
+          diagnostics.push(d);
+        }
       }
     }
     this.collection.set(document.uri, diagnostics);

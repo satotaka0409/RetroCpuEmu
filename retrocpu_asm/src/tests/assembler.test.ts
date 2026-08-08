@@ -451,6 +451,7 @@ END:
       byteAddr: 0,
       left: { kind: "symbol", name: "END" },
       right: { kind: "symbol", name: "START" },
+      area: "_CODE",
     });
   });
 
@@ -496,6 +497,92 @@ END:
 });
 
 /**
+ * 外部ラベルへの BALD / .dw は絶対ワードアドレスの W レコード（SYM-#0000）。
+ */
+describe("assembler: 外部ラベル BALD / .dw 絶対リロケーション", () => {
+  test("BALD 外部は第2語プレースホルダ + W FOO-#0000", () => {
+    const r = assemble(`
+        .globl  FOO
+        bald    FOO
+        h
+`);
+    assert.equal(r.symbolInfos.get("FOO")?.kind, "external");
+    assert.equal(r.words[0]!.value, 0x2617);
+    assert.equal(r.words[1]!.value, 0x0000, "リンク前はプレースホルダ");
+    assert.equal(r.relocs.length, 1);
+    assert.deepEqual(r.relocs[0], {
+      byteAddr: 2,
+      left: { kind: "symbol", name: "FOO" },
+      right: { kind: "const", value: 0 },
+      area: "_CODE",
+    });
+  });
+
+  test(".dw 外部もプレースホルダ + W BAR-#0000", () => {
+    const r = assemble(`
+        .globl  BAR
+        .dw     BAR
+`);
+    assert.equal(r.words[0]!.value, 0x0000);
+    assert.equal(r.relocs.length, 1);
+    assert.deepEqual(r.relocs[0], {
+      byteAddr: 0,
+      left: { kind: "symbol", name: "BAR" },
+      right: { kind: "const", value: 0 },
+      area: "_CODE",
+    });
+  });
+
+  test("同一モジュール内 BALD もリンク後は領域基底＋ローカル PC", () => {
+    const rel = writeRel(
+      assemble(`
+        bald    LOCAL
+        h
+LOCAL:  h
+`),
+      "USE",
+    );
+    const padRel = writeRel(
+      assemble(`
+        h
+        h
+`),
+      "PAD",
+    );
+    const linked = linkRelTexts([padRel, rel]);
+    // PAD 2 語 = 4 バイトのあと USE。LOCAL は USE 内ワード 3 → 絶対ワード 2+3=5
+    assert.equal(linked.image[4], 0x26);
+    assert.equal(linked.image[5], 0x17);
+    assert.equal(linked.image[6], 0x00);
+    assert.equal(linked.image[7], 0x05);
+  });
+
+  test("リンク後 BALD の第2語は FOO のワードアドレス", () => {
+    const defRel = writeRel(
+      assemble(`
+        .globl  FOO
+        h
+        h
+FOO:    h
+`),
+      "DEFS",
+    );
+    const useRel = writeRel(
+      assemble(`
+        .globl  FOO
+        bald    FOO
+        h
+`),
+      "USE",
+    );
+    const linked = linkRelTexts([defRel, useRel]);
+    assert.equal(linked.defs.get("FOO"), 4);
+    assert.equal(linked.image[8], 0x00);
+    assert.equal(linked.image[9], 0x02, "FOO はワードアドレス 2");
+  });
+});
+
+/**
  * 外部ラベルとローカルラベルの引き算もワード数。
  *
  *   defs: H×3 の後に END（Def=0006）
@@ -536,6 +623,7 @@ LOCAL:
       byteAddr: 0,
       left: { kind: "symbol", name: "END" },
       right: { kind: "word", value: 0 },
+      area: "_CODE",
     });
   });
 
@@ -545,6 +633,7 @@ LOCAL:
       byteAddr: 0,
       left: { kind: "word", value: 0 },
       right: { kind: "symbol", name: "END" },
+      area: "_CODE",
     });
   });
 
@@ -599,6 +688,23 @@ describe("assembler: REL ファイル出力", () => {
       !rel.includes("S SIZE "),
       "ローカルでない未宣言シンボルは出さない",
     );
+  });
+
+  test("複数 .area の A レコードは _CODE → _DATA → _WORK", () => {
+    const rel = writeRel(
+      assemble(`
+	.area	_WORK		(REL,NOLOAD)
+W0:	.ds	1
+	.area	_DATA		(REL,CON)
+	.dw	1
+	.area	_CODE		(REL,CON)
+	H
+`),
+      "AREAS",
+    );
+    const aOrder = [...rel.matchAll(/^A\s+(\S+)/gm)].map((m) => m[1]);
+    assert.deepEqual(aOrder, ["_CODE", "_DATA", "_WORK"]);
+    assert.match(rel, /A _WORK size 0002 flags 0010/);
   });
 
   test("REL ヘッダーが正しい", () => {
@@ -818,5 +924,102 @@ SIZE    .equ END - START
     const r = assemble("VAL .equ 0x1234\n        .org 0\n        .word VAL\n");
     assert.equal(r.symbols.get("VAL"), 0x1234);
     assert.equal(r.words[0].value, 0x1234);
+  });
+});
+
+describe("assembler: .area / .ds", () => {
+  test(".area _CODE のあと .org するとその領域の PC になる", () => {
+    const r = assemble(`
+	.area	_CODE		(REL,CON)
+	.org	0x0200
+START:	H
+`);
+    assert.equal(r.symbols.get("START"), 0x0200);
+    assert.equal(r.words[0]!.address, 0x0200);
+    assert.equal(r.words[0]!.value, 0x2000);
+  });
+
+  test(".area _WORK の .ds はラベルだけ確保しワードを出さない", () => {
+    const r = assemble(`
+	.area	_WORK		(REL,NOLOAD)
+	.org	0x1700
+VAR:	.ds	1
+BUF:	.ds	6
+	.area	_CODE
+	.org	0x0200
+	H
+`);
+    assert.equal(r.symbols.get("VAR"), 0x1700);
+    assert.equal(r.symbols.get("BUF"), 0x1701);
+    assert.equal(r.words.length, 1);
+    assert.equal(r.words[0]!.address, 0x0200);
+  });
+
+  test(".area _DATA の .word は ROM としてイメージに出す", () => {
+    const r = assemble(`
+	.area	_DATA		(REL,CON)
+	.org	0x1600
+TBL:	.word	0x1234
+`);
+    assert.equal(r.symbols.get("TBL"), 0x1600);
+    assert.equal(r.words.length, 1);
+    assert.equal(r.words[0]!.address, 0x1600);
+    assert.equal(r.words[0]!.value, 0x1234);
+  });
+
+  test(".area を往復しても各領域の PC を保持する", () => {
+    const r = assemble(`
+	.area	_CODE
+	.org	0x0200
+A:	H
+	.area	_WORK
+	.org	0x1700
+X:	.ds	1
+	.area	_CODE
+B:	H
+	.area	_WORK
+Y:	.ds	1
+`);
+    assert.equal(r.symbols.get("A"), 0x0200);
+    assert.equal(r.symbols.get("B"), 0x0201);
+    assert.equal(r.symbols.get("X"), 0x1700);
+    assert.equal(r.symbols.get("Y"), 0x1701);
+    assert.equal(r.words.length, 2);
+  });
+
+  test(".blkw は .ds と同じく予約する", () => {
+    const r = assemble(`
+	.area	_WORK
+	.org	0x1700
+A:	.blkw	2
+B:	.ds	1
+`);
+    assert.equal(r.symbols.get("A"), 0x1700);
+    assert.equal(r.symbols.get("B"), 0x1702);
+    assert.equal(r.words.length, 0);
+  });
+
+  test("領域なしの .org 0 は従来どおり", () => {
+    const r = assemble(`
+        .org 0
+START:  H
+`);
+    assert.equal(r.symbols.get("START"), 0);
+    assert.equal(r.words[0]!.address, 0);
+  });
+
+  test("TMS9995 の .blkw はワード単位（バイト×2）", () => {
+    const r = assemble(
+      `
+	.area	_WORK
+	.org	>8300
+A:	.blkw	1
+B:	.ds	2
+`,
+      "tms9995",
+    );
+    assert.equal(r.symbols.get("A"), 0x8300);
+    assert.equal(r.symbols.get("B"), 0x8302);
+    assert.equal(r.words.length, 0);
   });
 });

@@ -1,0 +1,99 @@
+          ; mn1613_mon
+          ; MN1613のモニタープログラム
+          ; リセット後、このプログラムからMN1613のプログラムを起動する
+          ;
+          ; 配置は memmap.inc（.area _VECTOR / _CODE / _DATA / _WORK / スタック）に従う。
+          
+          ; 割り込み関連 IO ポート定義
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          
+          INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+          INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+          
+          ; 割り込み要因番号
+          INT_CAUSE_TIMER0	.equ	0
+          INT_CAUSE_TIMER1	.equ	1
+          INT_CAUSE_HSHK		.equ	2
+          
+          ; MN1613 CPUボードのメモリ配置とモニタ作業領域の割り当て
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          ;
+          ; 2階ボードはオールRAMだが、コーディング上は ROM / RAM を分けて扱う。
+          ;   0100-0107  _VECTOR  割り込みベクタ（PSW / IC。DMA でロードする定数）
+          ;   0200-16FF  _CODE    コード（ROM 相当。実行中は書き換えない）
+          ;              _DATA    値あり定数・テーブル（ROM。`.word` / `.dw`）
+          ;              _WORK    モニタ作業領域（RAM。`.ds` のみ。初期値は実行時に書く）
+          ;   1800-F7FF  ユーザ領域
+          ;   F800-FFFF  スタック（SP は FFFF から下方へ伸びる）
+          
+          INT_VECTOR_BASE	.equ	0x0100
+          STACK_TOP	.equ	0xffff
+          
+          ; --- PAGE0: ゼロページエリア
+          ; --- SYSTEM: システムページ0エリア（0x0008 GL_RND_SEED / 0x0009 GL_HSHK_RECV_DATA）
+          	.area	_SYS_PAGE0		(ABS,NOLOAD)
+          	.org	0x0008
+          ; --- USER: ユーザページ0エリア
+          	.area	_USR_PAGE0		(ABS,NOLOAD)
+          	.org	0x0040
+          
+          	.area	_VECTOR		(ABS,OVR)
+          	.org	0x0100
+          
+          	.area	_CODE		(REL,CON)
+          	.org	0x0200
+          	.area	_DATA		(REL,CON)
+          	.area	_WORK		(REL,NOLOAD)
+          
+          
+          	.global gl_int_handler
+          	.global gl_main
+          	.global gl_rnd_init
+          
+          ; --- _WORK: BIOS 乱数（bios_common.asm） ---
+          GL_RND_DEFAULT_SEED	.equ	0x1234
+          
+          ; 割り込みベクタ（ロード時に書き込む定数）
+          	.area	_VECTOR		(ABS,OVR)
+          	.org	INT_VECTOR_BASE
+0100 00E0  	.dw	0b11100000		; STR
+0101 0208  	.dw	int0_handler
+          
+          	.org	INT_VECTOR_BASE + 2
+0102 00E0  	.dw	0b11100000		; STR
+0103 0209  	.dw	int1_handler
+          
+          	.org	INT_VECTOR_BASE + 4
+0104 00E0  	.dw	0b11100000		; STR
+0105 0000  	.dw	gl_int_handler		; IC
+          
+          	.org	INT_VECTOR_BASE + 6
+0106 00E0  	.dw	0b11100000		; STR
+0107 020A  	.dw	int3_handler
+          
+          	.area	_CODE		(REL,CON)
+          gl_main:
+          ;	スタック初期化
+0200 7D07  	mvwi	SP, #STACK_TOP
+0201 FFFF 
+          ; 	割り込み許可
+0202 0EE0  	mvi	STR, #0b11100000
+          ;       乱数初期化
+0203 7807  	mvwi	R0, #GL_RND_DEFAULT_SEED
+0204 1234 
+0205 2617  	bald	gl_rnd_init
+0206 0000 
+          ;       HALT
+0207 2000  	h
+          ; --- INT0 割り込みハンドラ ---
+          int0_handler:
+0208 2004  	lpsw	0
+          
+          ; --- INT1 割り込みハンドラ ---
+          int1_handler:
+0209 2005  	lpsw	1
+          
+          ; --- INT3 割り込みハンドラ (ソフト割り込み) ---
+          int3_handler:
+020A 2007  	lpsw	3
+          

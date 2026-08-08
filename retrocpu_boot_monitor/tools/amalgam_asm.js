@@ -42,7 +42,7 @@ function expand(absPath, seen, stack) {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const m = line.match(/^(?:\.INCLUDE|INCLUDE)\s+(.+)$/i);
+    const m = line.match(/^\s*(?:\.INCLUDE|INCLUDE)\s+(.+)$/i);
     if (!m) {
       out.push(line);
       continue;

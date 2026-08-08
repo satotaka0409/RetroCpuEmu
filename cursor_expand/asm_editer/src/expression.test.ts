@@ -142,6 +142,23 @@ describe("parseAsmLine: .equ は未知命令にしない", () => {
     assert.equal(p.kind, "unknown");
     assert.equal(p.mnemonic, "FOOBAR");
   });
+
+  test("LABEL: .ds n はディレクティブ（未知命令にしない）", () => {
+    const p = parseAsmLine("GL_HSHK_RECV_DATA:\t.ds\t1\t; 受信 1 バイト", arch);
+    assert.equal(p.kind, "directive");
+    assert.equal(p.mnemonic?.replace(/^\./, ""), "DS");
+  });
+
+  test(".blkw もディレクティブ", () => {
+    const p = parseAsmLine("BUF:\t.blkw\t6", arch);
+    assert.equal(p.kind, "directive");
+    assert.equal(p.mnemonic?.replace(/^\./, ""), "BLKW");
+  });
+
+  test("一覧に無い .foo も未知命令にしない", () => {
+    const p = parseAsmLine("\t.foo\t1", arch);
+    assert.equal(p.kind, "directive");
+  });
 });
 
 describe("parseAsmLine: ラベル参照抽出", () => {
@@ -187,6 +204,22 @@ describe("parseAsmLine: ラベル参照抽出", () => {
     const p = parseAsmLine("\tandi\tR0, 0b00000111", arch);
     assert.equal(p.kind, "instruction");
     assert.deepEqual(p.refs, []);
+  });
+
+  test(".dw 0b11100000 / #0b / #0x も refs 空", () => {
+    const dw = parseAsmLine("\t.dw\t0b11100000\t\t; STR", arch);
+    assert.equal(dw.kind, "directive");
+    assert.deepEqual(dw.refs, []);
+    assert.deepEqual(parseAsmLine("\tmvi\tR0, #0b11100000", arch).refs, []);
+    assert.deepEqual(parseAsmLine("\tandi\tR0, #0xFFFF", arch).refs, []);
+  });
+
+  test("0b11100000 内の B11100000 は単語として見つからない", () => {
+    assert.deepEqual(
+      findIdentRangesInLine("\t.dw\t0b11100000", "B11100000"),
+      [],
+    );
+    assert.deepEqual(findIdentRangesInLine("\tandi\tR0, #0xFFFF", "XFFFF"), []);
   });
 
   test("0x / サフィックス数値も refs にしない", () => {

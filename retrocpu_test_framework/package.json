@@ -1,0 +1,19 @@
+{
+  "name": "retrocpu-test-framework",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MN1613 アセンブラを HEX/CDB 経由でエミュレータ検証するテストフレームワーク",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "npm run build:asm && vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:asm": "npm --prefix ../retrocpu_asm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.9.2",
+    "vitest": "^3.0.0"
+  }
+}

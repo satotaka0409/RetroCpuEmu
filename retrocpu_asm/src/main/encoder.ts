@@ -242,7 +242,38 @@ function parseEm(token?: string): number {
 }
 
 /**
- * 4ビット即値を解析する。
+ * 即値オペランドから先頭の `#` を外す。`#` が無い場合はエラー。
+ * 根拠: asm-rules.mdc（即値は必ず `#`。無い数値・ラベルはアドレス）。
+ * @param arg オペランド文字列
+ * @param what エラーメッセージ用の種別（I4 / I8 / IM16 など）
+ * @returns `#` を除いた式
+ */
+function requireImmHash(arg: string, what: string): string {
+  const t = arg.trim();
+  if (!t.startsWith("#")) {
+    throw new Error(
+      `${what}: immediate operand requires '#' (got '${arg}')`,
+    );
+  }
+  return t.slice(1).trim();
+}
+
+/**
+ * `#` が付いていてはいけないオペランドから式を取る（LPSW の LL など）。
+ * @param arg - オペランド文字列
+ * @param what - エラーメッセージ用の種別
+ * @returns `#` の無い式
+ */
+function forbidImmHash(arg: string, what: string): string {
+  const t = arg.trim();
+  if (t.startsWith("#")) {
+    throw new Error(`${what} must not use '#' (got '${arg}')`);
+  }
+  return t;
+}
+
+/**
+ * 4ビット即値を解析する。`#` 必須。
  * @param arg - 即値を表す文字列（例: "#5"）
  * @param symbols - シンボルテーブル
  * @param allowUndefined - 未定義シンボルを許可するかどうか
@@ -254,13 +285,13 @@ function parseImm4(
   allowUndefined: boolean,
 ): number {
   return u4(
-    evalExpr(arg.replace(/^#/, "").trim(), symbols, allowUndefined),
+    evalExpr(requireImmHash(arg, "I4"), symbols, allowUndefined),
     "I4",
   );
 }
 
 /**
- * 8ビット即値を解析する。
+ * 8ビット即値を解析する。`#` 必須（MVI など）。
  * @param arg - 即値を表す文字列（例: "#200"）
  * @param symbols - シンボルテーブル
  * @param allowUndefined - 未定義シンボルを許可するかどうか
@@ -272,14 +303,47 @@ function parseImm8(
   allowUndefined: boolean,
 ): number {
   return u8(
+    evalExpr(requireImmHash(arg, "I8"), symbols, allowUndefined),
+    "I8",
+  );
+}
+
+/**
+ * I/O ポート番号（RD / WT）を解析する。アドレス表記なので `#` は任意。
+ * @param arg ポート番号（例: `HSHK_CTRL` / `#0x22`）
+ * @param symbols シンボルテーブル
+ * @param allowUndefined 未定義シンボルを許可するか
+ * @returns 8bit ポート番号
+ */
+function parseIoAddr8(
+  arg: string,
+  symbols: SymbolTable,
+  allowUndefined: boolean,
+): number {
+  return u8(
     evalExpr(arg.replace(/^#/, "").trim(), symbols, allowUndefined),
     "I8",
   );
 }
 
 /**
- * 16ビット即値／アドレスを解析する。
- * `#n` / `n` / `@n` / `(n)` を受理する（外側の # @ () を除去）。
+ * 16ビット即値を解析する。`#` 必須（MVWI / AWI / ANDI など）。
+ * @param arg 即値（例: `#0x1234` / `#HSHK_CMD_TIMER_SET`）
+ * @param symbols シンボルテーブル
+ * @param allowUndefined 未定義シンボルを許可するか
+ * @returns 16bit 即値
+ */
+function parseImm16Value(
+  arg: string,
+  symbols: SymbolTable,
+  allowUndefined: boolean,
+): number {
+  return evalExpr(requireImmHash(arg, "IM16"), symbols, allowUndefined) & 0xffff;
+}
+
+/**
+ * 16ビットアドレスを解析する。
+ * `n` / `@n` / `(n)` を受理する（外側の @ () を除去）。`#` は即値専用なので付けない。
  */
 function parseImm16(
   arg: string,
@@ -292,12 +356,16 @@ function parseImm16(
 }
 
 /**
- * アドレス表記の外側装飾（# / @ / 対応する括弧）を除去する。
- * 例: "#10" → "10", "@VEC" → "VEC", "(0x100)" → "0x100"
+ * アドレス表記の外側装飾（@ / 対応する括弧）を除去する。
+ * `#` は即値専用。アドレスに付いていたらエラー。
+ * 例: "@VEC" → "VEC", "(0x100)" → "0x100"
  */
 function stripAddrDecorators(arg: string): string {
   let t = arg.trim();
-  if (t.startsWith("#") || t.startsWith("@")) t = t.slice(1).trim();
+  if (t.startsWith("#")) {
+    throw new Error(`address operand must not use '#' (got '${arg}')`);
+  }
+  if (t.startsWith("@")) t = t.slice(1).trim();
   if (t.startsWith("(") && t.endsWith(")")) t = t.slice(1, -1).trim();
   if (t.startsWith("[") && t.endsWith("]")) t = t.slice(1, -1).trim();
   return t;
@@ -815,7 +883,11 @@ export function encodeInstruction(
     case "LPSW": {
       expectArgs(line, 1);
       const ll = u2(
-        evalExpr(line.args[0], symbols, allowUndefined),
+        evalExpr(
+          forbidImmHash(line.args[0]!, "LPSW level"),
+          symbols,
+          allowUndefined,
+        ),
         "LPSW level",
       );
       return [((0b00100 << 11) | 0x04 | ll) & 0xffff];
@@ -845,7 +917,7 @@ export function encodeInstruction(
       return [
         ((0b00011 << 11) |
           (r << 8) |
-          parseImm8(line.args[1], symbols, allowUndefined)) &
+          parseIoAddr8(line.args[1], symbols, allowUndefined)) &
           0xffff,
       ];
     }
@@ -855,7 +927,7 @@ export function encodeInstruction(
       return [
         ((0b00010 << 11) |
           (r << 8) |
-          parseImm8(line.args[1], symbols, allowUndefined)) &
+          parseIoAddr8(line.args[1], symbols, allowUndefined)) &
           0xffff,
       ];
     }
@@ -945,7 +1017,7 @@ export function encodeInstruction(
       expectArgs(line, 2, 3);
       const rd = parseReg(line.args[0], true);
       const skip = parseSkip(line.args[2]);
-      const im16 = parseImm16(line.args[1], symbols, allowUndefined);
+      const im16 = parseImm16Value(line.args[1], symbols, allowUndefined);
       return [op5(0b01111, rd, skip, 0x07), im16];
     }
     case "MVBR": {
@@ -991,7 +1063,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01011, rd, skip, 0x0f),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
     case "SWR": {
@@ -1006,7 +1078,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01011, rd, skip, 0x07),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
     case "CWR": {
@@ -1021,7 +1093,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01010, rd, skip, 0x0f),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
     case "CBR": {
@@ -1036,7 +1108,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01010, rd, skip, 0x07),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
 
@@ -1099,7 +1171,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01101, rd, skip, 0x07),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
 
@@ -1117,7 +1189,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01101, rd, skip, 0x0f),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
     case "ORR": {
@@ -1132,7 +1204,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01100, rd, skip, 0x0f),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
     case "EORR": {
@@ -1147,7 +1219,7 @@ export function encodeInstruction(
       const skip = parseSkip(line.args[2]);
       return [
         op5(0b01100, rd, skip, 0x07),
-        parseImm16(line.args[1], symbols, allowUndefined),
+        parseImm16Value(line.args[1], symbols, allowUndefined),
       ];
     }
 

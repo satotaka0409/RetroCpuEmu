@@ -5,13 +5,21 @@ description: MN1613 アセンブラ／C 成果物をエミュレータで検証�
 
 # エミュレータ・コードテスト（MN1613）
 
-根拠: 本ファイル。実装は `retrocpu_emu/src/main/feature/code_test/`。
+根拠: 本ファイル（HEX / CDB）。アセンブラソースから直接検証する仕様は `test_framework.mdc`（実装 `retrocpu_test_framework/`）。
 CPU コア API は `feature/cpu/mn1613/mn1613.ts`。
 
 ## 目的
 
-アセンブラ（および将来 SDCC 等）が出力したバイナリを、**TypeScript のテストから MN1613 エミュレータ上で呼び出し・検証**する。
+アセンブラ（および将来 SDCC 等）の成果物を、**TypeScript のテストから MN1613 エミュレータ上で呼び出し・検証**する。
 ターゲット CPU は当面 **MN1613** のみ。
+
+ドライバ `.asm`（入口＋引数書き込み専用）は置かない。BIOS 呼び出し規約どおり TS から `R0` / `R1` / スタックで `call` する。
+
+アセンブラ結合テストの詳細・API は **`test_framework.mdc`** を正とする。実行: `cd retrocpu_test_framework && npm test`。
+
+---
+
+## HEX / CDB ハーネス（`retrocpu_emu`）
 
 ## 成果物の入力
 
@@ -116,6 +124,9 @@ t.expectStackWork({ from: "preCallSp", offset: 0, words: [0x1111] });
 ## ファイル配置
 
 ```
+retrocpu_test_framework/   # 仕様: test_framework.mdc
+  src/                     assemble + link + MN1613 session + handshake mock
+  test/
 retrocpu_emu/src/main/feature/code_test/
   index.ts
   types.ts

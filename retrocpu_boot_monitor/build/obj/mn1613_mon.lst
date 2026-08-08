@@ -1,0 +1,1181 @@
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/start.asm
+          ; start.asm
+          ; amalgam / Intel HEX 用エントリ。include-once で単一モジュール化する。
+          
+          ; .include main.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/main.asm
+          ; mn1613_mon
+          ; MN1613のモニタープログラム
+          ; リセット後、このプログラムからMN1613のプログラムを起動する
+          ;
+          ; 配置は memmap.inc（.area _VECTOR / _CODE / _DATA / _WORK / スタック）に従う。
+          
+          ; .include interrupt_io.inc
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/interrupt_io.inc
+          ; 割り込み関連 IO ポート定義
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          
+          INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+          INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+          
+          ; 割り込み要因番号
+          INT_CAUSE_TIMER0	.equ	0
+          INT_CAUSE_TIMER1	.equ	1
+          INT_CAUSE_HSHK		.equ	2
+          
+          ; -------- end interrupt_io.inc
+          
+          ; .include memmap.inc
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/memmap.inc
+          ; MN1613 CPUボードのメモリ配置とモニタ作業領域の割り当て
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          ;
+          ; 2階ボードはオールRAMだが、コーディング上は ROM / RAM を分けて扱う。
+          ;   0100-0107  _VECTOR  割り込みベクタ（PSW / IC。DMA でロードする定数）
+          ;   0200-16FF  _CODE    コード（ROM 相当。実行中は書き換えない）
+          ;              _DATA    値あり定数・テーブル（ROM。`.word` / `.dw`）
+          ;              _WORK    モニタ作業領域（RAM。`.ds` のみ。初期値は実行時に書く）
+          ;   1800-F7FF  ユーザ領域
+          ;   F800-FFFF  スタック（SP は FFFF から下方へ伸びる）
+          
+          INT_VECTOR_BASE	.equ	0x0100
+          STACK_TOP	.equ	0xffff
+          
+          ; --- PAGE0: ゼロページエリア
+          ; --- SYSTEM: システムページ0エリア
+          	.area	_SYS_PAGE0		(ABS,NOLOAD)
+          	.org	0x0008
+          ; --- USER: ユーザページ0エリア
+          	.area	_USR_PAGE0		(ABS,NOLOAD)
+          	.org	0x0040
+          
+          	.area	_VECTOR		(ABS,OVR)
+          	.org	0x0100
+          
+          	.area	_CODE		(REL,CON)
+          	.org	0x0200
+          	.area	_DATA		(REL,CON)
+          	.area	_WORK		(REL,NOLOAD)
+          
+          ; -------- end memmap.inc
+          
+          
+          	.global gl_int_handler
+          	.global gl_main
+          
+          ; --- _WORK: BIOS 乱数（bios_common.asm） ---
+          GL_RND_DEFAULT_SEED	.equ	0x1234
+          
+          ; 割り込みベクタ（ロード時に書き込む定数）
+          	.area	_VECTOR		(ABS,OVR)
+          	.org	INT_VECTOR_BASE
+0100 00E0  	.dw	0b11100000		; STR
+0101 0208  	.dw	int0_handler
+          
+          	.org	INT_VECTOR_BASE + 2
+0102 00E0  	.dw	0b11100000		; STR
+0103 0209  	.dw	int1_handler
+          
+          	.org	INT_VECTOR_BASE + 4
+0104 00E0  	.dw	0b11100000		; STR
+0105 020B  	.dw	gl_int_handler		; IC
+          
+          	.org	INT_VECTOR_BASE + 6
+0106 00E0  	.dw	0b11100000		; STR
+0107 020A  	.dw	int3_handler
+          
+          	.area	_CODE		(REL,CON)
+          gl_main:
+          ;	スタック初期化
+0200 7D07  	mvwi	SP, #STACK_TOP
+0201 FFFF 
+          ; 	割り込み許可
+0202 0EE0  	mvi	STR, #0b11100000
+          ;       乱数初期化
+0203 7807  	mvwi	R0, #GL_RND_DEFAULT_SEED
+0204 1234 
+0205 2617  	bald	gl_rnd_init
+0206 021D 
+          ;       HALT
+0207 2000  	h
+          ; --- INT0 割り込みハンドラ ---
+          int0_handler:
+0208 2004  	lpsw	0
+          
+          ; --- INT1 割り込みハンドラ ---
+          int1_handler:
+0209 2005  	lpsw	1
+          
+          ; --- INT3 割り込みハンドラ (ソフト割り込み) ---
+          int3_handler:
+020A 2007  	lpsw	3
+          
+          ; -------- end main.asm
+          
+          ; .include interrupt.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/interrupt.asm
+          ; mn1613_mon
+          ; 割り込みハンドラー
+          
+          ; .include interrupt_io.inc
+          ; [skip already included] interrupt_io.inc
+          
+          
+          ; ハンドラは _CODE、要因テーブル（値あり）は _DATA（ROM）
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_int_handler
+          	.global gl_handshake_interrupt_handler
+          
+          ; 割り込みハンドラー
+          gl_int_handler:
+          	; 割り込みハンドラー
+020B 170F  	pshm
+          	; 割り込み処理実行中フラグをセット
+020C 7807  	mvwi	R0, #1
+020D 0001 
+020E 1020  	wt	R0, INTERRUPT_BUSY
+          
+          	; IO命令で割り込み要因を取得
+020F 1821  	rd	R0, INT_CAUSE
+0210 680F  	andi	R0, #0b00000111
+0211 0007 
+          	; 左1Bitシフト
+0212 200C  	sl	R0
+          	; interrupt_sub_func のアドレスを取得
+0213 7B07  	mvwi	X0, #interrupt_sub_func
+0214 0000 
+0215 5B08  	a	X0, R0
+          	; 広域サブルーチンコール
+0216 2716  	balr	(R3)
+          
+          	; 割り込み処理実行中フラグをクリア
+0217 6000  	eor	R0, R0
+0218 1020  	wt	R0, INTERRUPT_BUSY
+0219 1707  	popm
+          	; 割り込み処理を終了
+021A 2006  	lpsw	2
+          
+          ; タイマー0割り込みハンドラー
+          ; IOボードのタイマー（ハンドシェイク 19h で設定）満了で呼ばれる
+          timer0_interrupt_handler:
+021B 2003  	ret
+          
+          ; タイマー1割り込みハンドラー
+          timer1_interrupt_handler:
+021C 2003  	ret
+          
+          	.area	_DATA		(REL,CON)
+          ; 割り込み要因ごとのハンドラー（ROM 定数テーブル）
+          interrupt_sub_func:
+          	; 割り込み要因0 タイマー0
+0000 0000  	.dw	0  					; CSBR=0
+0001 021B  	.dw	timer0_interrupt_handler
+          	; 割り込み要因1 タイマー1
+0002 0000  	.dw	0  					; CSBR=0
+0003 021C  	.dw	timer1_interrupt_handler
+          	; 割り込み要因2 ハンドシェイク
+0004 0000  	.dw	0  					; CSBR=0
+0005 033A  	.dw	gl_handshake_interrupt_handler
+          
+          
+          
+          ; -------- end interrupt.asm
+          
+          ; .include handshake/handshake_main.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/handshake/handshake_main.asm
+          ; handshake_main.asm
+          ; IO→CPU ハンドシェイク割り込み（INT_CAUSE=2）
+          ; 根拠: HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」
+          ;
+          ; gl_int_handler から BALR で呼ばれるので、戻りは RETL。
+          ; 受理 → コマンド 1 バイト受信 → テーブルで分岐 → finalize。
+          
+          ; .include handshake_common.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/handshake/handshake_common.asm
+          ; handshake_common.asm
+          ; MN1613 CPUボード側ハンドシェイク（アセンブラ実装）
+          ; 根拠: HandShake.mdc（HSHK_ENA / IN_DATA / OUT_DATA）
+          ;
+          ; CPU -> IO:
+          ;   gl_hshk_initiate_send -> gl_hshk_send_byte*N -> gl_hshk_finalize_send
+          ; IO -> CPU（割り込み入口）:
+          ;   gl_hshk_accept_request -> gl_hshk_recv_byte*N -> gl_hshk_finalize_recv
+          ;
+          ; 1バイト: DENA 0→1 → DACK 0→1 → DENA 1→0 → DACK 1→0
+          ;
+          ; 引数は第1=R0、第2=R1、第3以降はスタック（asm-rules.mdc の呼び出し規約）。
+          ; 作業変数は _WORK（RAM）に置くため、初期値は実行時に書く。
+          ; ENA0 待ちの乱数は bios_common.asm の gl_get_rnd（M系列）を使う。
+          
+          ; .include handshake_io.inc
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/handshake/handshake_io.inc
+          ; ハンドシェイク用IOポート定義（CPUボード視点）
+          ; 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc
+          ;
+          ; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
+          ; interrupt_io.inc と共有。amalgam 時の二重 .equ を避けるため include する。
+          ; .include ../interrupt_io.inc
+          ; [skip already included] interrupt_io.inc
+          
+          
+          ; 作業領域（_WORK / RAM）は memmap.inc の .area _WORK + .ds で確保する
+          ; .include ../memmap.inc
+          ; [skip already included] memmap.inc
+          
+          
+          ; 制御信号ポート（同一アドレス、ビットで区別）
+          HSHK_CTRL	.equ	0x22
+          ; Bit0  HSHK_ENA（処理中／依頼受理）
+          ; Bit1  HSHK_DENA
+          ; Bit2  HSHK_DACK
+          ; Bit3  HSHK_REQ_0（CPU→IO 要求・CPU出力）
+          ; Bit4  HSHK_REQ_1（IO→CPU 要求・CPU入力／ポーリング）
+          
+          HSHK_IN_DATA	.equ	0x23	; CPU→IO データ Bit0-7
+          HSHK_OUT_DATA	.equ	0x24	; IO→CPU データ Bit0-7
+          
+          ; ビットマスク（LSB=Bit0）
+          HSHK_ENA_BIT	.equ	0x01
+          HSHK_DENA_BIT	.equ	0x02
+          HSHK_DACK_BIT	.equ	0x04
+          HSHK_REQ0_BIT	.equ	0x08
+          HSHK_REQ1_BIT	.equ	0x10
+          
+          ; INT_CAUSE_HSHK は interrupt_io.inc 側の定義を使用
+          
+          HSHK_OK		.equ	0x00
+          HSHK_NG		.equ	0x01
+          
+          ; CPU→IO コマンド（HandShake.mdc「コマンド概要」）
+          HSHK_CMD_TIMER_SET	.equ	0x19
+          
+          ; IO→CPU コマンド（HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」）
+          HSHK_CMD_BREAK_MEM_IO_SET	.equ	0x40
+          HSHK_CMD_BREAK_MEM_IO_CLR	.equ	0x41
+          HSHK_CMD_BREAK_INST_SET		.equ	0x42
+          HSHK_CMD_BREAK_INST_CLR		.equ	0x43
+          HSHK_CMD_CPU_STATUS_GET		.equ	0x48
+          HSHK_CMD_EXEC			.equ	0x49
+          HSHK_CMD_MEM_READ		.equ	0x50
+          HSHK_CMD_MEM_WRITE		.equ	0x51
+          HSHK_CMD_IO_READ		.equ	0x52
+          HSHK_CMD_IO_WRITE		.equ	0x53
+          HSHK_CMD_BREAK_HIST_GET		.equ	0x60
+          HSHK_CMD_IO_BASE		.equ	0x40
+          HSHK_CMD_IO_LAST		.equ	0x60
+          HSHK_CMD_IO_LIMIT		.equ	0x61
+          
+          ; IO→CPU コマンド後の残り受信バイト（cmd 除く）
+          HSHK_IRQ_PAY_40		.equ	9
+          HSHK_IRQ_PAY_41		.equ	1
+          HSHK_IRQ_PAY_42		.equ	5
+          HSHK_IRQ_PAY_43		.equ	1
+          HSHK_IRQ_PAY_49		.equ	4
+          HSHK_IRQ_STATUS_BYTES	.equ	0x28
+          
+          ; ENA=0 チェック: 最大10回
+          HSHK_ENA0_RETRY	.equ	10
+          HSHK_DELAY_50US	.equ	25
+          HSHK_DELAY_SPAN_MASK	.equ	0x1f
+          HSHK_WAIT_MAX	.equ	0xffff
+          
+          ; -------- end handshake_io.inc
+          
+          ; .include ../bios/bios_common.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/bios/bios_common.asm
+          ; bios_common.asm
+          ; BIOS 共通ルーチン（乱数など）
+          ;
+          ; 引数は第1=R0、第2=R1（asm-rules.mdc の呼び出し規約）。
+          ; 種はゼロページ _SYS_PAGE0 の GL_RND_SEED（L/ST *）。初期値は gl_rnd_init で書く。
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_rnd_init
+          	.global gl_get_rnd
+          
+          ; 16bit Galois LFSR（M系列）のタップ
+          ; 原始多項式 x^16 + x^14 + x^13 + x^11 + 1 → 0xB400
+          GL_RND_TAP	.equ	0xB400
+          
+          ; -------------------------------------------------------
+          ; 乱数初期化
+          ; @param R0 - 種（16bit。0 はロックするので 1 にする）
+          ; @Destruction R0
+          ; -------------------------------------------------------
+          gl_rnd_init:
+021D 7858  	mv	R0, R0, NZ
+021E 0801  	mvi	R0, #1
+021F 8008  	st	R0, *GL_RND_SEED
+0220 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; 乱数取得（M系列、1〜0xFFFF、周期 2^16-1）
+          ; @note 右シフト Galois LFSR。LSB=1 のとき 0xB400 を XOR
+          ; @return R0 - 乱数値
+          ; @Destruction R0
+          ; -------------------------------------------------------
+          gl_get_rnd:
+0221 C008  	l	R0, *GL_RND_SEED
+0222 7858  	mv	R0, R0, NZ
+0223 0801  	mvi	R0, #1
+0224 2009  	sr	R0, RE
+0225 2E40  	tbit	STR, #0, Z
+0226 6007  	eori	R0, #GL_RND_TAP
+0227 B400 
+0228 8008  	st	R0, *GL_RND_SEED
+0229 2003  	ret
+          
+          	.area	_SYS_PAGE0		(ABS,NOLOAD)
+          ; --- _SYS_PAGE0: BIOS 乱数（bios_common.asm） ---
+          GL_RND_SEED:	.ds	1	; 乱数種（gl_rnd_init / gl_get_rnd）
+          
+          ; -------- end bios_common.asm
+          
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_hshk_initiate_send
+          	.global gl_hshk_send_byte
+          	.global gl_hshk_finalize_send
+          	.global gl_hshk_accept_request
+          	.global gl_hshk_recv_byte
+          	.global gl_hshk_finalize_recv
+          	.global gl_hshk_wait_ena_delay
+          	.global gl_hshk_wait_req1_1
+          
+          ; -------------------------------------------------------
+          ; ENA=0 チェック用の待機（50us～100us ランダム近似）
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_wait_ena_delay:
+022A 2617  	bald	gl_get_rnd
+022B 0221 
+022C 680F  	andi	R0, #HSHK_DELAY_SPAN_MASK
+022D 001F 
+022E 580F  	awi	R0, #HSHK_DELAY_50US
+022F 0019 
+          hshk_wad_lp:
+0230 4041  	si	R0, #1, Z
+0231 CFFE  	b	hshk_wad_lp
+0232 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_ENA==0 を確認する
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_wait_ena0:
+0233 7907  	mvwi	R1, #HSHK_ENA0_RETRY
+0234 000A 
+          hshk_we0_lp:
+0235 2617  	bald	gl_hshk_wait_ena_delay
+0236 022A 
+0237 1822  	rd	R0, HSHK_CTRL
+0238 684F  	andi	R0, #HSHK_ENA_BIT, Z
+0239 0001 
+023A CF03  	b	hshk_we0_busy
+023B 7807  	mvwi	R0, #HSHK_OK
+023C 0000 
+023D 2003  	ret
+          hshk_we0_busy:
+023E 4141  	si	R1, #1, Z
+023F CFF5  	b	hshk_we0_lp
+0240 7807  	mvwi	R0, #HSHK_NG
+0241 0001 
+0242 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_ENA が期待値になるまで待つ
+          ; @param R0 - 期待値（0 または HSHK_ENA_BIT）
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_wait_ena:
+0243 2201  	push	R2
+0244 7A08  	mv	R2, R0
+0245 7907  	mvwi	R1, #HSHK_WAIT_MAX
+0246 FFFF 
+          hshk_ena_lp:
+0247 1822  	rd	R0, HSHK_CTRL
+0248 680F  	andi	R0, #HSHK_ENA_BIT
+0249 0001 
+024A 504A  	c	R0, R2, Z
+024B CF04  	b	hshk_ena_cont
+024C 7807  	mvwi	R0, #HSHK_OK
+024D 0000 
+024E 2202  	pop	R2
+024F 2003  	ret
+          hshk_ena_cont:
+0250 4141  	si	R1, #1, Z
+0251 CFF5  	b	hshk_ena_lp
+0252 7807  	mvwi	R0, #HSHK_NG
+0253 0001 
+0254 2202  	pop	R2
+0255 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_DACK が期待値になるまで待つ
+          ; @param R0 - 期待値（0 または HSHK_DACK_BIT）
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_wait_dack:
+0256 2201  	push	R2
+0257 7A08  	mv	R2, R0
+0258 7907  	mvwi	R1, #HSHK_WAIT_MAX
+0259 FFFF 
+          hshk_dack_lp:
+025A 1822  	rd	R0, HSHK_CTRL
+025B 680F  	andi	R0, #HSHK_DACK_BIT
+025C 0004 
+025D 504A  	c	R0, R2, Z
+025E CF04  	b	hshk_dack_cont
+025F 7807  	mvwi	R0, #HSHK_OK
+0260 0000 
+0261 2202  	pop	R2
+0262 2003  	ret
+          hshk_dack_cont:
+0263 4141  	si	R1, #1, Z
+0264 CFF5  	b	hshk_dack_lp
+0265 7807  	mvwi	R0, #HSHK_NG
+0266 0001 
+0267 2202  	pop	R2
+0268 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_DENA が期待値になるまで待つ
+          ; @param R0 - 期待値（0 または HSHK_DENA_BIT）
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_wait_dena:
+0269 2201  	push	R2
+026A 7A08  	mv	R2, R0
+026B 7907  	mvwi	R1, #HSHK_WAIT_MAX
+026C FFFF 
+          hshk_dena_lp:
+026D 1822  	rd	R0, HSHK_CTRL
+026E 680F  	andi	R0, #HSHK_DENA_BIT
+026F 0002 
+0270 504A  	c	R0, R2, Z
+0271 CF04  	b	hshk_dena_cont
+0272 7807  	mvwi	R0, #HSHK_OK
+0273 0000 
+0274 2202  	pop	R2
+0275 2003  	ret
+          hshk_dena_cont:
+0276 4141  	si	R1, #1, Z
+0277 CFF5  	b	hshk_dena_lp
+0278 7807  	mvwi	R0, #HSHK_NG
+0279 0001 
+027A 2202  	pop	R2
+027B 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_REQ_1 == 0 になるまで待つ
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_wait_req1_0:
+027C 7907  	mvwi	R1, #HSHK_WAIT_MAX
+027D FFFF 
+          hshk_req1_lp:
+027E 1822  	rd	R0, HSHK_CTRL
+027F 684F  	andi	R0, #HSHK_REQ1_BIT, Z
+0280 0010 
+0281 CF03  	b	hshk_req1_cont
+0282 7807  	mvwi	R0, #HSHK_OK
+0283 0000 
+0284 2003  	ret
+          hshk_req1_cont:
+0285 4141  	si	R1, #1, Z
+0286 CFF7  	b	hshk_req1_lp
+0287 7807  	mvwi	R0, #HSHK_NG
+0288 0001 
+0289 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; HSHK_REQ_1 == 1 になるまで待つ
+          ; @note 割り込みを使わず IO→CPU 依頼を待つ（BIOS の応答受信）
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_wait_req1_1:
+028A 7907  	mvwi	R1, #HSHK_WAIT_MAX
+028B FFFF 
+          hshk_req1s_lp:
+028C 1822  	rd	R0, HSHK_CTRL
+028D 684F  	andi	R0, #HSHK_REQ1_BIT, Z
+028E 0010 
+028F CF05  	b	hshk_req1s_ok
+0290 4141  	si	R1, #1, Z
+0291 CFFA  	b	hshk_req1s_lp
+0292 7807  	mvwi	R0, #HSHK_NG
+0293 0001 
+0294 2003  	ret
+          hshk_req1s_ok:
+0295 7807  	mvwi	R0, #HSHK_OK
+0296 0000 
+0297 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; 制御ポート RMW: ビットセット
+          ; @param R0 - セットするビットマスク
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_ctrl_set:
+0298 7908  	mv	R1, R0
+0299 1822  	rd	R0, HSHK_CTRL
+029A 6009  	or	R0, R1
+029B 1022  	wt	R0, HSHK_CTRL
+029C 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; 制御ポート RMW: ビットクリア
+          ; @param R0 - クリアするビットマスク
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_ctrl_clr:
+029D 7908  	mv	R1, R0
+029E 6107  	eori	R1, #0xffff
+029F FFFF 
+02A0 1822  	rd	R0, HSHK_CTRL
+02A1 6809  	and	R0, R1
+02A2 1022  	wt	R0, HSHK_CTRL
+02A3 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; CPU -> IO ハンドシェイク開始
+          ; @note ENA=0確認 → DENA=0 → REQ_0=1 → ENA=1待ち → REQ_0=0
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_initiate_send:
+02A4 2617  	bald	hshk_wait_ena0
+02A5 0233 
+02A6 7908  	mv	R1, R0
+02A7 7807  	mvwi	R0, #HSHK_OK
+02A8 0000 
+02A9 5148  	c	R1, R0, Z
+02AA CF18  	b	hshk_init_send_fail
+          
+02AB 7807  	mvwi	R0, #HSHK_DENA_BIT
+02AC 0002 
+02AD 2617  	bald	hshk_ctrl_clr
+02AE 029D 
+          
+02AF 7807  	mvwi	R0, #HSHK_REQ0_BIT
+02B0 0008 
+02B1 2617  	bald	hshk_ctrl_set
+02B2 0298 
+          
+02B3 7807  	mvwi	R0, #HSHK_ENA_BIT
+02B4 0001 
+02B5 2617  	bald	hshk_wait_ena
+02B6 0243 
+02B7 7908  	mv	R1, R0
+02B8 7807  	mvwi	R0, #HSHK_OK
+02B9 0000 
+02BA 5148  	c	R1, R0, Z
+02BB CF07  	b	hshk_init_send_fail
+          
+02BC 7807  	mvwi	R0, #HSHK_REQ0_BIT
+02BD 0008 
+02BE 2617  	bald	hshk_ctrl_clr
+02BF 029D 
+          
+02C0 7807  	mvwi	R0, #HSHK_OK
+02C1 0000 
+02C2 2003  	ret
+          
+          hshk_init_send_fail:
+02C3 7807  	mvwi	R0, #HSHK_REQ0_BIT
+02C4 0008 
+02C5 2617  	bald	hshk_ctrl_clr
+02C6 029D 
+02C7 7807  	mvwi	R0, #HSHK_NG
+02C8 0001 
+02C9 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; CPU -> IO 1バイト送信
+          ; @param R0 - 送信バイト（下位8bit）
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_send_byte:
+02CA 1023  	wt	R0, HSHK_IN_DATA
+          
+02CB 7807  	mvwi	R0, #HSHK_DENA_BIT
+02CC 0002 
+02CD 2617  	bald	hshk_ctrl_set
+02CE 0298 
+          
+02CF 7807  	mvwi	R0, #HSHK_DACK_BIT
+02D0 0004 
+02D1 2617  	bald	hshk_wait_dack
+02D2 0256 
+02D3 7908  	mv	R1, R0
+02D4 7807  	mvwi	R0, #HSHK_OK
+02D5 0000 
+02D6 5148  	c	R1, R0, Z
+02D7 CF0F  	b	hshk_send_fail
+          
+02D8 7807  	mvwi	R0, #HSHK_DENA_BIT
+02D9 0002 
+02DA 2617  	bald	hshk_ctrl_clr
+02DB 029D 
+          
+02DC 6000  	eor	R0, R0
+02DD 2617  	bald	hshk_wait_dack
+02DE 0256 
+02DF 7908  	mv	R1, R0
+02E0 7807  	mvwi	R0, #HSHK_OK
+02E1 0000 
+02E2 5148  	c	R1, R0, Z
+02E3 CF03  	b	hshk_send_fail
+          
+02E4 7807  	mvwi	R0, #HSHK_OK
+02E5 0000 
+02E6 2003  	ret
+          
+          hshk_send_fail:
+02E7 7807  	mvwi	R0, #HSHK_DENA_BIT
+02E8 0002 
+02E9 2617  	bald	hshk_ctrl_clr
+02EA 029D 
+02EB 7807  	mvwi	R0, #HSHK_NG
+02EC 0001 
+02ED 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; CPU -> IO ハンドシェイク完了
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_finalize_send:
+02EE 6000  	eor	R0, R0
+02EF 2617  	bald	hshk_wait_ena
+02F0 0243 
+02F1 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; IO -> CPU 依頼受理（割り込みハンドラから）
+          ; @note DACK=0 → ENA=1 → REQ_1=0待ち
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_accept_request:
+02F2 7807  	mvwi	R0, #HSHK_DACK_BIT
+02F3 0004 
+02F4 2617  	bald	hshk_ctrl_clr
+02F5 029D 
+          
+02F6 7807  	mvwi	R0, #HSHK_ENA_BIT
+02F7 0001 
+02F8 2617  	bald	hshk_ctrl_set
+02F9 0298 
+          
+02FA 2617  	bald	hshk_wait_req1_0
+02FB 027C 
+02FC 7908  	mv	R1, R0
+02FD 7807  	mvwi	R0, #HSHK_OK
+02FE 0000 
+02FF 5148  	c	R1, R0, Z
+0300 CF03  	b	hshk_accept_fail
+          
+0301 7807  	mvwi	R0, #HSHK_OK
+0302 0000 
+0303 2003  	ret
+          
+          hshk_accept_fail:
+0304 7807  	mvwi	R0, #HSHK_ENA_BIT
+0305 0001 
+0306 2617  	bald	hshk_ctrl_clr
+0307 029D 
+0308 7807  	mvwi	R0, #HSHK_NG
+0309 0001 
+030A 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; IO -> CPU 1バイト受信
+          ; @note 受信データは _WORK の GL_HSHK_RECV_DATA に格納
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_recv_byte:
+030B 7807  	mvwi	R0, #HSHK_DENA_BIT
+030C 0002 
+030D 2617  	bald	hshk_wait_dena
+030E 0269 
+030F 7908  	mv	R1, R0
+0310 7807  	mvwi	R0, #HSHK_OK
+0311 0000 
+0312 5148  	c	R1, R0, Z
+0313 CF1C  	b	hshk_recv_fail
+          
+0314 1824  	rd	R0, HSHK_OUT_DATA
+0315 680F  	andi	R0, #0x00ff
+0316 00FF 
+0317 2748  	std	R0, GL_HSHK_RECV_DATA
+0318 0000 
+          
+0319 7807  	mvwi	R0, #HSHK_DACK_BIT
+031A 0004 
+031B 2617  	bald	hshk_ctrl_set
+031C 0298 
+          
+031D 6000  	eor	R0, R0
+031E 2617  	bald	hshk_wait_dena
+031F 0269 
+0320 7908  	mv	R1, R0
+0321 7807  	mvwi	R0, #HSHK_OK
+0322 0000 
+0323 5148  	c	R1, R0, Z
+0324 CF07  	b	hshk_recv_fail2
+          
+0325 7807  	mvwi	R0, #HSHK_DACK_BIT
+0326 0004 
+0327 2617  	bald	hshk_ctrl_clr
+0328 029D 
+0329 7807  	mvwi	R0, #HSHK_OK
+032A 0000 
+032B 2003  	ret
+          
+          hshk_recv_fail2:
+032C 7807  	mvwi	R0, #HSHK_DACK_BIT
+032D 0004 
+032E 2617  	bald	hshk_ctrl_clr
+032F 029D 
+          hshk_recv_fail:
+0330 7807  	mvwi	R0, #HSHK_NG
+0331 0001 
+0332 2003  	ret
+          
+          ; -------------------------------------------------------
+          ; IO -> CPU ハンドシェイク完了
+          ; @return R0 - HSHK_OK / HSHK_NG
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_hshk_finalize_recv:
+0333 7807  	mvwi	R0, #HSHK_ENA_BIT
+0334 0001 
+0335 2617  	bald	hshk_ctrl_clr
+0336 029D 
+0337 7807  	mvwi	R0, #HSHK_OK
+0338 0000 
+0339 2003  	ret
+          
+          	.area	_WORK		(REL,NOLOAD)
+          ; --- _WORK: ハンドシェイク（handshake_common.asm） ---
+          GL_HSHK_RECV_DATA:	.ds	1	; 受信 1 バイト
+          
+          ; -------- end handshake_common.asm
+          
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_handshake_interrupt_handler
+          
+          ; -------------------------------------------------------
+          ; レベル2割り込み: ハンドシェイク要因
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_handshake_interrupt_handler:
+033A 2617  	bald	gl_hshk_accept_request
+033B 02F2 
+033C 7908  	mv	R1, R0
+033D 7807  	mvwi	R0, #HSHK_OK
+033E 0000 
+033F 5148  	c	R1, R0, Z
+0340 CF1D  	b	hshk_irq_fail_accept
+          
+0341 2617  	bald	gl_hshk_recv_byte
+0342 030B 
+0343 7908  	mv	R1, R0
+0344 7807  	mvwi	R0, #HSHK_OK
+0345 0000 
+0346 5148  	c	R1, R0, Z
+0347 CF17  	b	hshk_irq_fail_recv
+          
+0348 2708  	ld	R0, GL_HSHK_RECV_DATA
+0349 0000 
+034A 680F  	andi	R0, #0x00ff
+034B 00FF 
+034C 502F  	cwi	R0, #HSHK_CMD_IO_BASE, M
+034D 0040 
+034E CF01  	b	hshk_irq_ge_base
+034F CF0B  	b	hshk_irq_fin
+          hshk_irq_ge_base:
+0350 503F  	cwi	R0, #HSHK_CMD_IO_LIMIT, PZ
+0351 0061 
+0352 CF01  	b	hshk_irq_dispatch
+0353 CF07  	b	hshk_irq_fin
+          
+          hshk_irq_dispatch:
+0354 5807  	swi	R0, #HSHK_CMD_IO_BASE
+0355 0040 
+0356 200D  	sl	R0, RE
+0357 7B07  	mvwi	X0, #hshk_irq_cmd_tab
+0358 0006 
+0359 5B08  	a	X0, R0
+035A 2716  	balr	(R3)
+          
+          hshk_irq_fin:
+035B 2617  	bald	gl_hshk_finalize_recv
+035C 0333 
+035D 3F07  	retl
+          hshk_irq_fail_accept:
+035E 3F07  	retl
+          
+          hshk_irq_fail_recv:
+035F 2617  	bald	gl_hshk_finalize_recv
+0360 0333 
+0361 3F07  	retl
+          
+          ; -------------------------------------------------------
+          ; R0 バイト受信して捨てる
+          ; @param R0 - バイト数
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_irq_recv_n:
+0362 2201  	push	R2
+0363 7A08  	mv	R2, R0
+          hshk_irq_rn_lp:
+0364 784A  	mv	R0, R2, Z
+0365 CF02  	b	hshk_irq_rn_go
+0366 2202  	pop	R2
+0367 2003  	ret
+          hshk_irq_rn_go:
+0368 2617  	bald	gl_hshk_recv_byte
+0369 030B 
+036A 4201  	si	R2, #1
+036B CFF8  	b	hshk_irq_rn_lp
+          
+          ; -------------------------------------------------------
+          ; 0 を R0 バイト送る
+          ; @param R0 - バイト数
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          hshk_irq_send_zeros:
+036C 2201  	push	R2
+036D 7A08  	mv	R2, R0
+          hshk_irq_sz_lp:
+036E 784A  	mv	R0, R2, Z
+036F CF02  	b	hshk_irq_sz_go
+0370 2202  	pop	R2
+0371 2003  	ret
+          hshk_irq_sz_go:
+0372 6000  	eor	R0, R0
+0373 2617  	bald	gl_hshk_send_byte
+0374 02CA 
+0375 4201  	si	R2, #1
+0376 CFF7  	b	hshk_irq_sz_lp
+          
+          ; -------------------------------------------------------
+          ; 未実装コマンド（ペイロードは読まず NG も返さない）
+          ; -------------------------------------------------------
+          hshk_irq_unknown:
+0377 3F07  	retl
+          
+          ; 40h メモリ/IOブレイク設定
+          hshk_irq_40:
+0378 7807  	mvwi	R0, #HSHK_IRQ_PAY_40
+0379 0009 
+037A 2617  	bald	hshk_irq_recv_n
+037B 0362 
+037C 7807  	mvwi	R0, #HSHK_NG
+037D 0001 
+037E 2617  	bald	gl_hshk_send_byte
+037F 02CA 
+0380 3F07  	retl
+          
+          ; 41h メモリ/IOブレイク解除
+          hshk_irq_41:
+0381 7807  	mvwi	R0, #HSHK_IRQ_PAY_41
+0382 0001 
+0383 2617  	bald	hshk_irq_recv_n
+0384 0362 
+0385 7807  	mvwi	R0, #HSHK_NG
+0386 0001 
+0387 2617  	bald	gl_hshk_send_byte
+0388 02CA 
+0389 3F07  	retl
+          
+          ; 42h 命令ブレイク設定
+          hshk_irq_42:
+038A 7807  	mvwi	R0, #HSHK_IRQ_PAY_42
+038B 0005 
+038C 2617  	bald	hshk_irq_recv_n
+038D 0362 
+038E 7807  	mvwi	R0, #HSHK_NG
+038F 0001 
+0390 2617  	bald	gl_hshk_send_byte
+0391 02CA 
+0392 3F07  	retl
+          
+          ; 43h 命令ブレイク解除
+          hshk_irq_43:
+0393 7807  	mvwi	R0, #HSHK_IRQ_PAY_43
+0394 0001 
+0395 2617  	bald	hshk_irq_recv_n
+0396 0362 
+0397 7807  	mvwi	R0, #HSHK_NG
+0398 0001 
+0399 2617  	bald	gl_hshk_send_byte
+039A 02CA 
+039B 3F07  	retl
+          
+          ; 48h CPU状態取得（中身は cpu_status.asm へ移す想定。今は 0 埋め）
+          hshk_irq_48:
+039C 7807  	mvwi	R0, #HSHK_IRQ_STATUS_BYTES
+039D 0028 
+039E 2617  	bald	hshk_irq_send_zeros
+039F 036C 
+03A0 2617  	bald	gl_hshk_recv_byte
+03A1 030B 
+03A2 3F07  	retl
+          
+          ; 49h 実行指示
+          hshk_irq_49:
+03A3 7807  	mvwi	R0, #HSHK_IRQ_PAY_49
+03A4 0004 
+03A5 2617  	bald	hshk_irq_recv_n
+03A6 0362 
+03A7 7807  	mvwi	R0, #HSHK_NG
+03A8 0001 
+03A9 2617  	bald	gl_hshk_send_byte
+03AA 02CA 
+03AB 3F07  	retl
+          
+          	.area	_DATA		(REL,CON)
+          ; IO→CPU コマンド 0x40–0x60（1 エントリ = CSBR + ハンドラ、BALR 用）
+          hshk_irq_cmd_tab:
+0006 0000  	.dw	0
+0007 0378  	.dw	hshk_irq_40			; 40
+0008 0000  	.dw	0
+0009 0381  	.dw	hshk_irq_41			; 41
+000A 0000  	.dw	0
+000B 038A  	.dw	hshk_irq_42			; 42
+000C 0000  	.dw	0
+000D 0393  	.dw	hshk_irq_43			; 43
+000E 0000  	.dw	0
+000F 0377  	.dw	hshk_irq_unknown		; 44
+0010 0000  	.dw	0
+0011 0377  	.dw	hshk_irq_unknown		; 45
+0012 0000  	.dw	0
+0013 0377  	.dw	hshk_irq_unknown		; 46
+0014 0000  	.dw	0
+0015 0377  	.dw	hshk_irq_unknown		; 47
+0016 0000  	.dw	0
+0017 039C  	.dw	hshk_irq_48			; 48
+0018 0000  	.dw	0
+0019 03A3  	.dw	hshk_irq_49			; 49
+001A 0000  	.dw	0
+001B 0377  	.dw	hshk_irq_unknown		; 4A
+001C 0000  	.dw	0
+001D 0377  	.dw	hshk_irq_unknown		; 4B
+001E 0000  	.dw	0
+001F 0377  	.dw	hshk_irq_unknown		; 4C
+0020 0000  	.dw	0
+0021 0377  	.dw	hshk_irq_unknown		; 4D
+0022 0000  	.dw	0
+0023 0377  	.dw	hshk_irq_unknown		; 4E
+0024 0000  	.dw	0
+0025 0377  	.dw	hshk_irq_unknown		; 4F
+0026 0000  	.dw	0
+0027 0377  	.dw	hshk_irq_unknown		; 50
+0028 0000  	.dw	0
+0029 0377  	.dw	hshk_irq_unknown		; 51
+002A 0000  	.dw	0
+002B 0377  	.dw	hshk_irq_unknown		; 52
+002C 0000  	.dw	0
+002D 0377  	.dw	hshk_irq_unknown		; 53
+002E 0000  	.dw	0
+002F 0377  	.dw	hshk_irq_unknown		; 54
+0030 0000  	.dw	0
+0031 0377  	.dw	hshk_irq_unknown		; 55
+0032 0000  	.dw	0
+0033 0377  	.dw	hshk_irq_unknown		; 56
+0034 0000  	.dw	0
+0035 0377  	.dw	hshk_irq_unknown		; 57
+0036 0000  	.dw	0
+0037 0377  	.dw	hshk_irq_unknown		; 58
+0038 0000  	.dw	0
+0039 0377  	.dw	hshk_irq_unknown		; 59
+003A 0000  	.dw	0
+003B 0377  	.dw	hshk_irq_unknown		; 5A
+003C 0000  	.dw	0
+003D 0377  	.dw	hshk_irq_unknown		; 5B
+003E 0000  	.dw	0
+003F 0377  	.dw	hshk_irq_unknown		; 5C
+0040 0000  	.dw	0
+0041 0377  	.dw	hshk_irq_unknown		; 5D
+0042 0000  	.dw	0
+0043 0377  	.dw	hshk_irq_unknown		; 5E
+0044 0000  	.dw	0
+0045 0377  	.dw	hshk_irq_unknown		; 5F
+0046 0000  	.dw	0
+0047 0377  	.dw	hshk_irq_unknown		; 60
+          
+          ; -------- end handshake_main.asm
+          
+          ; .include handshake/handshake_timer.asm
+          ; -------- begin ../retrocpu_boot_monitor/mn1613/src/handshake/handshake_timer.asm
+          ; handshake_timer.asm
+          ; タイマー設定（ハンドシェイク 19h）
+          ; 根拠: HandShake.mdc「タイマー設定」/ boot_monitor.mdc「タイマー割り込み」
+          ;
+          ; 線上 送信 6B: 19h, タイマー番号, 周期H, 周期L, 回数H, 回数L → 受信 1B: status
+          ; タイマーは IO ボード側にあり、番号 0 / 1 の 2 本。初期化直後は停止している。
+          ; 周期 0 で停止、回数 0 で無限。
+          ;
+          ; 引数は第1=R0、第2=R1、第3以降はスタック（asm-rules.mdc の呼び出し規約）。
+          ; R2-R4 は非破壊なので先頭で PUSH し、復帰前に逆順で POP する。
+          ; 送信フレームはスタック上に確保する（_WORK は使わない）。
+          
+          ; .include handshake_common.asm
+          ; [skip already included] handshake_common.asm
+          
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_bios_timer_set
+          
+          BIOS_TIMER_FRAME_LEN	.equ	6
+          
+          ; -------------------------------------------------------
+          ; タイマー設定（19h）
+          ; @note 応答はハンドシェイク割り込みを使わず REQ_1 のポーリングで受け取る
+          ; @param R0 - タイマー番号（0 または 1）
+          ; @param R1 - 周期 ms（16bit、0 で停止）
+          ; @param S+2 - 回数（16bit、0 で無限）-スタック
+          ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG）
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_bios_timer_set:
+03AC 2201  	push	R2
+03AD 2301  	push	R3
+03AE 2401  	push	R4
+          
+          	; 第3引数（回数）。入口では S+2、3 PUSH 後は SP+5
+03AF 7B0D  	mv	X0, SP
+03B0 E205  	l	R2, 5(X0)
+          
+          	; 送信フレーム 6 ワードをスタックに確保（SP+1 … SP+6）
+03B1 4506  	si	SP, #BIOS_TIMER_FRAME_LEN
+          
+          	; 1 ワード 1 バイト、上位バイト先
+03B2 7B0D  	mv	X0, SP
+03B3 7C08  	mv	R4, R0			; タイマー番号
+03B4 7807  	mvwi	R0, #HSHK_CMD_TIMER_SET
+03B5 0019 
+03B6 A001  	st	R0, 1(X0)
+03B7 780C  	mv	R0, R4
+03B8 680F  	andi	R0, #0x00ff
+03B9 00FF 
+03BA A002  	st	R0, 2(X0)
+03BB 7009  	bswp	R0, R1
+03BC 680F  	andi	R0, #0x00ff
+03BD 00FF 
+03BE A003  	st	R0, 3(X0)
+03BF 7809  	mv	R0, R1
+03C0 680F  	andi	R0, #0x00ff
+03C1 00FF 
+03C2 A004  	st	R0, 4(X0)
+03C3 700A  	bswp	R0, R2			; R2 = 回数
+03C4 680F  	andi	R0, #0x00ff
+03C5 00FF 
+03C6 A005  	st	R0, 5(X0)
+03C7 780A  	mv	R0, R2
+03C8 680F  	andi	R0, #0x00ff
+03C9 00FF 
+03CA A006  	st	R0, 6(X0)
+          
+03CB 2617  	bald	gl_hshk_initiate_send
+03CC 02A4 
+03CD 7908  	mv	R1, R0
+03CE 7807  	mvwi	R0, #HSHK_OK
+03CF 0000 
+03D0 5148  	c	R1, R0, Z
+03D1 CF34  	b	bios_timer_fail
+          
+03D2 7B0D  	mv	X0, SP
+03D3 4B01  	ai	X0, #1			; フレーム先頭
+03D4 7C07  	mvwi	X1, #BIOS_TIMER_FRAME_LEN
+03D5 0006 
+          bios_timer_send_lp:
+03D6 E000  	l	R0, 0(X0)
+03D7 2617  	bald	gl_hshk_send_byte
+03D8 02CA 
+03D9 7908  	mv	R1, R0
+03DA 7807  	mvwi	R0, #HSHK_OK
+03DB 0000 
+03DC 5148  	c	R1, R0, Z
+03DD CF28  	b	bios_timer_fail
+03DE 4B01  	ai	X0, #1
+03DF 4441  	si	X1, #1, Z
+03E0 CFF5  	b	bios_timer_send_lp
+          
+03E1 2617  	bald	gl_hshk_finalize_send
+03E2 02EE 
+03E3 7908  	mv	R1, R0
+03E4 7807  	mvwi	R0, #HSHK_OK
+03E5 0000 
+03E6 5148  	c	R1, R0, Z
+03E7 CF1E  	b	bios_timer_fail
+          
+          	; 応答 1 バイトは IO→CPU の転送で届く。割り込みを待たず REQ_1 をポーリングする
+03E8 2617  	bald	gl_hshk_wait_req1_1
+03E9 028A 
+03EA 7908  	mv	R1, R0
+03EB 7807  	mvwi	R0, #HSHK_OK
+03EC 0000 
+03ED 5148  	c	R1, R0, Z
+03EE CF17  	b	bios_timer_fail
+          
+03EF 2617  	bald	gl_hshk_accept_request
+03F0 02F2 
+03F1 7908  	mv	R1, R0
+03F2 7807  	mvwi	R0, #HSHK_OK
+03F3 0000 
+03F4 5148  	c	R1, R0, Z
+03F5 CF10  	b	bios_timer_fail
+          
+03F6 2617  	bald	gl_hshk_recv_byte
+03F7 030B 
+03F8 7908  	mv	R1, R0
+03F9 7807  	mvwi	R0, #HSHK_OK
+03FA 0000 
+03FB 5148  	c	R1, R0, Z
+03FC CF07  	b	bios_timer_recv_fail
+          
+03FD 2617  	bald	gl_hshk_finalize_recv
+03FE 0333 
+          
+03FF 2708  	ld	R0, GL_HSHK_RECV_DATA
+0400 0000 
+0401 680F  	andi	R0, #0x00ff
+0402 00FF 
+0403 CF04  	b	bios_timer_done
+          
+          bios_timer_recv_fail:
+0404 2617  	bald	gl_hshk_finalize_recv
+0405 0333 
+          bios_timer_fail:
+0406 7807  	mvwi	R0, #HSHK_NG
+0407 0001 
+          bios_timer_done:
+0408 4D06  	ai	SP, #BIOS_TIMER_FRAME_LEN
+0409 2402  	pop	R4
+040A 2302  	pop	R3
+040B 2202  	pop	R2
+040C 2003  	ret
+          
+          ; -------- end handshake_timer.asm
+          
+          
+          ; -------- end start.asm
+          

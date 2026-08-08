@@ -389,10 +389,10 @@ DMSRELI:
         RET
 
 ; ── LPSW（割り込みリターン）LL=0〜3 ────────────────────────
-        LPSW 0                  ; レベル0割り込みからリターン
-        LPSW 1                  ; レベル1
-        LPSW 2                  ; レベル2
-        LPSW 3                  ; ソフトウェア用途
+        LPSW 0                   ; レベル0割り込みからリターン
+        LPSW 1                   ; レベル1
+        LPSW 2                   ; レベル2
+        LPSW 3                   ; ソフトウェア用途
 
 ; ── MVI（8bit即値ロード） ────────────────────────────────────
         MVI  R0, #0
@@ -535,14 +535,14 @@ DMSRELI:
         MVWR R0, (R3), M
 
 ; ── MVWI（ワード即値転送）────────────────────────────────────
-        MVWI R0, 0x1234
-        MVWI R1, 0x5678
-        MVWI R2, 0xABCD
-        MVWI R3, 0x0000
-        MVWI R4, 0xFFFF
-        MVWI SP, 0x0F00
-        MVWI R0, 0x1234, Z
-        MVWI R1, 0xFFFF, NZ
+        MVWI R0, #0x1234
+        MVWI R1, #0x5678
+        MVWI R2, #0xABCD
+        MVWI R3, #0x0000
+        MVWI R4, #0xFFFF
+        MVWI SP, #0x0F00
+        MVWI R0, #0x1234, Z
+        MVWI R1, #0xFFFF, NZ
 
 ; ── MVBR（バイト間接転送 下位8bit → R0）────────────────────
         MVBR R0, (R1)
@@ -589,13 +589,13 @@ DMSRELI:
         AWR  R0, (R3), M
 
 ; ── AWI（ワード即値加算）────────────────────────────────────
-        AWI  R0, 0x0001
-        AWI  R0, 0x0010
-        AWI  R1, 0x0100
-        AWI  R2, 0x1000
-        AWI  R0, 0xFFFF
-        AWI  R0, 0x0010, M
-        AWI  R1, 0x0020, Z
+        AWI R0, #0x0001
+        AWI R0, #0x0010
+        AWI R1, #0x0100
+        AWI R2, #0x1000
+        AWI R0, #0xFFFF
+        AWI R0, #0x0010, M
+        AWI R1, #0x0020, Z
 
 ; ── SWR（ワード間接減算 → R0）───────────────────────────────
         SWR  R0, (R1)
@@ -605,11 +605,11 @@ DMSRELI:
         SWR  R0, (R1), Z
 
 ; ── SWI（ワード即値減算）────────────────────────────────────
-        SWI  R0, 0x0001
-        SWI  R0, 0x0010
-        SWI  R1, 0x0100
-        SWI  R2, 0x1000
-        SWI  R0, 0x0010, M
+        SWI R0, #0x0001
+        SWI R0, #0x0010
+        SWI R1, #0x0100
+        SWI R2, #0x1000
+        SWI R0, #0x0010, M
 
 ; ── CWR（ワード間接比較）────────────────────────────────────
         CWR  R0, (R1)
@@ -621,11 +621,11 @@ DMSRELI:
         CWR  R0, (R3), LM
 
 ; ── CWI（ワード即値比較）────────────────────────────────────
-        CWI  R0, 0x0000
-        CWI  R0, 0x00FF
-        CWI  R1, 0x1234
-        CWI  R0, 0x00FF, Z
-        CWI  R1, 0x00FF, LP
+        CWI R0, #0x0000
+        CWI R0, #0x00FF
+        CWI R1, #0x1234
+        CWI R0, #0x00FF, Z
+        CWI R1, #0x00FF, LP
 
 ; ── CBR（バイト間接比較）────────────────────────────────────
         CBR  R0, (R1)
@@ -635,9 +635,9 @@ DMSRELI:
         CBR  R0, (R1), Z
 
 ; ── CBI（バイト即値比較）────────────────────────────────────
-        CBI  R0, 0x00FF
-        CBI  R1, 0x0000
-        CBI  R0, 0x00FF, Z
+        CBI R0, #0x00FF
+        CBI R1, #0x0000
+        CBI R0, #0x00FF, Z
 
 ; ── NEG（2の補数）───────────────────────────────────────────
         NEG  R0                 ; c=1（Eを含めない）
@@ -709,9 +709,9 @@ DMSRELI:
         LADR R0, (R1), Z
 
 ; ── LADI（BCD補正値ロード 即値）────────────────────────────
-        LADI R0, 0x6666
-        LADI R1, 0x6666
-        LADI R0, 0x6666, Z
+        LADI R0, #0x6666
+        LADI R1, #0x6666
+        LADI R0, #0x6666, Z
 
 ; ============================================================
 ; ■ 浮動小数点演算命令
@@ -771,11 +771,11 @@ DMSRELI:
         ANDR R0, (R2), NZ
 
 ; ── ANDI（AND 即値）─────────────────────────────────────────
-        ANDI R0, 0xF0F0
-        ANDI R1, 0x0F0F
-        ANDI R2, 0xFF00
-        ANDI R0, 0xF0F0, Z
-        ANDI R1, 0x0F0F, NZ
+        ANDI R0, #0xF0F0
+        ANDI R1, #0x0F0F
+        ANDI R2, #0xFF00
+        ANDI R0, #0xF0F0, Z
+        ANDI R1, #0x0F0F, NZ
 
 ; ── ORR（OR 間接）───────────────────────────────────────────
         ORR  R0, (R1)
@@ -785,10 +785,10 @@ DMSRELI:
         ORR  R0, (R1), Z
 
 ; ── ORI（OR 即値）───────────────────────────────────────────
-        ORI  R0, 0x0F0F
-        ORI  R1, 0xF0F0
-        ORI  R2, 0x00FF
-        ORI  R0, 0x0F0F, Z
+        ORI R0, #0x0F0F
+        ORI R1, #0xF0F0
+        ORI R2, #0x00FF
+        ORI R0, #0x0F0F, Z
 
 ; ── EORR（EOR 間接）─────────────────────────────────────────
         EORR R0, (R1)
@@ -798,10 +798,10 @@ DMSRELI:
         EORR R0, (R1), Z
 
 ; ── EORI（EOR 即値）─────────────────────────────────────────
-        EORI R0, 0x5555
-        EORI R1, 0xAAAA
-        EORI R2, 0xFFFF
-        EORI R0, 0x5555, Z
+        EORI R0, #0x5555
+        EORI R1, #0xAAAA
+        EORI R2, #0xFFFF
+        EORI R0, #0x5555, Z
 
 ; ============================================================
 ; ■ 分岐命令（MN1613新設: BD / BL / BR / BALD / BALL / BALR / RETL）

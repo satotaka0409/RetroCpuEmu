@@ -20,6 +20,74 @@ function toRelocOperand(
 }
 
 /**
+ * 16bit アドレス／即値オペランドから単純シンボル名を取り出す。
+ * @param expr - オペランド（`FOO` / `#FOO` / `@FOO` / `(FOO)`）
+ * @return 大文字シンボル名。単純でなければ null
+ */
+export function parseSimpleSymbolOperand(expr: string): string | null {
+  let t: string = expr.trim();
+  if (t.startsWith("#")) t = t.slice(1).trim();
+  if (t.startsWith("@")) t = t.slice(1).trim();
+  if (
+    (t.startsWith("(") && t.endsWith(")")) ||
+    (t.startsWith("[") && t.endsWith("]"))
+  ) {
+    t = t.slice(1, -1).trim();
+  }
+  if (!/^[A-Za-z_.$][A-Za-z0-9_.$]*$/.test(t)) return null;
+  return t.toUpperCase();
+}
+
+/**
+ * 単一の外部シンボル（アドレス、または `#SYM` 即値）を検出する。
+ * リンク時に絶対ワードアドレスを埋める W レコード（`SYM-=0000`）用。
+ * @param expr - オペランド文字列
+ * @param symbolInfos - シンボル情報表
+ * @return 大文字シンボル名。該当しなければ null
+ */
+export function matchExternalAbsReloc(
+  expr: string,
+  symbolInfos: SymbolInfoTable,
+): string | null {
+  const name = parseSimpleSymbolOperand(expr);
+  if (!name) return null;
+  const info = symbolInfos.get(name);
+  if (info?.kind !== "external") return null;
+  return name;
+}
+
+/**
+ * リンク後の絶対ワードアドレスが必要な 16bit オペランドを検出する。
+ * - external / global: Def 名で解決（`SYM-=0000`）
+ * - local かつ `_CODE` / `_DATA`: 同一領域内ワード＋領域基底（`#PC-=0000`）
+ * `.equ` やゼロページ / `_WORK` はアセンブル時確定なので null。
+ * @param expr - オペランド文字列
+ * @param symbolInfos - シンボル情報表
+ * @return リロケーション左右オペランド。不要なら null
+ */
+export function matchAbsAddrReloc(
+  expr: string,
+  symbolInfos: SymbolInfoTable,
+): { left: RelocOperand; right: RelocOperand } | null {
+  const name = parseSimpleSymbolOperand(expr);
+  if (!name) return null;
+  const info = symbolInfos.get(name);
+  if (!info) return null;
+  if (info.kind === "external" || info.kind === "global") {
+    return {
+      left: { kind: "symbol", name },
+      right: { kind: "const", value: 0 },
+    };
+  }
+  const area = info.area ? info.area.trim().toUpperCase() : "";
+  if (area !== "_CODE" && area !== "_DATA") return null;
+  return {
+    left: { kind: "word", value: info.value & 0xffff },
+    right: { kind: "const", value: 0 },
+  };
+}
+
+/**
  * `.word A - B` で、少なくとも一方が external のアドレス差を検出する。
  * 両方が定義済みなら null（アセンブル時に確定させる）。
  * @param expr - 式文字列

@@ -33,6 +33,13 @@
     ],
     "description": ".word データ定義"
   },
+  "Reserve storage": {
+    "prefix": "ds",
+    "body": [
+      "${1:LABEL}:\t.ds\t${2:1}"
+    ],
+    "description": ".ds 領域予約（LABEL: 必須。イメージに出さない）"
+  },
   "Equate": {
     "prefix": "equ",
     "body": [
@@ -52,7 +59,14 @@
     "body": [
       "MVI ${1:R0}, #${2:0}"
     ],
-    "description": "MVI 即値ロード"
+    "description": "MVI 即値ロード（8bit。# 必須）"
+  },
+  "Load word immediate": {
+    "prefix": "mvwi",
+    "body": [
+      "MVWI ${1:R0}, #${2:0}"
+    ],
+    "description": "MVWI ワード即値ロード（16bit。# 必須）"
   },
   "Branch": {
     "prefix": "b",

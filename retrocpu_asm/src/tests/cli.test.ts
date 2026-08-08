@@ -80,7 +80,7 @@ describe("parseArgs: --cpu / -m 必須", () => {
 });
 
 describe("assemble: CPU モード切替", () => {
-  const awiSrc = ["        .org 0", "        AWI R0, 1", ""].join("\n");
+  const awiSrc = ["        .org 0", "        AWI R0, #1", ""].join("\n");
   const balSrc = ["        .org 0", "L:      BAL L", ""].join("\n");
 
   test("mn1613 では AWI をアセンブルできる", () => {

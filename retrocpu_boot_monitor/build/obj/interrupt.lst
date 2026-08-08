@@ -1,0 +1,74 @@
+          ; mn1613_mon
+          ; 割り込みハンドラー
+          
+          ; 割り込み関連 IO ポート定義
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          
+          INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+          INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+          
+          ; 割り込み要因番号
+          INT_CAUSE_TIMER0	.equ	0
+          INT_CAUSE_TIMER1	.equ	1
+          INT_CAUSE_HSHK		.equ	2
+          
+          
+          ; ハンドラは _CODE、要因テーブル（値あり）は _DATA（ROM）
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_int_handler
+          	.global gl_handshake_interrupt_handler
+          
+          ; 割り込みハンドラー
+          gl_int_handler:
+          	; 割り込みハンドラー
+0000 170F  	pshm
+          	; 割り込み処理実行中フラグをセット
+0001 7807  	mvwi	R0, #1
+0002 0001 
+0003 1020  	wt	R0, INTERRUPT_BUSY
+          
+          	; IO命令で割り込み要因を取得
+0004 1821  	rd	R0, INT_CAUSE
+0005 680F  	andi	R0, #0b00000111
+0006 0007 
+          	; 左1Bitシフト
+0007 200C  	sl	R0
+          	; interrupt_sub_func のアドレスを取得
+0008 7B07  	mvwi	X0, #interrupt_sub_func
+0009 0000 
+000A 5B08  	a	X0, R0
+          	; 広域サブルーチンコール
+000B 2716  	balr	(R3)
+          
+          	; 割り込み処理実行中フラグをクリア
+000C 6000  	eor	R0, R0
+000D 1020  	wt	R0, INTERRUPT_BUSY
+000E 1707  	popm
+          	; 割り込み処理を終了
+000F 2006  	lpsw	2
+          
+          ; タイマー0割り込みハンドラー
+          ; IOボードのタイマー（ハンドシェイク 19h で設定）満了で呼ばれる
+          timer0_interrupt_handler:
+0010 2003  	ret
+          
+          ; タイマー1割り込みハンドラー
+          timer1_interrupt_handler:
+0011 2003  	ret
+          
+          	.area	_DATA		(REL,CON)
+          ; 割り込み要因ごとのハンドラー（ROM 定数テーブル）
+          interrupt_sub_func:
+          	; 割り込み要因0 タイマー0
+0000 0000  	.dw	0  					; CSBR=0
+0001 0010  	.dw	timer0_interrupt_handler
+          	; 割り込み要因1 タイマー1
+0002 0000  	.dw	0  					; CSBR=0
+0003 0011  	.dw	timer1_interrupt_handler
+          	; 割り込み要因2 ハンドシェイク
+0004 0000  	.dw	0  					; CSBR=0
+0005 0000  	.dw	gl_handshake_interrupt_handler
+          
+          
+          

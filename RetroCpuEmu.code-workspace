@@ -9,6 +9,10 @@
       "path": "./retrocpu_boot_monitor",
     },
     {
+      "name": "retrocpu_test_framework",
+      "path": "./retrocpu_test_framework",
+    },
+    {
       "name": "retrocpu_emu",
       "path": "./retrocpu_emu",
     },

@@ -1,0 +1,230 @@
+          ; handshake_timer.asm
+          ; タイマー設定（ハンドシェイク 19h）
+          ; 根拠: HandShake.mdc「タイマー設定」/ boot_monitor.mdc「タイマー割り込み」
+          ;
+          ; 線上 送信 6B: 19h, タイマー番号, 周期H, 周期L, 回数H, 回数L → 受信 1B: status
+          ; タイマーは IO ボード側にあり、番号 0 / 1 の 2 本。初期化直後は停止している。
+          ; 周期 0 で停止、回数 0 で無限。
+          ;
+          ; 引数は第1=R0、第2=R1、第3以降はスタック（asm-rules.mdc の呼び出し規約）。
+          ; R2-R4 は非破壊なので先頭で PUSH し、復帰前に逆順で POP する。
+          ; 送信フレームはスタック上に確保する（_WORK は使わない）。
+          
+          ; ハンドシェイク用IOポート定義（CPUボード視点）
+          ; 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc
+          ;
+          ; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
+          ; interrupt_io.inc と共有。二重 .equ を避けるため include する。
+          ; memmap.inc は .org を含むのでここからは include しない（各 .asm を個別アセンブルしてリンクする）。
+          ; 割り込み関連 IO ポート定義
+          ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+          
+          INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+          INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+          
+          ; 割り込み要因番号
+          INT_CAUSE_TIMER0	.equ	0
+          INT_CAUSE_TIMER1	.equ	1
+          INT_CAUSE_HSHK		.equ	2
+          
+          
+          ; ゼロページ _SYS_PAGE0（0x0008=GL_RND_SEED は bios_common.asm）
+          GL_HSHK_RECV_DATA	.equ	0x0009
+          
+          ; 制御信号ポート（同一アドレス、ビットで区別）
+          HSHK_CTRL	.equ	0x22
+          ; Bit0  HSHK_ENA（処理中／依頼受理）
+          ; Bit1  HSHK_DENA
+          ; Bit2  HSHK_DACK
+          ; Bit3  HSHK_REQ_0（CPU→IO 要求・CPU出力）
+          ; Bit4  HSHK_REQ_1（IO→CPU 要求・CPU入力／ポーリング）
+          
+          HSHK_IN_DATA	.equ	0x23	; CPU→IO データ Bit0-7
+          HSHK_OUT_DATA	.equ	0x24	; IO→CPU データ Bit0-7
+          
+          ; ビットマスク（LSB=Bit0）
+          HSHK_ENA_BIT	.equ	0x01
+          HSHK_DENA_BIT	.equ	0x02
+          HSHK_DACK_BIT	.equ	0x04
+          HSHK_REQ0_BIT	.equ	0x08
+          HSHK_REQ1_BIT	.equ	0x10
+          
+          ; INT_CAUSE_HSHK は interrupt_io.inc 側の定義を使用
+          
+          HSHK_OK		.equ	0x00
+          HSHK_NG		.equ	0x01
+          
+          ; CPU→IO コマンド（HandShake.mdc「コマンド概要」）
+          HSHK_CMD_TIMER_SET	.equ	0x19
+          
+          ; IO→CPU コマンド（HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」）
+          HSHK_CMD_BREAK_MEM_IO_SET	.equ	0x40
+          HSHK_CMD_BREAK_MEM_IO_CLR	.equ	0x41
+          HSHK_CMD_BREAK_INST_SET		.equ	0x42
+          HSHK_CMD_BREAK_INST_CLR		.equ	0x43
+          HSHK_CMD_CPU_STATUS_GET		.equ	0x48
+          HSHK_CMD_EXEC			.equ	0x49
+          HSHK_CMD_MEM_READ		.equ	0x50
+          HSHK_CMD_MEM_WRITE		.equ	0x51
+          HSHK_CMD_IO_READ		.equ	0x52
+          HSHK_CMD_IO_WRITE		.equ	0x53
+          HSHK_CMD_BREAK_HIST_GET		.equ	0x60
+          HSHK_CMD_IO_BASE		.equ	0x40
+          HSHK_CMD_IO_LAST		.equ	0x60
+          HSHK_CMD_IO_LIMIT		.equ	0x61
+          
+          ; IO→CPU コマンド後の残り受信バイト（cmd 除く）
+          HSHK_IRQ_PAY_40		.equ	9
+          HSHK_IRQ_PAY_41		.equ	1
+          HSHK_IRQ_PAY_42		.equ	5
+          HSHK_IRQ_PAY_43		.equ	1
+          HSHK_IRQ_PAY_49		.equ	4
+          HSHK_IRQ_STATUS_BYTES	.equ	0x28
+          
+          ; ENA=0 チェック: 最大10回
+          HSHK_ENA0_RETRY	.equ	10
+          HSHK_DELAY_50US	.equ	25
+          HSHK_DELAY_SPAN_MASK	.equ	0x1f
+          HSHK_WAIT_MAX	.equ	0xffff
+          
+          
+          	.area	_CODE		(REL,CON)
+          
+          	.global gl_bios_timer_set
+          	.global gl_hshk_initiate_send
+          	.global gl_hshk_send_byte
+          	.global gl_hshk_finalize_send
+          	.global gl_hshk_wait_req1_1
+          	.global gl_hshk_accept_request
+          	.global gl_hshk_recv_byte
+          	.global gl_hshk_finalize_recv
+          
+          BIOS_TIMER_FRAME_LEN	.equ	6
+          
+          ; -------------------------------------------------------
+          ; タイマー設定（19h）
+          ; @note 応答はハンドシェイク割り込みを使わず REQ_1 のポーリングで受け取る
+          ; @param R0 - タイマー番号（0 または 1）
+          ; @param R1 - 周期 ms（16bit、0 で停止）
+          ; @param S+2 - 回数（16bit、0 で無限）-スタック
+          ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG）
+          ; @Destruction R0, R1
+          ; -------------------------------------------------------
+          gl_bios_timer_set:
+0000 2201  	push	R2
+0001 2301  	push	R3
+0002 2401  	push	R4
+          
+          	; 第3引数（回数）。入口では S+2、3 PUSH 後は SP+5
+0003 7B0D  	mv	X0, SP
+0004 E205  	l	R2, 5(X0)
+          
+          	; 送信フレーム 6 ワードをスタックに確保（SP+1 … SP+6）
+0005 4506  	si	SP, #BIOS_TIMER_FRAME_LEN
+          
+          	; 1 ワード 1 バイト、上位バイト先
+0006 7B0D  	mv	X0, SP
+0007 7C08  	mv	R4, R0			; タイマー番号
+0008 7807  	mvwi	R0, #HSHK_CMD_TIMER_SET
+0009 0019 
+000A A001  	st	R0, 1(X0)
+000B 780C  	mv	R0, R4
+000C 680F  	andi	R0, #0x00ff
+000D 00FF 
+000E A002  	st	R0, 2(X0)
+000F 7009  	bswp	R0, R1
+0010 680F  	andi	R0, #0x00ff
+0011 00FF 
+0012 A003  	st	R0, 3(X0)
+0013 7809  	mv	R0, R1
+0014 680F  	andi	R0, #0x00ff
+0015 00FF 
+0016 A004  	st	R0, 4(X0)
+0017 700A  	bswp	R0, R2			; R2 = 回数
+0018 680F  	andi	R0, #0x00ff
+0019 00FF 
+001A A005  	st	R0, 5(X0)
+001B 780A  	mv	R0, R2
+001C 680F  	andi	R0, #0x00ff
+001D 00FF 
+001E A006  	st	R0, 6(X0)
+          
+001F 2617  	bald	gl_hshk_initiate_send
+0020 0000 
+0021 7908  	mv	R1, R0
+0022 7807  	mvwi	R0, #HSHK_OK
+0023 0000 
+0024 5148  	c	R1, R0, Z
+0025 CF33  	b	bios_timer_fail
+          
+0026 7B0D  	mv	X0, SP
+0027 4B01  	ai	X0, #1			; フレーム先頭
+0028 7C07  	mvwi	X1, #BIOS_TIMER_FRAME_LEN
+0029 0006 
+          bios_timer_send_lp:
+002A E000  	l	R0, 0(X0)
+002B 2617  	bald	gl_hshk_send_byte
+002C 0000 
+002D 7908  	mv	R1, R0
+002E 7807  	mvwi	R0, #HSHK_OK
+002F 0000 
+0030 5148  	c	R1, R0, Z
+0031 CF27  	b	bios_timer_fail
+0032 4B01  	ai	X0, #1
+0033 4441  	si	X1, #1, Z
+0034 CFF5  	b	bios_timer_send_lp
+          
+0035 2617  	bald	gl_hshk_finalize_send
+0036 0000 
+0037 7908  	mv	R1, R0
+0038 7807  	mvwi	R0, #HSHK_OK
+0039 0000 
+003A 5148  	c	R1, R0, Z
+003B CF1D  	b	bios_timer_fail
+          
+          	; 応答 1 バイトは IO→CPU の転送で届く。割り込みを待たず REQ_1 をポーリングする
+003C 2617  	bald	gl_hshk_wait_req1_1
+003D 0000 
+003E 7908  	mv	R1, R0
+003F 7807  	mvwi	R0, #HSHK_OK
+0040 0000 
+0041 5148  	c	R1, R0, Z
+0042 CF16  	b	bios_timer_fail
+          
+0043 2617  	bald	gl_hshk_accept_request
+0044 0000 
+0045 7908  	mv	R1, R0
+0046 7807  	mvwi	R0, #HSHK_OK
+0047 0000 
+0048 5148  	c	R1, R0, Z
+0049 CF0F  	b	bios_timer_fail
+          
+004A 2617  	bald	gl_hshk_recv_byte
+004B 0000 
+004C 7908  	mv	R1, R0
+004D 7807  	mvwi	R0, #HSHK_OK
+004E 0000 
+004F 5148  	c	R1, R0, Z
+0050 CF06  	b	bios_timer_recv_fail
+          
+0051 2617  	bald	gl_hshk_finalize_recv
+0052 0000 
+          
+0053 C009  	l	R0, *GL_HSHK_RECV_DATA
+0054 680F  	andi	R0, #0x00ff
+0055 00FF 
+0056 CF04  	b	bios_timer_done
+          
+          bios_timer_recv_fail:
+0057 2617  	bald	gl_hshk_finalize_recv
+0058 0000 
+          bios_timer_fail:
+0059 7807  	mvwi	R0, #HSHK_NG
+005A 0001 
+          bios_timer_done:
+005B 4D06  	ai	SP, #BIOS_TIMER_FRAME_LEN
+005C 2402  	pop	R4
+005D 2302  	pop	R3
+005E 2202  	pop	R2
+005F 2003  	ret
+          

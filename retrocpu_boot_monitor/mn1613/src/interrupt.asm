@@ -1,36 +1,39 @@
 ; mn1613_mon
 ; 割り込みハンドラー
 
-.include "interrupt_io.inc"
+	.include "interrupt_io.inc"
 
-.global gl_int_handler
-.global gl_handshake_interrupt_handler
+; ハンドラは _CODE、要因テーブル（値あり）は _DATA（ROM）
+	.area	_CODE		(REL,CON)
+
+	.global gl_int_handler
+	.global gl_handshake_interrupt_handler
 
 ; 割り込みハンドラー
 gl_int_handler:
 	; 割り込みハンドラー
 	pshm
 	; 割り込み処理実行中フラグをセット
-	mvi	R0, 1
+	mvwi	R0, #1
 	wt	R0, INTERRUPT_BUSY
 
 	; IO命令で割り込み要因を取得
 	rd	R0, INT_CAUSE
-	andi	R0, 0b00000111
+	andi	R0, #0b00000111
 	; 左1Bitシフト
 	sl	R0
 	; interrupt_sub_func のアドレスを取得
-	mvwi	X0, interrupt_sub_func
+	mvwi	X0, #interrupt_sub_func
 	a	X0, R0
 	; 広域サブルーチンコール
 	balr	(R3)
 
 	; 割り込み処理実行中フラグをクリア
-	mvi	R0, 0
+	eor	R0, R0
 	wt	R0, INTERRUPT_BUSY
 	popm
 	; 割り込み処理を終了
-	lpsw    2
+	lpsw	2
 
 ; タイマー0割り込みハンドラー
 ; IOボードのタイマー（ハンドシェイク 19h で設定）満了で呼ばれる
@@ -41,7 +44,8 @@ timer0_interrupt_handler:
 timer1_interrupt_handler:
 	ret
 
-; 割り込み要因ごとのハンドラー
+	.area	_DATA		(REL,CON)
+; 割り込み要因ごとのハンドラー（ROM 定数テーブル）
 interrupt_sub_func:
 	; 割り込み要因0 タイマー0
 	.dw	0  					; CSBR=0

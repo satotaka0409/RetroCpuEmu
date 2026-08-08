@@ -31,6 +31,12 @@ const DATA_REF_DIRECTIVES = new Set([
   ".DB",
   "BYTE",
   ".BYTE",
+  "DS",
+  ".DS",
+  "BLKW",
+  ".BLKW",
+  "BLKB",
+  ".BLKB",
   "GLOBAL",
   ".GLOBAL",
   "GLOBL",
@@ -106,6 +112,10 @@ function collectOperandRefs(
   const re = /[A-Za-z_.$][A-Za-z0-9_.$]*/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(cleaned)) !== null) {
+    // `0b11100000` / `0xFFFF` の先頭 0 の直後を識別子にしない
+    if (m.index > 0 && /[A-Za-z0-9_.$]/.test(cleaned.charAt(m.index - 1))) {
+      continue;
+    }
     const up = m[0].toUpperCase();
     if (seen.has(up)) continue;
     if (arch.registers.has(up)) continue;
@@ -193,7 +203,8 @@ export function parseAsmLine(
     };
   }
 
-  if (isDirectiveToken(mnemonic, arch)) {
+  // `.ds` / `.area` など、ドット始まりは疑似命令（一覧に無くても未知命令にしない）
+  if (isDirectiveToken(mnemonic, arch) || mnemonic.startsWith(".")) {
     const refs = isLabelRefDirective(mnemonic)
       ? collectLabelRefs(body, arch)
       : [];

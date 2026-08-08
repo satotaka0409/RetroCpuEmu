@@ -173,6 +173,62 @@ describe("assembler: エラー系 - 即値オーバーフロー", () => {
   });
 });
 
+// ─── 即値の # 必須 ───────────────────────────────────────────────────────────
+
+describe("assembler: エラー系 - 即値は # 必須", () => {
+  test("MVI に # が無いとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        MVI R0, 0x55\n"),
+      /immediate operand requires '#'/i,
+    );
+  });
+
+  test("MVWI に # が無いとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        MVWI R0, 0x19\n"),
+      /immediate operand requires '#'/i,
+    );
+  });
+
+  test("MVWI のシンボル即値も # が無いとエラー", () => {
+    assert.throws(
+      () =>
+        assemble(
+          "CMD .equ 0x19\n        .org 0\n        MVWI R0, CMD\n",
+        ),
+      /immediate operand requires '#'/i,
+    );
+  });
+
+  test("AI に # が無いとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        AI R0, 1\n"),
+      /immediate operand requires '#'/i,
+    );
+  });
+
+  test("ANDI に # が無いとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        ANDI R0, 0x00FF\n"),
+      /immediate operand requires '#'/i,
+    );
+  });
+
+  test("LPSW に # を付けるとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        LPSW #2\n"),
+      /LPSW level must not use '#'/i,
+    );
+  });
+
+  test("LD のアドレスに # を付けるとエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        LD R0, #0x0100\n"),
+      /address operand must not use '#'/i,
+    );
+  });
+});
+
 // ─── 相対アドレス範囲外 ───────────────────────────────────────────────────────
 
 describe("assembler: エラー系 - 相対アドレス範囲外", () => {
@@ -233,6 +289,97 @@ describe("assembler: エラー系 - 未定義ラベル", () => {
     assert.throws(
       () => assemble("        .org 0\n        .word UNDEF_CONST\n"),
       /Undefined symbol.*UNDEF_CONST/i,
+    );
+  });
+});
+
+// ─── 第1欄（左端）はラベル専用 ───────────────────────────────────────────────
+
+describe("assembler: エラー系 - 疑似命令は字下げ必須", () => {
+  test("左端の .org はエラー", () => {
+    assert.throws(
+      () => assemble(".org 0\n        H\n"),
+      /pseudo-op must not start in column 1/i,
+    );
+  });
+
+  test("左端の .area はエラー", () => {
+    assert.throws(
+      () => assemble(".area _CODE\n        H\n"),
+      /pseudo-op must not start in column 1/i,
+    );
+  });
+
+  test("字下げした .org は通る", () => {
+    assert.doesNotThrow(() => assemble("        .org 0\n        H\n"));
+  });
+
+  test("LABEL .equ は左端がラベルなので通る", () => {
+    const r = assemble("FOO\t.equ\t0x10\n        .org 0\n        H\n");
+    assert.equal(r.symbols.get("FOO"), 0x10);
+  });
+});
+
+describe("assembler: エラー系 - .area _WORK / .ds", () => {
+  test("_WORK に命令はエラー", () => {
+    assert.throws(
+      () =>
+        assemble(`
+	.area	_WORK
+	.org	0x1700
+	H
+`),
+      /noload area _WORK/i,
+    );
+  });
+
+  test("_WORK に .word はエラー", () => {
+    assert.throws(
+      () =>
+        assemble(`
+	.area	_WORK
+	.org	0x1700
+	.word	0
+`),
+      /cannot have initial values/i,
+    );
+  });
+
+  test(".area に名前が無いとエラー", () => {
+    assert.throws(
+      () => assemble("        .area\n        H\n"),
+      /\.area requires a name/i,
+    );
+  });
+
+  test("未知の .area フラグはエラー", () => {
+    assert.throws(
+      () => assemble("        .area _CODE (REL,FOO)\n        H\n"),
+      /unknown \.area flag 'FOO'/i,
+    );
+  });
+
+  test(".ds の引数が無いとエラー", () => {
+    assert.throws(
+      () =>
+        assemble(`
+	.area	_WORK
+	.org	0x1700
+	.ds
+`),
+      /\.ds requires one argument/i,
+    );
+  });
+
+  test(".ds はラベルにコロンが必要（NAME .ds は不可）", () => {
+    assert.throws(
+      () =>
+        assemble(`
+	.area	_WORK
+	.org	0x1700
+VAR	.ds	1
+`),
+      /label must end with ':'/i,
     );
   });
 });

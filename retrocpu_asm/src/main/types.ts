@@ -11,6 +11,8 @@ export type SymbolKind = "local" | "global" | "external";
 export interface SymbolInfo {
   value: number;
   kind: SymbolKind;
+  /** ラベルが属する `.area`（`.equ` は無し） */
+  area?: string;
 }
 
 /** 大文字化したシンボル名をキーにした定義済みシンボル値（ワード） */
@@ -22,21 +24,25 @@ export type SymbolInfoTable = Map<string, SymbolInfo>;
 /**
  * ワード差リロケーションのオペランド。
  * - symbol: 外部/グローバルの Def（バイト）をリンク時にワードへ変換
- * - word: モジュール内のワードアドレス（ローカル等、アセンブル時確定）
+ * - word: モジュール内のワードアドレス（ローカル等、アセンブル時確定。領域基底を足す）
+ * - const: 絶対定数（領域基底を足さない。BALD 外部の `SYM-=0000` など）
  */
 export type RelocOperand =
   | { kind: "symbol"; name: string }
-  | { kind: "word"; value: number };
+  | { kind: "word"; value: number }
+  | { kind: "const"; value: number };
 
 /**
  * アドレス差をリンク時に埋めるリロケーション。
  * 値 = resolve(left) - resolve(right)（いずれもワード数）。
  */
 export interface WordDiffReloc {
-  /** パッチ先のバイトアドレス（モジュール内） */
+  /** パッチ先のバイトアドレス（領域内オフセット） */
   byteAddr: number;
   left: RelocOperand;
   right: RelocOperand;
+  /** パッチ先の `.area`。省略時は `_CODE` */
+  area?: string;
 }
 
 /** 元ソース1行分（行番号付き） */
@@ -54,12 +60,22 @@ export interface ParsedLine extends SourceLine {
 
 /** ソース行に対応づいた出力1ワード */
 export interface EmittedWord {
-  /** ワードアドレス */
+  /** 領域内アドレス（MN161x: ワード / TMS: バイト） */
   address: number;
   /** 16bit値 */
   value: number;
   lineNo: number;
   source: string;
+  /** 属する `.area`（未宣言時は `_CODE`） */
+  area: string;
+}
+
+/** アセンブル結果の 1 領域 */
+export interface AreaInfo {
+  name: string;
+  /** アドレス単位でのサイズ（MN161x: ワード / TMS: バイト） */
+  size: number;
+  noload: boolean;
 }
 
 /** アセンブル結果一式（出力語・シンボル・元ソース） */
@@ -69,8 +85,10 @@ export interface AssemblyResult {
   symbols: SymbolTable;
   /** local / global / external を含むシンボル情報 */
   symbolInfos: SymbolInfoTable;
-  /** 外部を含むアドレス引き算のリロケーション */
+  /** 外部を含むアドレス引き算・絶対アドレス（BALD / .dw 等）のリロケーション */
   relocs: WordDiffReloc[];
+  /** `.area` ごとのサイズ（リンク順に並べる） */
+  areas: AreaInfo[];
   sourceLines: SourceLine[];
   /** アセンブル対象 CPU */
   cpuType: CpuType;

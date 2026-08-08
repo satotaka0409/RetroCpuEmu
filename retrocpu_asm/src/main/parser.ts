@@ -240,6 +240,7 @@ interface ParsedBody {
 
 /**
  * SDAS 流 `NAME .equ value`（コロンなし）を試す。
+ * `.ds` / `.blkw` はラベルなので `NAME:` が必須（この形式では受けない）。
  * マッチしなければ null。
  */
 function tryParseSdasStyleEqu(
@@ -283,10 +284,19 @@ function parseBody(body: string): ParseResult<ParsedBody> {
     return ok({ label: labelRes.value, args: [] }, cur);
   }
 
-  // SDAS流: NAME .equ value（コロンなし）
+  // SDAS流: NAME .equ value（コロンなし）。.ds / .blkw は NAME: が必須
   if (!labelRes.value) {
     const sdasEqu = tryParseSdasStyleEqu(body, cur);
     if (sdasEqu) return sdasEqu;
+    const dsNoColon = body.slice(cur).match(
+      /^([A-Za-z_.$][A-Za-z0-9_.$]*)[ \t]+(\.ds|\.blkw)\b/i,
+    );
+    if (dsNoColon) {
+      return ng(
+        `${dsNoColon[2]} label must end with ':' (write ${dsNoColon[1]}: ${dsNoColon[2]} ...)`,
+        cur,
+      );
+    }
   }
 
   const opRes: ParseResult<string> = opToken(body, cur);
@@ -342,10 +352,20 @@ export function parseSource(text: string): {
     const lineNo: number = i + 1;
     sourceLines.push({ lineNo, text: raw });
 
-    const body: string = stripComment(raw).trim();
+    const stripped: string = stripComment(raw);
+    const body: string = stripped.trim();
     if (!body) {
       parsed.push({ lineNo, text: raw, args: [] });
       continue;
+    }
+
+    // sdas/asxxxx: 第1欄（左端）はラベル専用。疑似命令は字下げする。
+    // sdas 自体は '.' を LETTER 扱いするので左端の .area でも通るが、
+    // ラベルと疑似命令が区別できなくなるためここではエラーにする。
+    if (stripped.startsWith(".")) {
+      throw new Error(
+        `Line ${lineNo}: pseudo-op must not start in column 1 (indent .area/.org/.include/.equ; labels go in column 1)`,
+      );
     }
 
     const bodyRes: ParseResult<ParsedBody> = parseBody(body);
