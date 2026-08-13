@@ -115,6 +115,17 @@ export interface CpuToIoHandlers {
   onUndefLed(on: boolean): number;
 
   /**
+   * ブレイク通知 (cmd=0x18): 比較器ヒットで CPU がモニタへ戻るとき。
+   * kind: 0=命令 / 1=メモリ / 2=IO / 3=ステップ。slot: 0–7。
+   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。
+   */
+  onBreakNotify(info: {
+    kind: number;
+    slot: number;
+    addr: number;
+  }): number;
+
+  /**
    * LCD制御 (cmd=0x19): Clear/Home/DisplayCtrl/SetCursor。モード不問。
    * @param frame コマンドを含む 5 バイト
    */
@@ -152,6 +163,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.TIME_GET]: 1,
   /** 未定義命令LED: cmd(1) + Bit0(1) = 2バイト */
   [CMD_CPU_TO_IO.UNDEF_LED]: 2,
+  /** ブレイク通知: cmd(1) + 区分(1) + 設定番号(1) + addr32(4) = 7バイト */
+  [CMD_CPU_TO_IO.BREAK_NOTIFY]: 7,
   /** LCD制御: cmd(1) + kind(1) + argA(1) + argB(1) + argC(1) = 5バイト */
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
@@ -172,6 +185,7 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.TIMER_SET]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET] - 1,
   [CMD_CPU_TO_IO.TIME_GET]: 0,
   [CMD_CPU_TO_IO.UNDEF_LED]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED] - 1,
+  [CMD_CPU_TO_IO.BREAK_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY] - 1,
   [CMD_CPU_TO_IO.LCD_CTRL]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL] - 1,
   [CMD_CPU_TO_IO.LCD_TEXT]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_TEXT] - 1,
 };
@@ -249,6 +263,8 @@ export class CpuToIoCommandDispatcher {
         return this._handleTimeGet();
       case CMD_CPU_TO_IO.UNDEF_LED:
         return this._handleUndefLed(frame);
+      case CMD_CPU_TO_IO.BREAK_NOTIFY:
+        return this._handleBreakNotify(frame);
       case CMD_CPU_TO_IO.LCD_CTRL:
         return this._handleLcdControl(frame);
       case CMD_CPU_TO_IO.LCD_TEXT:
@@ -386,6 +402,25 @@ export class CpuToIoCommandDispatcher {
     }
     const result = this.handlers.onUndefLed(flag === 1);
     return new Uint8Array([result]);
+  }
+
+  /**
+   * ブレイク通知 (0x18)
+   * 区分 0–3、スロット 0–7。応答: 1バイト (OK / NG)
+   */
+  private _handleBreakNotify(frame: Uint8Array): Uint8Array {
+    const kind = frame[0x01]! & 0xff;
+    const slot = frame[0x02]! & 0xff;
+    if (kind > 3 || slot > 7) {
+      return new Uint8Array([RESPONSE_CODE.NG]);
+    }
+    const addr =
+      ((frame[0x03]! & 0xff) << 24) |
+      ((frame[0x04]! & 0xff) << 16) |
+      ((frame[0x05]! & 0xff) << 8) |
+      (frame[0x06]! & 0xff);
+    const result = this.handlers.onBreakNotify({ kind, slot, addr });
+    return new Uint8Array([result & 0xff]);
   }
 
   /**

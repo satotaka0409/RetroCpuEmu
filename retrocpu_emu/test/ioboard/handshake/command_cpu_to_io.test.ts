@@ -42,6 +42,7 @@ function makeMockHandlers(): CpuToIoHandlers {
       status: RESPONSE_CODE.OK,
     }),
     onUndefLed: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
+    onBreakNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdControl: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdText: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
   };
@@ -67,6 +68,9 @@ describe("CPU_FRAME_SIZE", () => {
   });
   it("未定義命令LED は 2 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED]).toBe(2);
+  });
+  it("ブレイク通知は 7 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(7);
   });
   it("LCD制御は 5 バイト、文字列表示は 20 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(5);
@@ -360,6 +364,43 @@ describe("CpuToIoCommandDispatcher — 未定義命令LED(0x17)", () => {
       new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 2]),
     );
     expect(handlers.onUndefLed).not.toHaveBeenCalled();
+    expect(response[0]).toBe(RESPONSE_CODE.NG);
+  });
+});
+
+describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
+  let handlers: CpuToIoHandlers;
+  let dispatcher: CpuToIoCommandDispatcher;
+
+  beforeEach(() => {
+    handlers = makeMockHandlers();
+    dispatcher = new CpuToIoCommandDispatcher(handlers);
+  });
+
+  it("18h を onBreakNotify へ渡し OK を返す", () => {
+    const frame = new Uint8Array([
+      CMD_CPU_TO_IO.BREAK_NOTIFY,
+      1,
+      3,
+      0x00,
+      0x00,
+      0x30,
+      0x00,
+    ]);
+    const response = dispatcher.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith({
+      kind: 1,
+      slot: 3,
+      addr: 0x00003000,
+    });
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
+
+  it("区分やスロットが範囲外なら NG", () => {
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.BREAK_NOTIFY, 4, 0, 0, 0, 0, 0]),
+    );
+    expect(handlers.onBreakNotify).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);
   });
 });

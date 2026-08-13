@@ -45,7 +45,7 @@ CDB           := $(HEX_DIR)/$(TARGET_NAME).cdb
 ASM_SRCS := \
 	$(SRC_DIR)/main.asm \
 	$(SRC_DIR)/interrupt.asm \
-	$(SRC_DIR)/breakpoint/breadpoint.asm \
+	$(SRC_DIR)/breakpoint/breakpoint.asm \
 	$(SRC_DIR)/bios/bios_common.asm \
 	$(SRC_DIR)/handshake/handshake_common.asm \
 	$(SRC_DIR)/handshake/handshake_main.asm \
@@ -66,7 +66,7 @@ ASM_SRCS := \
 
 REL_MAIN      := $(OBJ_DIR)/main.rel
 REL_INT       := $(OBJ_DIR)/interrupt.rel
-REL_BP        := $(OBJ_DIR)/breadpoint.rel
+REL_BP        := $(OBJ_DIR)/breakpoint.rel
 REL_HSHK_C    := $(OBJ_DIR)/handshake_common.rel
 REL_HSHK_M    := $(OBJ_DIR)/handshake_main.rel
 REL_HSHK_AB   := $(OBJ_DIR)/handshake_address_break.rel
@@ -162,7 +162,7 @@ $(REL_MAIN): $(SRC_DIR)/main.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 $(REL_INT): $(SRC_DIR)/interrupt.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module INTERRUPT
 
-$(REL_BP): $(SRC_DIR)/breakpoint/breadpoint.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
+$(REL_BP): $(SRC_DIR)/breakpoint/breakpoint.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module BREAKPOINT
 
 $(REL_HSHK_C): $(SRC_DIR)/handshake/handshake_common.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)

@@ -52,6 +52,8 @@ import { addrComparators } from "./addr_comparator";
 const MEM_WORDS = 0x40000; // 256K words
 let _memory: ArrayBufferLike = new ArrayBuffer(MEM_WORDS * 2);
 let _memView: DataView = new DataView(_memory);
+/** IO ポートごとの直近書込値（WRITE ブレイクの 0034 用 BEFORE） */
+const _ioLastWrite = new Map<number, number>();
 
 /** SharedArrayBuffer 可（CPU / IO ワーカ間で RAM を共有するとき） */
 export function setMemory(buf: ArrayBufferLike): void {
@@ -239,6 +241,7 @@ export function powerOnIdle(): void {
     setOutputLevel(p, false);
     p[1] = false;
   }
+  _ioLastWrite.clear();
 }
 
 /** CPU をリセットする（MN1613 仕様: IO:0 の RESET_VECTOR → IC、実行開始、NPP=1） */
@@ -261,6 +264,7 @@ export function reset(): void {
   };
   _stepMode = false;
   _pendingIRQ = 0;
+  _ioLastWrite.clear();
   // 入力 [0] は外部駆動のまま残し、エッジ再発火を防ぐため [1] を同期
   for (const p of _inputPins) {
     clearDeferred(p);
@@ -662,8 +666,18 @@ function _doIoWrite(port: number, val: number): void {
   setOutputLevel(_pinIOP, true);
   setOutputLevel(_pinWRT, true);
   _addClocks(CPU_CLK_PER_ACCESS);
-  _ioWrite(port, val);
-  addrComparators.probe({ addr: port & 0xffff, io: true, write: true });
+  const p = port & 0xffff;
+  const prev = _ioLastWrite.get(p) ?? 0;
+  const after = val & 0xffff;
+  _ioWrite(p, after);
+  _ioLastWrite.set(p, after);
+  addrComparators.probe({
+    addr: p,
+    io: true,
+    write: true,
+    data: after,
+    prev,
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -708,10 +722,19 @@ function _wrPhys(phys: number, val: number): void {
   _addClocks(CPU_CLK_PER_ACCESS);
   const p = phys & 0x3ffff;
   const b = p * 2;
+  const after = val & 0xffff;
+  const prev =
+    b + 1 >= _memView.byteLength ? 0xffff : _memView.getUint16(b, false);
   if (b + 1 < _memView.byteLength) {
-    _memView.setUint16(b, val & 0xffff, false);
+    _memView.setUint16(b, after, false);
   }
-  addrComparators.probe({ addr: p, io: false, write: true });
+  addrComparators.probe({
+    addr: p,
+    io: false,
+    write: true,
+    data: after,
+    prev,
+  });
 }
 
 /**

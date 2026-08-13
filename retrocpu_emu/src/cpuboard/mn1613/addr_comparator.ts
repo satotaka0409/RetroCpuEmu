@@ -1,6 +1,6 @@
 /**
  * CPU ボード CPLD 相当のアドレス比較器（8 本）
- * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc（IO 0030–0033）/
+ * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc（IO 0030–0034）/
  *       HandShake.mdc / retrocpu_debug.mdc（比較器ブレイク）
  *
  * 一致時は呼び出し側が INT2・要因 4 を上げる（本モジュールはヒット判定とレジスタのみ）。
@@ -17,6 +17,8 @@ export const IO_PORT_BREAK_ADDR_LO = 0x0031;
 export const IO_PORT_BREAK_ADDR_HI = 0x0032;
 /** IO:0033 — 直近に一致した比較器番号（CPU 読取） */
 export const IO_PORT_BREAK_HIT = 0x0033;
+/** IO:0034 — ヒットしたスロットの前回書き込み値（READ 時は不定） */
+export const IO_PORT_BREAK_PREV = 0x0034;
 
 /** Bit5–6: READ のみ */
 export const BREAK_RDWR_RD = 0b01;
@@ -43,6 +45,10 @@ export type AddrBusAccess = {
   io: boolean;
   /** true=WRITE、false=READ */
   write: boolean;
+  /** WRITE 時の書込後値（AFTER） */
+  data?: number;
+  /** WRITE 時の書込前値（BEFORE）。省略時は 0 */
+  prev?: number;
 };
 
 /**
@@ -112,7 +118,9 @@ export function slotMatches(
 }
 
 /**
- * 8 本のアドレス比較器。IO 0030–0033 で設定・取得する。
+ * 8 本のアドレス比較器。IO 0030–0034 で設定・取得する。
+ * 0034 は WRITE ヒット時の書込前値（CPLD が保持する前回値）。
+ * 0033 を読んでから 0034 を読む（マップの取得順）。
  */
 export class AddrComparatorBank {
   private readonly slots: AddrComparatorSlot[];
@@ -122,6 +130,10 @@ export class AddrComparatorBank {
   private addrHiLatch = 0;
   /** 直近ヒットしたスロット。無しは 0xFFFF */
   private lastHit = 0xffff;
+  /** スロットごとの WRITE ヒット時の書込前値（0034 のバックアップ） */
+  private prevWrite: number[];
+  /** 0033 読取でラッチした 0034 値（READ ヒットは 0） */
+  private prevLatch = 0;
   /** ヒット時コールバック（INT2 要因4 など） */
   private onHit: ((slot: number) => void) | null = null;
 
@@ -133,6 +145,7 @@ export class AddrComparatorBank {
       rdwr: 0,
       addr: 0,
     }));
+    this.prevWrite = Array.from({ length: CPLD_COMPARATOR_COUNT }, () => 0);
   }
 
   /**
@@ -155,6 +168,8 @@ export class AddrComparatorBank {
     this.addrLoLatch = 0;
     this.addrHiLatch = 0;
     this.lastHit = 0xffff;
+    this.prevLatch = 0;
+    this.prevWrite.fill(0);
   }
 
   /**
@@ -198,6 +213,13 @@ export class AddrComparatorBank {
   probe(access: AddrBusAccess): number {
     for (let i = 0; i < CPLD_COMPARATOR_COUNT; i += 1) {
       if (slotMatches(this.slots[i]!, access)) {
+        if (access.write) {
+          const before = (access.prev ?? 0) & 0xffff;
+          this.prevWrite[i] = before;
+          this.prevLatch = before;
+        } else {
+          this.prevLatch = 0;
+        }
         this.lastHit = i;
         this.onHit?.(i);
         return i;
@@ -207,7 +229,7 @@ export class AddrComparatorBank {
   }
 
   /**
-   * IO リード（0030–0033）。
+   * IO リード（0030–0034）。
    * @param port ポート番号
    * @returns 16bit。対象外は null
    */
@@ -223,7 +245,16 @@ export class AddrComparatorBank {
       return this.addrHiFromSelected();
     }
     if (p === IO_PORT_BREAK_HIT) {
-      return this.lastHit === 0xffff ? 0xffff : this.lastHit & 0x07;
+      if (this.lastHit === 0xffff) {
+        this.prevLatch = 0;
+        return 0xffff;
+      }
+      const slot = this.lastHit & 0x07;
+      this.prevLatch = this.prevWrite[slot]! & 0xffff;
+      return slot;
+    }
+    if (p === IO_PORT_BREAK_PREV) {
+      return this.prevLatch & 0xffff;
     }
     return null;
   }
@@ -252,7 +283,7 @@ export class AddrComparatorBank {
       this.applyCtrlToSlot();
       return true;
     }
-    if (p === IO_PORT_BREAK_HIT) {
+    if (p === IO_PORT_BREAK_HIT || p === IO_PORT_BREAK_PREV) {
       return true;
     }
     return false;

@@ -175,10 +175,14 @@ l_next_handshake:
 	bald	g_handshake_interrupt_handler
 	pop	X1
 	push	X1
-	; ブレイクポイント割り込みハンドラー
+	; ブレイクポイント割り込みハンドラー（要因 4）
 	l	R0, 1(X1)
-	cbi	R0, #4, NZ
+	cbi	R0, #4, Z
+	b	l_int2_epilogue
 	bald	g_breakpoint_interrupt_handler
+	or	R0, R0, Z
+	b	l_int2_halt
+l_int2_epilogue:
 	pop	X1
 	; 割り込み処理実行中フラグをクリア
 	eor	R0, R0
@@ -191,6 +195,17 @@ l_next_handshake:
 	setb	R0, TSR0
 	popm
 	lpsw	2
+l_int2_halt:
+	pop	X1
+	eor	R0, R0
+	wt	R0, INTERRUPT_BUSY
+	ai	SP, #1
+	pop	R1
+	pop	R0
+	setb	R1, TSR1
+	setb	R0, TSR0
+	popm
+	bd	g_main_loop
 
 ; -------------------------------------------------------
 ; INT3 割り込みハンドラー

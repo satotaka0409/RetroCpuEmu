@@ -1,8 +1,8 @@
 /**
- * CPLD アドレス比較器（IO:0030–0033）
+ * CPLD アドレス比較器（IO:0030–0034）
  * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc / HandShake.mdc（要因 4）
  *
- * 設定・読取と、一致時の INT2・INT_CAUSE=4 を確認する。
+ * 設定・読取と、一致時の INT2・INT_CAUSE=4・0034 前回書込値を確認する。
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -15,6 +15,7 @@ import {
   IO_PORT_BREAK_ADDR_LO,
   IO_PORT_BREAK_CTRL,
   IO_PORT_BREAK_HIT,
+  IO_PORT_BREAK_PREV,
   addrComparators,
 } from "../../src/cpuboard/mn1613/addr_comparator";
 import {
@@ -83,7 +84,7 @@ function wtPort(port: number, val: number): void {
   runSteps([0x7807, val & 0xffff, 0x1000 | (port & 0xff), 0x2000], 3);
 }
 
-describe("アドレス比較器 IO:0030–0033", () => {
+describe("アドレス比較器 IO:0030–0034", () => {
   beforeEach(() => {
     setMemory(new ArrayBuffer(0x10000));
     setPins({ HLT: false, RST: false, IRQ0: false, IRQ1: false, IRQ2: false });
@@ -126,6 +127,7 @@ describe("アドレス比較器 IO:0030–0033", () => {
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(2);
+    expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0);
   });
 
   it("MEM WRITE のみ監視のとき READ では上がらない", () => {
@@ -146,6 +148,25 @@ describe("アドレス比較器 IO:0030–0033", () => {
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(0);
+    expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0x1111);
+    runSteps([0x7807, 0x3333, 0x2748, watch, 0x2000], 2);
+    expect(rdPort(IO_PORT_BREAK_HIT)).toBe(0);
+    expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0x2222);
+  });
+
+  it("0033 の次に 0034 を読むと書込前値が取れる", () => {
+    const watch = 0x0400;
+    new DataView(getMemory()).setUint16(watch * 2, 0xabcd, false);
+    wtPort(IO_PORT_BREAK_ADDR_LO, watch);
+    wtPort(IO_PORT_BREAK_ADDR_HI, 0);
+    wtPort(
+      IO_PORT_BREAK_CTRL,
+      encodeBreakCtrl(1, true, false, BREAK_RDWR_WR),
+    );
+
+    runSteps([0x7807, 0x1000, 0x2748, watch, 0x2000], 2);
+    expect(rdPort(IO_PORT_BREAK_HIT)).toBe(1);
+    expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0xabcd);
   });
 
   it("IO アクセス一致でも INT2・要因4 が立つ", () => {
@@ -161,5 +182,6 @@ describe("アドレス比較器 IO:0030–0033", () => {
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(5);
+    expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0);
   });
 });

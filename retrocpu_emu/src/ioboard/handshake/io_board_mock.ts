@@ -65,6 +65,8 @@ export type IoBoardMockState = {
   /** 未定義命令LED（17h）。true=点灯 */
   undefLed: boolean;
   addrBreakNo: number;
+  /** 直近のブレイク通知（18h）。未受信は null */
+  lastBreakNotify: { kind: number; slot: number; addr: number } | null;
   /** 64bit タイマー（上位バイトが [0]） */
   timestamp: Uint8Array;
   log: IoBoardMockLogEntry[];
@@ -110,6 +112,7 @@ export function createIoBoardCommandState(): IoBoardMockState {
     lastTimer: null,
     undefLed: false,
     addrBreakNo: 0,
+    lastBreakNotify: null,
     timestamp: new Uint8Array(8),
     log: [],
   };
@@ -130,6 +133,7 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
   state.lastTimer = fresh.lastTimer;
   state.undefLed = fresh.undefLed;
   state.addrBreakNo = fresh.addrBreakNo;
+  state.lastBreakNotify = fresh.lastBreakNotify;
   state.timestamp = fresh.timestamp;
   state.log = fresh.log;
   resetUndefLed();
@@ -206,6 +210,14 @@ export function createDefaultCpuToIoHandlers(
     onUndefLed(on) {
       state.undefLed = on;
       applyUndefLedCommand(on);
+      return RESPONSE_CODE.OK;
+    },
+    onBreakNotify(info) {
+      state.lastBreakNotify = {
+        kind: info.kind & 0xff,
+        slot: info.slot & 0xff,
+        addr: info.addr >>> 0,
+      };
       return RESPONSE_CODE.OK;
     },
     onLcdControl(frame) {

@@ -18,6 +18,15 @@
     "editor.indentSize": "tabSize",
     "editor.formatOnSave": false,
     "editor.defaultFormatter": "retrocpuemu.retro-asm-editor",
-    "files.trimTrailingWhitespace": false
+    "files.trimTrailingWhitespace": false,
+    "editor.inlineSuggest.enabled": false,
+    "editor.quickSuggestions": {
+      "other": false,
+      "comments": false,
+      "strings": false
+    },
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.wordBasedSuggestions": "off",
+    "editor.snippetSuggestions": "none"
   }
 }

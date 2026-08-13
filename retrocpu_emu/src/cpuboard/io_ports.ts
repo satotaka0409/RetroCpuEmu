@@ -4,7 +4,7 @@
  *
  * 0000 RESET_VECTOR — リセット時 CPU が読む起動 IC
  * 0020〜0024 — ハンドシェイク（任意で bridge 接続）
- * 0030〜0033 — CPLD アドレス比較器（設定・ヒット読取）
+ * 0030〜0034 — CPLD アドレス比較器（設定・ヒット・前回書込値）
  */
 
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
@@ -23,6 +23,7 @@ import {
   IO_PORT_BREAK_ADDR_LO,
   IO_PORT_BREAK_CTRL,
   IO_PORT_BREAK_HIT,
+  IO_PORT_BREAK_PREV,
 } from "./mn1613/addr_comparator";
 import { INT_CAUSE_CODE } from "../shared/handshake/handshake_type";
 
@@ -103,7 +104,7 @@ function raiseAddrBreakIrq(_slot: number): void {
 /**
  * CPU の RD/WT コールバックを IO ボードポートに接続する。
  * 既存のハンドシェイク bridge があれば 0x20〜0x24 を委譲する。
- * 0030〜0033 は CPLD 比較器。一致時は INT2・要因 4。
+ * 0030〜0034 は CPLD 比較器。一致時は INT2・要因 4。
  */
 export function attachIoBoardPorts(): void {
   const hshk = _handshakeBus
@@ -147,7 +148,8 @@ export function attachIoBoardPorts(): void {
       p === IO_PORT_BREAK_CTRL ||
       p === IO_PORT_BREAK_ADDR_LO ||
       p === IO_PORT_BREAK_ADDR_HI ||
-      p === IO_PORT_BREAK_HIT
+      p === IO_PORT_BREAK_HIT ||
+      p === IO_PORT_BREAK_PREV
     ) {
       addrComparators.writePort(p, val);
       return;

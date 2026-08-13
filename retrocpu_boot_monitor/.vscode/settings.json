@@ -22,7 +22,16 @@
     "editor.detectIndentation": false,
     "editor.indentSize": "tabSize",
     "files.trimTrailingWhitespace": false,
-    "files.insertFinalNewline": false
+    "files.insertFinalNewline": false,
+    "editor.inlineSuggest.enabled": false,
+    "editor.quickSuggestions": {
+      "other": false,
+      "comments": false,
+      "strings": false
+    },
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.wordBasedSuggestions": "off",
+    "editor.snippetSuggestions": "none"
   },
   "[asm-intel-x86-generic]": {
     "editor.formatOnSave": false,

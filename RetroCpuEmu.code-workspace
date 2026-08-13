@@ -41,6 +41,11 @@
     "workbench.settings.useSplitJSON": true,
     "git.ignoreLimitWarning": true,
     "editor.inlineSuggest.enabled": true,
+    "cursor.cpp.disabledLanguages": [
+      "mn1613asm",
+      "asm",
+      "asm-intel-x86-generic",
+    ],
     "js/ts.validate.enabled": true,
     "js/ts.format.insertSpaceAfterOpeningAndBeforeClosingEmptyBraces": false,
     "js/ts.updateImportsOnFileMove.enabled": "always",
@@ -99,11 +104,15 @@
       "editor.indentSize": "tabSize",
       "files.trimTrailingWhitespace": false,
       "files.insertFinalNewline": false,
-      "cursor.mn1613asm.disabledLanguages": [
-        "mn1613asm",
-        "asm",
-        "asm-intel-x86-generic",
-      ],
+      "editor.inlineSuggest.enabled": false,
+      "editor.quickSuggestions": {
+        "other": false,
+        "comments": false,
+        "strings": false,
+      },
+      "editor.suggestOnTriggerCharacters": false,
+      "editor.wordBasedSuggestions": "off",
+      "editor.snippetSuggestions": "none",
     },
     "[asm-intel-x86-generic]": {
       "editor.formatOnSave": false,

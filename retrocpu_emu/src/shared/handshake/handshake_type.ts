@@ -72,6 +72,8 @@ export const CMD_CPU_TO_IO = {
   TIME_GET: 0x16,
   /** 未定義命令LED 点灯/消灯（Bit0: 0=消灯 / 1=点灯） */
   UNDEF_LED: 0x17,
+  /** ブレイク通知（比較器ヒットで CPU が停止するとき） */
+  BREAK_NOTIFY: 0x18,
   /** LCD1602 制御（Clear/Home/DisplayCtrl/SetCursor）。モード不問 */
   LCD_CTRL: 0x19,
   /** LCD1602 文字列表示。モード不問 */
