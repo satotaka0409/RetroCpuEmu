@@ -1,0 +1,249 @@
+---
+alwaysApply: true
+description: MN1613 アセンブラテスト統合仕様（asm 結合テスト + HEX/CDB ハーネス）
+---
+
+# asm テストフレームワーク
+
+根拠: 本ファイル。実装は `retrocpu_test_framework/` と `retrocpu_emu/src/code_test/`。
+呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。
+
+## 目的
+
+MN1613 の成果物を TypeScript テストから検証するための統合仕様。
+セッションがテスト対象として読んでよい入力は **`.ihx` と `.cdb` のみ**（`.asm` は読まない）。
+アセンブル／リンクは Makefile 等で事前に行い、成果物パスを `JsonTestSettings` に書く。
+
+## 対象範囲
+
+| 系統 | 入力（セッション） | 主用途 | 実装 |
+| :----- | :---- | :---- | :---- |
+| BIOS/モニタ結合 | `.ihx` + `.cdb`（Makefile 成果物） | 回帰・結合 | `retrocpu_test_framework/` + `retrocpu_boot_monitor` |
+| code_test ハーネス | Intel HEX + CDB | 既リンク成果物・C 出力検証 | `retrocpu_emu/src/code_test/` |
+| フレームワーク単体 | 自前で `assembleToHexCdb` した一時 HEX/CDB | ハーネス自身の検証 | `retrocpu_test_framework/test/*.unit.ts` |
+
+ターゲット CPU は当面 MN1613。
+
+## 共通原則
+
+1. **テスト対象のロードは `.ihx` / `.cdb` のみ。** `createMn1613AsmSession` / `createSessionFromSettings` は `.asm` を読まない。
+2. ドライバ専用 `.asm` は作らない。TS から `call` で引数を渡す。
+3. 第1引数=`R0`、第2引数=`R1`、第3引数=`R2`、第4引数以降はスタック、戻り値=`R0`/`R1`/`R2`（必要な分）。
+4. 被試験ラベルは `.global` / `.globl`。
+5. `call()` はメモリと IO ピンを消さない。ケース分離は `reload()` を使う。
+6. IO/ハンドシェイク検証は `ioMock` で明示する。
+
+## アドレス規約（MN1613）
+
+- CPU 内部の IC/SP/メモリアクセスはワードアドレス。
+- 物理メモリは 1 ワード = 2 バイト（BE）。
+- Intel HEX のアドレスはバイトアドレスとして扱う。
+- CDB のラベル末尾アドレスも当面バイトアドレスとして扱い、呼び出し時に `wordAddr = byteAddr / 2`（奇数はエラー）。
+
+## BIOS/モニタ結合テスト
+
+### 処理フロー
+
+```text
+Makefile: .asm (+ .inc) -> assemble/link -> .ihx + .cdb
+  -> JsonTestSettings（hexFile / cdbFile のみ）-> セッションロード
+  -> g_main -> HALT -> call -> RET -> 戻りスタブ H -> 検証
+```
+
+`assembleToHexCdb` / `assembleAndLink` はフレームワーク単体テストやビルド補助用。
+リンクは in-process ではなく **sdld**（`SDLD` / `SDCC_BIN_DIR` / `make sdcc-setup`）。未導入なら失敗する。
+製品テストのセッション作成パスでは呼ばない。
+
+### 原則
+
+1. セッション入力は `.ihx` / `.cdb` のみ。`sources` / `sourceRoot` は設定に持たない。
+2. 1 対象モジュール（または機能）= 1 `*_test.ts`。
+3. テストはプロジェクトをまたがない。
+4. Vitest は使わない（独自 `test()` / `expect()`）。
+
+### 配置
+
+| プロジェクト | 置き場 | 内容 |
+| :--- | :---- | :----- |
+| `retrocpu_test_framework` | `test/*.unit.ts` | フレームワーク単体 |
+| `retrocpu_boot_monitor` | `mn1613/test/**/*_test.ts` | BIOS 結合（事前ビルド HEX/CDB） |
+
+## HEX/CDB ハーネス（code_test）
+
+### 実行モデル
+
+1. メモリ確保（必要に応じてゼロクリア）
+2. Intel HEX ロード
+3. CDB ロード
+4. 既定 `SP=0xFFFF` で初期化
+5. 必要ならゼロページ/ラベルへ初期値書き込み
+6. 戻りスタブを積んで `call`
+7. HALT 後にレジスタ/メモリ/スタックを検証
+
+### TypeScript API（概要）
+
+```ts
+import {
+  createMn1613CodeTest,
+  createMn1613CodeTestFromSettings,
+} from "../code_test";
+
+const t = createMn1613CodeTest({
+  stackInit: 0xffff,
+  returnStubAddr: 0x17fe,
+  maxCycles: 100_000,
+  ioMock: [{ type: "port", port: "0x24", read: "0x00AB" }],
+});
+
+const t2 = createMn1613CodeTestFromSettings("code_test.json");
+
+await t.call("add", {
+  registers: { R0: 3, R1: 4 },
+  stack: [0x1111],
+});
+
+t.expectRegisters({ R0: 7 });
+```
+
+## ioMock
+
+`JsonTestSettings.ioMock`（または code_test の `ioMock`）で RD/WT を差し替える。
+
+| `ioMock[].type` | 役割                                                        |
+| :-------------- | :---------------------------------------------------------- |
+| `handshake`     | 1階 IO ボードハンドシェイクモックを attach（`0x20`-`0x24`） |
+| `port`          | 指定ポート RD 固定値またはキュー（WT はログ記録）           |
+
+補足:
+
+- `handshake` は配列内 1 件まで。
+- `port` は同一ポートで `handshake` より優先。
+- 未宣言時は既定 RD=`0xFFFF`、WT 無視。
+
+## テスト専用 CPU ログ出力
+
+CPU 実行ログはテスト実行時のみ有効化できる。セッション単位でモードを選ぶ。
+
+1. ログ出力先は `JsonTestSettings.cpuLogFile` / `Mn1613SessionOptions.cpuLogFile` で指定する（`${FRAMEWORK_BUILD}` 可）。
+2. 設定でログ出力先の指定がない場合、ログは出力しない。
+3. 出力モードは `cpuLogMode`（省略可）:
+   - **指定なし**: ケースタイトルの **START / END のみ**（本文・`# reload` 等なし）
+   - `checkpoint`: `; @cp` 箇所のみ。命令の **実行前・実行後** の 2 行
+   - `instruction`: **全命令**。命令の **実行後のみ** 1 行（チェックポイント欄は該当時 `name$serial`、それ以外は `-`）
+4. 本機能はテスト専用とし、エミュレータ本体の通常実行ではログを出力しない（フックは null）。
+5. 理由は実行速度低下の回避（ログ出力コストが高いため。特に `instruction`）。
+6. `; @cp` は `retrocpu_asm` が `.rel` に `L:__CP$name$serial:addr` を出し、リンク後 CDB にも載る。ログ未設定でも CDB には載る。
+7. 通過回数は `reload()` でリセットし、同一テスト内の `runInit` / `call` では累積する（アドレス単位）。
+8. **全体テスト実行の開始時**に、対象が `mn1613/test` 配下なら `mn1613/logs/*.log` を削除してから実行する（CLI）。
+9. 各 `test()` ケースの開始・終了で、タイトルを `START` / `END` としてログに書く（例: `g_rnd_init は非零の種をそのまま書く START`）。
+10. 実行中に `session.setCpuLogMode(...)` で本文モードを切り替えられる（同一ログファイル）。
+### ログレコード形式
+
+TAB 区切り 1 行。フィールド順:
+
+1. CPU累積Clock（10 進。before=フェッチ直前 / after=実行直後）
+2. アドレス（実行した命令のワードアドレス、4 桁大文字 16 進）
+3. データ（命令語。2 語命令は空白区切りで 2 つ）
+4. チェックポイント名（`name$serial`。同一アドレスに複数なら `,` 連結。例 `add_enter$0001`。無ければ `-`）
+5. フェーズ（`before` / `after`。`instruction` モードは常に `after`）
+6. 実行回数（このテスト＝`reload` 以降。当該アドレスの通過回数。before で +1、after は同じ値）
+7. 逆アセンブルした命令
+8. レジスタ値（`R0=` … `SBRB=`。after の IC は次命令／分岐先）
+9. スタックフレーム 16 Word（`SP+1` … `SP+16`、各 4 桁 16 進）
+
+### チェックポイントコメントの記録
+
+アセンブラソース中のデバッグチェックポイント特殊コメント（`asm_editer.mdc` 参照）は、
+`cpuLogMode: "checkpoint"` のときログ本文の対象になる。
+
+1. 記録対象はテスト起動時のみ。
+2. 通常のエミュレータ実行では記録しない。
+3. ログ未設定時はチェックポイント記録も行わない。
+4. `checkpoint` モードでは当該命令の **実行前・実行後** の 2 行を書く。
+5. `cpuLogMode` 省略時は START/END のみで、チェックポイント本文は出さない。
+
+### CDB へのチェックポイント出力
+
+チェックポイントは `.rel` と CDB に次の形式で出す。`; @cp` はアセンブララベルではない（同一ワードでもエラーにしない）。同名は 4 桁 serial で区別する。REL の addr は領域相対バイト、CDB はリンク後の絶対バイト。
+
+```text
+L:__CP$<checkpoint_name>$<serial4>:<addr_hex>
+```
+
+例:
+
+```text
+L:__CP$uart_initialized$0001:812A
+```
+
+2 つの `; @cp g_get_rnd`（同一命令でも可）→ `__CP$g_get_rnd$0001` と `__CP$g_get_rnd$0002`。
+
+`parseCdb` / `loadCdb` は `L:__CP$...` をラベル表（`byName` / `symbols`）に混ぜず、`checkpoints` に保持する。セッションは `getCheckpoints()` で読む。
+
+### 主要 API
+
+| API                                                  | 内容                                                       |
+| :--------------------------------------------------- | :--------------------------------------------------------- |
+| `session.reload()`                                   | HEX 再ロード + CPU reset + ioMock 再適用                   |
+| `session.runInit()`                                  | `initLabel`（既定 `g_main`）を HALT まで実行              |
+| `session.call(label, opts)`                          | `.global` ラベルを `callMode` 指定で実行（既定 `bal`=`BALD`） |
+| `session.expectRegisters()`                          | レジスタ検証                                               |
+| `session.expectMemoryWords()` / `expectLabelWords()` | メモリ検証                                                 |
+| `session.expectStackWork()`                          | `preCallSp` 基準のスタック検証                             |
+| `session.requireHandshakeMock()`                     | handshake モック取得                                       |
+| `session.detachIoMock()`                             | RD/WT を既定に戻す                                         |
+| `cpuLogFile`（設定）                                 | テスト専用 CPU ログパス。未指定なら出力しない              |
+| `cpuLogMode`（設定）                                 | 省略=START/END のみ / `checkpoint` / `instruction`         |
+| `session.setCpuLogMode(mode?)`                       | 実行中に本文モードを切替（省略/`null` でタイトルのみ）     |
+
+## `call` オプション
+
+| オプション  | 意味                                                         |
+| :---------- | :----------------------------------------------------------- |
+| `registers` | R0-R4, STR, CSBR, SSBR, SP など部分指定                      |
+| `stack`     | 呼び出し前に PUSH するワード列                               |
+| `callMode`  | `"bal"`（既定=`BALD`）または `"balr"`。BIOS 呼び出しは原則省略／`"bal"` |
+| `resetCpu`  | `true` でレジスタのみ reset（メモリ/IO 維持）                |
+
+注記:
+
+- `retl` は **call オプションとしては廃止**。
+- `RETL`/`BALR` は CPU 命令として有効だが、BIOS・handshake は `RET`/`BALD`。テストも原則 `callMode` 省略（`bal`）。
+
+## よくある失敗
+
+| 症状                          | 原因の目安                                  |
+| :---------------------------- | :------------------------------------------ |
+| `CDB symbol not found`        | `.global` でない / リンク対象漏れ           |
+| `did not return to stub`      | `RET`/`RETL` と `callMode` の不一致         |
+| `handshake ENA0 check failed` | IO->CPU で `REQ_1===1` 前に `call`          |
+| `timeout`                     | `ioMock` 未設定、またはフレーム長不一致     |
+| `Intel HEX がありません`      | `hexFile` 未ビルド／パスミス（先に Makefile） |
+
+## 実行
+
+フレームワーク単体:
+
+```bash
+cd retrocpu_test_framework
+npm install
+npm test
+```
+
+BIOS/asm 結合:
+
+```bash
+cd retrocpu_boot_monitor
+npm test
+```
+
+`npm test`（CLI）は実行前に `mn1613/logs/*.log` を削除する。
+
+## 関連
+
+- 呼び出し規約・`.area` / `.include`: `asm-rules.mdc`
+- BIOS エントリ: `boot_monitor.mdc`
+- ハンドシェイク線・コマンド: `HandShake.mdc`
+- メモリ/IO マップ: `MN1613_CPUボードメモリ_IOマップ.mdc`
+- エミュレータ概要: `retrocpu_emu.mdc`
+- 命令: `MN1610.mdc` / `MN1613.mdc`

@@ -1,0 +1,162 @@
+{
+  "name": "retro-asm-editor",
+  "displayName": "Retro Assembler Editor",
+  "description": "レトロ CPU アセンブラ編集支援（MN1610 / MN1613 / TMS9995）",
+  "version": "0.2.4",
+  "publisher": "retroemu",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/*.{asm,s,mn1613,mn1610,tms9995,inc,h}"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "retroAsm.rebuildIndex",
+        "title": "Retro Assembler: Rebuild Symbol Index"
+      },
+      {
+        "command": "retroAsm.showOutput",
+        "title": "Retro Assembler: Show Output"
+      },
+      {
+        "command": "retroAsm.selectCpu",
+        "title": "Retro Assembler: Select CPU"
+      }
+    ],
+    "languages": [
+      {
+        "id": "mn1613asm",
+        "aliases": [
+          "MN1613 Assembly",
+          "MN1610 Assembly",
+          "TMS9995 Assembly",
+          "Retro Assembly"
+        ],
+        "extensions": [
+          ".asm",
+          ".s",
+          ".mn1613",
+          ".mn1610",
+          ".tms9995",
+          ".inc",
+          ".h"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mn1613asm",
+        "scopeName": "source.mn1613asm",
+        "path": "./syntaxes/mn1613.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "mn1613asm",
+        "path": "./snippets/mn1613.json"
+      }
+    ],
+    "colors": [
+      {
+        "id": "retroAsm.checkpointForeground",
+        "description": "; @cp チェックポイントコメントの文字色",
+        "defaults": {
+          "dark": "#FFB020",
+          "light": "#B54700",
+          "highContrast": "#FFFF00",
+          "highContrastLight": "#0000CC"
+        }
+      },
+      {
+        "id": "retroAsm.checkpointBackground",
+        "description": "; @cp チェックポイントコメントの背景色",
+        "defaults": {
+          "dark": "#FFB02033",
+          "light": "#FFB02044",
+          "highContrast": "#FFFF0044",
+          "highContrastLight": "#0000CC22"
+        }
+      },
+      {
+        "id": "retroAsm.todoForeground",
+        "description": "; TODO コメントの文字色",
+        "defaults": {
+          "dark": "#4FC1FF",
+          "light": "#0078D4",
+          "highContrast": "#5C9CFF",
+          "highContrastLight": "#0050A0"
+        }
+      },
+      {
+        "id": "retroAsm.todoBackground",
+        "description": "; TODO コメントの背景色",
+        "defaults": {
+          "dark": "#4FC1FF33",
+          "light": "#0078D433",
+          "highContrast": "#5C9CFF44",
+          "highContrastLight": "#0050A022"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Retro Assembler",
+      "properties": {
+        "retroAsm.defaultCpu": {
+          "type": "string",
+          "enum": [
+            "mn1610",
+            "mn1613",
+            "tms9995"
+          ],
+          "default": "mn1613",
+          "description": "ステータスバーで選ぶ既定 CPU。.asm / .s / .inc / .h の命令解釈に使う（.mn1610 / .mn1613 / .tms9995 は拡張子優先）"
+        },
+        "retroAsm.assemblerPath": {
+          "type": "string",
+          "default": "",
+          "description": "retrocpu_asm CLI のパス（未設定時は PATH から検索）"
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[mn1613asm]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null,
+        "editor.codeActionsOnSave": {},
+        "editor.tabSize": 8,
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false,
+        "editor.indentSize": "tabSize",
+        "files.trimTrailingWhitespace": false,
+        "files.insertFinalNewline": false
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p tsconfig.build.json",
+    "watch": "tsc -watch -p tsconfig.build.json",
+    "lint": "tsc -p ./ --noEmit",
+    "test": "node --require tsx/cjs --test src/**/*.test.ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.2"
+  }
+}

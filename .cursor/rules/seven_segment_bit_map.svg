@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="520" viewBox="0 0 700 520" style="font-family:monospace">
+  <!-- 背景 -->
+  <rect width="700" height="520" fill="#1a1a1a"/>
+
+  <!-- タイトル -->
+  <text x="350" y="36" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="bold">7セグメントLED セグメント名・ビット位置対応図</text>
+
+  <!-- ===== 左: セグメント図（ラベル付き）===== -->
+  <!-- 背景パネル -->
+  <rect x="40" y="60" width="260" height="380" rx="12" fill="#222" stroke="#444" stroke-width="1.5"/>
+  <text x="170" y="90" text-anchor="middle" fill="#aaa" font-size="14">セグメント配置</text>
+
+  <!-- 7セグ本体 (width=120, height=240, thickness=20, origin: 90,110) -->
+  <!-- a: top horizontal -->
+  <rect x="110" y="110" width="80" height="20" rx="8" fill="#ff3333"/>
+  <text x="150" y="107" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">a</text>
+
+  <!-- f: top-left vertical -->
+  <rect x="90" y="130" width="20" height="80" rx="8" fill="#ff3333"/>
+  <text x="83" y="175" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">f</text>
+
+  <!-- b: top-right vertical -->
+  <rect x="190" y="130" width="20" height="80" rx="8" fill="#ff3333"/>
+  <text x="220" y="175" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">b</text>
+
+  <!-- g: middle horizontal -->
+  <rect x="110" y="215" width="80" height="20" rx="8" fill="#ff3333"/>
+  <text x="150" y="212" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">g</text>
+
+  <!-- e: bottom-left vertical -->
+  <rect x="90" y="235" width="20" height="80" rx="8" fill="#ff3333"/>
+  <text x="83" y="280" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">e</text>
+
+  <!-- c: bottom-right vertical -->
+  <rect x="190" y="235" width="20" height="80" rx="8" fill="#ff3333"/>
+  <text x="220" y="280" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">c</text>
+
+  <!-- d: bottom horizontal -->
+  <rect x="110" y="315" width="80" height="20" rx="8" fill="#ff3333"/>
+  <text x="150" y="352" text-anchor="middle" fill="#ff6666" font-size="13" font-weight="bold">d</text>
+
+  <!-- dp: decimal point -->
+  <circle cx="228" cy="330" r="10" fill="#ff3333"/>
+  <text x="245" y="350" fill="#ff6666" font-size="13" font-weight="bold">dp</text>
+
+  <!-- ===== 右: ビット位置表 ===== -->
+  <rect x="320" y="60" width="340" height="380" rx="12" fill="#222" stroke="#444" stroke-width="1.5"/>
+  <text x="490" y="90" text-anchor="middle" fill="#aaa" font-size="14">ビット位置 (pattern配列インデックス)</text>
+
+  <!-- ヘッダ -->
+  <rect x="335" y="100" width="310" height="30" rx="4" fill="#333"/>
+  <text x="380" y="120" text-anchor="middle" fill="#ccc" font-size="13" font-weight="bold">インデックス</text>
+  <text x="490" y="120" text-anchor="middle" fill="#ccc" font-size="13" font-weight="bold">セグメント</text>
+  <text x="600" y="120" text-anchor="middle" fill="#ccc" font-size="13" font-weight="bold">位置</text>
+
+  <!-- 行 a -->
+  <rect x="335" y="130" width="310" height="32" rx="2" fill="#2a2a2a"/>
+  <text x="380" y="151" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">0</text>
+  <text x="490" y="151" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">a</text>
+  <text x="600" y="151" text-anchor="middle" fill="#aaa" font-size="13">上段 水平</text>
+
+  <!-- 行 b -->
+  <rect x="335" y="162" width="310" height="32" rx="2" fill="#222"/>
+  <text x="380" y="183" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">1</text>
+  <text x="490" y="183" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">b</text>
+  <text x="600" y="183" text-anchor="middle" fill="#aaa" font-size="13">右上 垂直</text>
+
+  <!-- 行 c -->
+  <rect x="335" y="194" width="310" height="32" rx="2" fill="#2a2a2a"/>
+  <text x="380" y="215" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">2</text>
+  <text x="490" y="215" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">c</text>
+  <text x="600" y="215" text-anchor="middle" fill="#aaa" font-size="13">右下 垂直</text>
+
+  <!-- 行 d -->
+  <rect x="335" y="226" width="310" height="32" rx="2" fill="#222"/>
+  <text x="380" y="247" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">3</text>
+  <text x="490" y="247" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">d</text>
+  <text x="600" y="247" text-anchor="middle" fill="#aaa" font-size="13">下段 水平</text>
+
+  <!-- 行 e -->
+  <rect x="335" y="258" width="310" height="32" rx="2" fill="#2a2a2a"/>
+  <text x="380" y="279" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">4</text>
+  <text x="490" y="279" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">e</text>
+  <text x="600" y="279" text-anchor="middle" fill="#aaa" font-size="13">左下 垂直</text>
+
+  <!-- 行 f -->
+  <rect x="335" y="290" width="310" height="32" rx="2" fill="#222"/>
+  <text x="380" y="311" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">5</text>
+  <text x="490" y="311" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">f</text>
+  <text x="600" y="311" text-anchor="middle" fill="#aaa" font-size="13">左上 垂直</text>
+
+  <!-- 行 g -->
+  <rect x="335" y="322" width="310" height="32" rx="2" fill="#2a2a2a"/>
+  <text x="380" y="343" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">6</text>
+  <text x="490" y="343" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">g</text>
+  <text x="600" y="343" text-anchor="middle" fill="#aaa" font-size="13">中段 水平</text>
+
+  <!-- 行 dp -->
+  <rect x="335" y="354" width="310" height="32" rx="2" fill="#222"/>
+  <text x="380" y="375" text-anchor="middle" fill="#7ec8e3" font-size="14" font-weight="bold">7</text>
+  <text x="490" y="375" text-anchor="middle" fill="#ff6666" font-size="14" font-weight="bold">dp</text>
+  <text x="600" y="375" text-anchor="middle" fill="#aaa" font-size="13">小数点</text>
+
+  <!-- ===== 下部: 16進数パターン表 ===== -->
+  <rect x="40" y="460" width="620" height="40" rx="8" fill="#222" stroke="#444" stroke-width="1"/>
+  <text x="350" y="477" text-anchor="middle" fill="#888" font-size="12">パターン配列: [ a, b, c, d, e, f, g ]  ※ dp は decimalPoint プロパティで個別制御</text>
+  <text x="350" y="494" text-anchor="middle" fill="#888" font-size="12">例: "8" → [1,1,1,1,1,1,1]  "0" → [1,1,1,1,1,1,0]  "1" → [0,1,1,0,0,0,0]</text>
+</svg>

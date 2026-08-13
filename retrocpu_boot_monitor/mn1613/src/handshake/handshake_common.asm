@@ -1,0 +1,464 @@
+; handshake_common.asm
+; MN1613 CPUボード側ハンドシェイク（アセンブラ実装）
+; 根拠: HandShake.mdc（HSHK_ENA / IN_DATA / OUT_DATA）
+;
+; CPU -> IO:
+;   g_hshk_initiate_send -> g_hshk_send_byte*N -> g_hshk_finalize_send
+; IO -> CPU（割り込み入口）:
+;   g_hshk_accept_request -> g_hshk_recv_byte*N -> g_hshk_finalize_recv
+;
+; 1バイト: DENA 0→1 → DACK 0→1 → DENA 1→0 → DACK 1→0
+;
+; 引数は第1=R0、第2=R1、第3=R2、第4以降はスタック（asm-rules.mdc）。
+; g_hshk_recv_byte の受信バイトは R1（リエントラント。グローバル作業域は使わない）。
+; ENA0 待ちの乱数は bios_common.asm の g_get_rnd（BALD）。待ち時間は厳密でなくてよい。
+; g_* / l_* は BALD / RET。コードはセグメント 0。拡張 SBR はデータ専用。
+
+	.cpu	mn1613
+
+	.include "handshake_io.inc"
+
+	.area	_CODE		(REL,CON)
+
+	.global g_hshk_initiate_send
+	.global g_hshk_send_byte
+	.global g_hshk_send_word
+	.global g_hshk_reg_send16
+	.global g_hshk_finalize_send
+	.global g_hshk_accept_request
+	.global g_hshk_recv_byte
+	.global g_hshk_finalize_recv
+	.global g_hshk_wait_ena_delay
+	.global g_hshk_wait_req1_1
+	.global g_hshk_mem_map
+	.global g_hshk_mem_ld8
+	.global g_hshk_mem_st8
+	.global g_get_rnd
+
+; -------------------------------------------------------
+; ENA=0 チェック用の待機（g_get_rnd でばらした粗いスピン）
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+g_hshk_wait_ena_delay:
+	push	R3
+	bald	g_get_rnd
+	andi	R0, #HSHK_DELAY_MASK
+	awi	R0, #HSHK_DELAY_MIN
+l_hshk_wad_lp:
+	si	R0, #1, Z
+	b	l_hshk_wad_lp
+	pop	R3
+	ret
+; -------------------------------------------------------
+; HSHK_ENA==0 を確認する
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+l_hshk_wait_ena0:
+	push	R3
+	mvwi	R1, #HSHK_ENA0_RETRY
+l_hshk_we0_lp:
+	bald	g_hshk_wait_ena_delay
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_ENA_BIT, Z
+	b	l_hshk_we0_busy
+	mvwi	R0, #HSHK_OK
+	pop	R3
+	ret
+l_hshk_we0_busy:
+	si	R1, #1, Z
+	b	l_hshk_we0_lp
+	mvwi	R0, #HSHK_NG
+	pop	R3
+	ret
+
+; -------------------------------------------------------
+; HSHK_ENA が期待値になるまで待つ
+; @param R0 - 期待値（0 または HSHK_ENA_BIT）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_wait_ena:
+	push	R2
+	mv	R2, R0
+	mvwi	R1, #HSHK_WAIT_MAX
+l_hshk_ena_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_ENA_BIT
+	c	R0, R2, Z
+	b	l_hshk_ena_cont
+	mvwi	R0, #HSHK_OK
+	pop	R2
+	ret
+l_hshk_ena_cont:
+	si	R1, #1, Z
+	b	l_hshk_ena_lp
+	mvwi	R0, #HSHK_NG
+	pop	R2
+	ret
+
+; -------------------------------------------------------
+; HSHK_DACK が期待値になるまで待つ
+; @param R0 - 期待値（0 または HSHK_DACK_BIT）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_wait_dack:
+	push	R2
+	mv	R2, R0
+	mvwi	R1, #HSHK_WAIT_MAX
+l_hshk_dack_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_DACK_BIT
+	c	R0, R2, Z
+	b	l_hshk_dack_cont
+	mvwi	R0, #HSHK_OK
+	pop	R2
+	ret
+l_hshk_dack_cont:
+	si	R1, #1, Z
+	b	l_hshk_dack_lp
+	mvwi	R0, #HSHK_NG
+	pop	R2
+	ret
+
+; -------------------------------------------------------
+; HSHK_DENA が期待値になるまで待つ
+; @param R0 - 期待値（0 または HSHK_DENA_BIT）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_wait_dena:
+	push	R2
+	mv	R2, R0
+	mvwi	R1, #HSHK_WAIT_MAX
+l_hshk_dena_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_DENA_BIT
+	c	R0, R2, Z
+	b	l_hshk_dena_cont
+	mvwi	R0, #HSHK_OK
+	pop	R2
+	ret
+l_hshk_dena_cont:
+	si	R1, #1, Z
+	b	l_hshk_dena_lp
+	mvwi	R0, #HSHK_NG
+	pop	R2
+	ret
+
+; -------------------------------------------------------
+; HSHK_REQ_1 == 0 になるまで待つ
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_wait_req1_0:
+	mvwi	R1, #HSHK_WAIT_MAX
+l_hshk_req1_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_REQ1_BIT, Z
+	b	l_hshk_req1_cont
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_req1_cont:
+	si	R1, #1, Z
+	b	l_hshk_req1_lp
+	mvwi	R0, #HSHK_NG
+	ret
+
+; -------------------------------------------------------
+; HSHK_REQ_1 == 1 になるまで待つ
+; @note 割り込みを使わず IO→CPU 依頼を待つ（BIOS の応答受信）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_wait_req1_1:
+	mvwi	R1, #HSHK_WAIT_MAX
+l_hshk_req1s_lp:
+	rd	R0, HSHK_CTRL
+	andi	R0, #HSHK_REQ1_BIT, Z
+	b	l_hshk_req1s_ok
+	si	R1, #1, Z
+	b	l_hshk_req1s_lp
+	mvwi	R0, #HSHK_NG
+	ret
+l_hshk_req1s_ok:
+	mvwi	R0, #HSHK_OK
+	ret
+; -------------------------------------------------------
+; 制御ポート RMW: ビットセット
+; @param R0 - セットするビットマスク
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_ctrl_set:
+	mv	R1, R0
+	rd	R0, HSHK_CTRL
+	or	R0, R1
+	wt	R0, HSHK_CTRL
+	ret
+
+; -------------------------------------------------------
+; 制御ポート RMW: ビットクリア
+; @param R0 - クリアするビットマスク
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_ctrl_clr:
+	mv	R1, R0
+	eori	R1, #0xffff
+	rd	R0, HSHK_CTRL
+	and	R0, R1
+	wt	R0, HSHK_CTRL
+	ret
+
+; -------------------------------------------------------
+; CPU -> IO ハンドシェイク開始
+; @note ENA=0確認 → DENA=0 → REQ_0=1 → ENA=1待ち → REQ_0=0
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_initiate_send:
+	bald	l_hshk_wait_ena0
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_init_send_fail
+
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_ctrl_clr
+
+	mvwi	R0, #HSHK_REQ0_BIT
+	bald	l_hshk_ctrl_set
+
+	mvwi	R0, #HSHK_ENA_BIT
+	bald	l_hshk_wait_ena
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_init_send_fail
+
+	mvwi	R0, #HSHK_REQ0_BIT
+	bald	l_hshk_ctrl_clr
+
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_init_send_fail:
+	mvwi	R0, #HSHK_REQ0_BIT
+	bald	l_hshk_ctrl_clr
+	mvwi	R0, #HSHK_NG
+	ret
+; -------------------------------------------------------
+; CPU -> IO 1バイト送信
+; @param R0 - 送信バイト（下位8bit）
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_send_byte:
+	wt	R0, HSHK_IN_DATA
+
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_ctrl_set
+
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_wait_dack
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_send_fail
+
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_ctrl_clr
+
+	eor	R0, R0
+	bald	l_hshk_wait_dack
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_send_fail
+
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_send_fail:
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_ctrl_clr
+	mvwi	R0, #HSHK_NG
+	ret
+; -------------------------------------------------------
+; CPU -> IO 16bit をビッグエンディアン 2 バイトで送る
+; @param R0 - 送信ワード
+; @return R0 - HSHK_OK / HSHK_NG（最後のバイト）
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+g_hshk_reg_send16:
+g_hshk_send_word:
+	push	R3
+	mv	R2, R0
+	bswp	R0, R2
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	andi	R2, #0x00ff
+	mv	R0, R2
+	bald	g_hshk_send_byte
+	pop	R3
+	ret
+; -------------------------------------------------------
+; CPU -> IO ハンドシェイク完了
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_finalize_send:
+	eor	R0, R0
+	bald	l_hshk_wait_ena
+	ret
+; -------------------------------------------------------
+; IO -> CPU 依頼受理（割り込みハンドラから）
+; @note DACK=0 → ENA=1 → REQ_1=0待ち
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_accept_request:
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_ctrl_clr
+
+	mvwi	R0, #HSHK_ENA_BIT
+	bald	l_hshk_ctrl_set
+
+	bald	l_hshk_wait_req1_0
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_accept_fail
+
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_accept_fail:
+	mvwi	R0, #HSHK_ENA_BIT
+	bald	l_hshk_ctrl_clr
+	mvwi	R0, #HSHK_NG
+	ret
+; -------------------------------------------------------
+; IO -> CPU 1バイト受信
+; @note 受信バイトは R1（下位 8bit）。DACK 中はスタックに退避する
+; @return R0 - HSHK_OK / HSHK_NG、R1 - 受信バイト（OK 時）
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_recv_byte:
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_wait_dena
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_recv_fail
+
+	rd	R0, HSHK_OUT_DATA
+	andi	R0, #0x00ff
+	push	R0
+
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_ctrl_set
+
+	eor	R0, R0
+	bald	l_hshk_wait_dena
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_recv_fail2
+
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_ctrl_clr
+	pop	R1
+	andi	R1, #0x00ff
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_recv_fail2:
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_ctrl_clr
+	pop	R1
+l_hshk_recv_fail:
+	mvwi	R0, #HSHK_NG
+	ret
+; -------------------------------------------------------
+; IO -> CPU ハンドシェイク完了
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+g_hshk_finalize_recv:
+	mvwi	R0, #HSHK_ENA_BIT
+	bald	l_hshk_ctrl_clr
+	mvwi	R0, #HSHK_OK
+	ret
+; -------------------------------------------------------
+; 32bit バイトアドレス → TSR0 + 論理ワード + 奇偶
+; phys_word = byte_addr >> 1（18bit）。
+; ボード運用: SBR 下位 2bit は 0 固定（有効値 0/4/8/C）。
+;   TSR0 = phys[17:16] << 2、論理 = phys[15:0]、奇偶 = byte_addr[0]。
+; @param R0 - バイトアドレス bits 31-16
+; @param R1 - バイトアドレス bits 15-0
+; @return R0 - 0=偶数（上位バイト）/ 1=奇数（下位バイト）
+; @return R1 - 論理ワードアドレス（16bit）
+; @return TSR0 - セグメント（下位 2bit=0）
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+g_hshk_mem_map:
+	push	R3
+	mv	R2, R0			; byte_hi
+	mv	R3, R1			; byte_lo
+	mv	R0, R1
+	andi	R0, #1			; 奇偶
+	; phys[15:0] = (byte_lo >> 1) | ((byte_hi & 1) << 15)
+	mv	R1, R3
+	sr	R1, RE
+	tbit	R2, #0, Z
+	awi	R1, #0x8000
+	; TSR0 = phys[17:16] << 2 = (byte_hi >> 1) << 2
+	sr	R2, RE
+	andi	R2, #3
+	sl	R2, RE
+	sl	R2, RE
+	setb	R2, TSR0
+	pop	R3
+	ret
+; -------------------------------------------------------
+; 物理メモリから 1 バイト読む（ビッグエンディアン）
+; @param R0 - バイトアドレス bits 31-16
+; @param R1 - バイトアドレス bits 15-0
+; @return R0 - データバイト（下位 8bit）
+; @Destruction R0, R1, R2（TSR0 を書き換える）
+; -------------------------------------------------------
+g_hshk_mem_ld8:
+	push	R3
+	bald	g_hshk_mem_map
+	mv	R2, R0
+	lr	R0, TSR0, (R1)
+	mv	R2, R2, Z
+	b	l_hshk_mld_odd
+	bswp	R0, R0
+l_hshk_mld_odd:
+	andi	R0, #0x00ff
+	pop	R3
+	ret
+; -------------------------------------------------------
+; 物理メモリへ 1 バイト書く（ビッグエンディアン、RMW）
+; @param R0 - バイトアドレス bits 31-16
+; @param R1 - バイトアドレス bits 15-0
+; @param R2 - データバイト（下位 8bit）
+; @Destruction R0, R1, R2（TSR0 を書き換える）
+; -------------------------------------------------------
+g_hshk_mem_st8:
+	push	R3
+	push	R4
+	mv	R4, R2			; データ
+	bald	g_hshk_mem_map
+	mv	R2, R0			; 奇偶
+	lr	R0, TSR0, (R1)
+	mv	R2, R2, Z
+	b	l_hshk_mst_odd
+	andi	R0, #0x00ff
+	bswp	R2, R4
+	andi	R2, #0xff00
+	or	R0, R2
+	b	l_hshk_mst_wr
+l_hshk_mst_odd:
+	andi	R0, #0xff00
+	andi	R4, #0x00ff
+	or	R0, R4
+l_hshk_mst_wr:
+	str	R0, TSR0, (R1)
+	pop	R4
+	pop	R3
+	ret

@@ -1,0 +1,326 @@
+/* Retro CPU Debug — retrocpu_debug.mdc 基本画面 */
+
+:root {
+  --gap: 4px;
+  --border: var(--vscode-panel-border, #444);
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --bg2: var(--vscode-sideBar-background, #252526);
+  --fg: var(--vscode-foreground, #ccc);
+  --muted: var(--vscode-descriptionForeground, #888);
+  --accent: var(--vscode-focusBorder, #007acc);
+  --current: var(--vscode-editor-lineHighlightBackground, #2a2d2e);
+  --bp: #c0504d;
+  --mono: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+  --font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--font-size);
+}
+
+button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+button.active {
+  outline: 1px solid var(--accent);
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+
+.toolbar-title {
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-note {
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+.layout {
+  display: grid;
+  height: calc(100% - 32px);
+  grid-template-columns: minmax(220px, 0.9fr) minmax(240px, 1.2fr) minmax(240px, 1.2fr);
+  grid-template-rows: minmax(0, 1.4fr) minmax(120px, 0.55fr) minmax(140px, 0.7fr);
+  grid-template-areas:
+    "regs disasm source"
+    "bp   break  break"
+    "mem  mem    mem";
+  gap: var(--gap);
+  padding: var(--gap);
+}
+
+.pane-regs {
+  grid-area: regs;
+}
+.pane-disasm {
+  grid-area: disasm;
+}
+.pane-source {
+  grid-area: source;
+}
+.pane-bp {
+  grid-area: bp;
+}
+.pane-break {
+  grid-area: break;
+}
+.pane-mem {
+  grid-area: mem;
+}
+
+.pane-regs,
+.pane-disasm,
+.pane-source,
+.pane-bp,
+.pane-break,
+.pane-mem {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.pane-head {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--vscode-titleBar-activeBackground, #323233);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.pane-head.sub {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.code-scroll {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 4px 0;
+  white-space: pre;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 18px 52px 1fr;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.line.disasm {
+  grid-template-columns: 18px 52px 90px 1fr;
+}
+
+.line.mem {
+  grid-template-columns: 52px repeat(8, minmax(36px, 1fr));
+}
+
+.line.current {
+  background: var(--current);
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.line.focus {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.gutter {
+  color: var(--muted);
+  text-align: center;
+}
+
+.gutter.bp {
+  color: var(--bp);
+  font-weight: 700;
+}
+
+.addr {
+  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
+
+.bytes {
+  color: var(--muted);
+}
+
+.text {
+  color: var(--fg);
+}
+
+.word {
+  text-align: center;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.word:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  cursor: pointer;
+}
+
+.reg-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.reg-tabs .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+
+.reg-tabs .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.reg-meta {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.reg-body {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.stack-dump {
+  margin: 0;
+  padding: 4px 8px 8px;
+  max-height: 88px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.bp-block {
+  padding: 4px 6px;
+}
+
+.bp-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.bp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.bp-list li {
+  display: flex;
+  gap: 6px;
+  padding: 1px 2px;
+}
+
+.bp-list li.on .slot {
+  color: var(--bp);
+  font-weight: 700;
+}
+
+.bp-list .slot {
+  width: 1.5em;
+  color: var(--muted);
+}
+
+.break-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto auto auto;
+    grid-template-areas:
+      "regs regs"
+      "disasm source"
+      "bp break"
+      "mem mem";
+    height: auto;
+    overflow: auto;
+  }
+
+  html,
+  body {
+    overflow: auto;
+  }
+
+  .pane-regs,
+  .pane-disasm,
+  .pane-source {
+    min-height: 220px;
+  }
+}

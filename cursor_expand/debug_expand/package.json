@@ -1,0 +1,78 @@
+{
+  "name": "retro-cpu-debug",
+  "displayName": "Retro CPU Debug",
+  "description": "レトロ CPU デバッグ支援（逆アセンブル・レジスタ・メモリ・ブレイクポイント）",
+  "version": "0.1.0",
+  "publisher": "retroemu",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:retroDebug.openPanel",
+    "onCommand:retroDebug.loadProgram"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "retroDebug.openPanel",
+        "title": "Retro CPU Debug: Open Debug View",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "retroDebug.loadProgram",
+        "title": "Retro CPU Debug: Load Intel HEX / CDB",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "retroDebug.showOutput",
+        "title": "Retro CPU Debug: Show Output"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "retroDebug.openPanel",
+          "group": "navigation",
+          "when": "resourceExtname =~ /\\.(asm|s|ihx|hex|cdb)$/i"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Retro CPU Debug",
+      "properties": {
+        "retroDebug.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "IO ボード（エミュ）TCP ホスト（プロトコル接続時）"
+        },
+        "retroDebug.port": {
+          "type": "number",
+          "default": 23540,
+          "description": "IO ボード（エミュ）TCP ポート（既定 23540）"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p tsconfig.build.json",
+    "watch": "tsc -watch -p tsconfig.build.json",
+    "lint": "tsc -p ./ --noEmit",
+    "test": "node --require tsx/cjs --test src/**/*.test.ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.2"
+  }
+}

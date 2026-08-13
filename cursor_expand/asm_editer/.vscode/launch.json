@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder:cursor_asm_editer}",
+        "${workspaceFolder:retrocpu_boot_monitor}"
+      ],
+      "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
+      "preLaunchTask": "compile retro-asm-editor",
+      "sourceMaps": true,
+      "debugWebWorkerExtensions": false
+    },
+    {
+      "name": "Run Extension (this folder)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/../../retrocpu_boot_monitor"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "compile retro-asm-editor",
+      "sourceMaps": true,
+      "debugWebWorkerExtensions": false
+    }
+  ]
+}

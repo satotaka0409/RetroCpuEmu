@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension: Retro Assembler Editor",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder:cursor_asm_editer}",
+        "${workspaceFolder:root}/retrocpu_boot_monitor"
+      ],
+      "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
+      "preLaunchTask": "cursor_asm_editer: npm: compile",
+      "sourceMaps": true
+    }
+  ]
+}

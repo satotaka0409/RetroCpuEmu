@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension: retro-cpu-debug",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder:debug_expand}",
+        "${workspaceFolder:retrocpu_boot_monitor}"
+      ],
+      "outFiles": ["${workspaceFolder:debug_expand}/dist/**/*.js"],
+      "preLaunchTask": "compile retro-cpu-debug",
+      "sourceMaps": true,
+      "debugWebWorkerExtensions": false
+    },
+    {
+      "name": "Run Extension: retro-cpu-debug (this folder)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/../../retrocpu_boot_monitor"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "compile retro-cpu-debug",
+      "sourceMaps": true,
+      "debugWebWorkerExtensions": false
+    }
+  ]
+}

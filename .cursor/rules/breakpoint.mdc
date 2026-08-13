@@ -1,0 +1,158 @@
+---
+alwaysApply: true
+---
+
+# ブレイクポイント仕様叩き台（ver3: レジスタ値詳細対応）
+
+## ブレイクポイントデータ構造
+
+- **アドレスブレイクポイント（8個）**
+  - 0～5: ユーザー設定用ブレイクポイント
+  - 6, 7: ステップ実行用（内部利用、ユーザは操作不可）
+
+### 基本レイアウト
+
+```c
+struct Breakpoint {
+    uint16_t addr[8];   // ブレイクポイントアドレス
+    uint8_t  en[8];     // 有効フラグ
+};
+```
+
+- STEP実行時は6または7を内部利用
+- 保存方式は .area \_WORK などを想定
+
+## 履歴ヒストリ・詳細仕様
+
+**下記情報を各ブレイクについて16件保存する必要がある。6個分 (BP0～BP5, ユーザ分のみ)**
+
+- 時刻（ハンドシェイクで取得した64bit時刻）
+- ブレイクが掛かった時の全レジスタ値
+  - 下記レジスタを「HandShake.mdc (385-395)」に従い保存
+  - R0, R1, R2, R3, R4, SP, STR, IC, CSBR, SSBR, TSR0, TSR1
+- SPの0-15ワード分（スタックダンプ16ワード分、32バイト）
+- 書き込みアドレスの「前回書き込み値」も（WRITE時のみ/0埋め可）
+
+---
+
+### データ構造例（ブレイクごと）
+
+| 位置 | 値                       | 説明                                                         |
+| :--: | :----------------------- | :----------------------------------------------------------- |
+|  00  | 0:無効 1:有効            |                                                              |
+|  01  | ブレイクカウント         | カウントの現在値 0になるとブレイクとして稼働する             |
+|  02  | Bit0 0:MEM 1:IO          | メモリ（命令含む）／IO                                       |
+|  02  | Bit1 RD_EN               | 1: READ でヒット可                                           |
+|  02  | Bit2 WR_EN               | 1: WRITE でヒット可。RD_EN+WR_EN で両方。両方0は NG          |
+|  02  | Bit3-5 条件              | 000:なし 001:= 010:<> 011:>= 100:<= 101:AND<>0 110:AND=0     |
+|  02  | Bit6 1:命令（INST）      | UI／`18h` 区分用。ハードは MEM+RD_EN（Bit0=0, Bit1=1）と同等 |
+|  02  | Bit7 1:履歴 0:通常       | 履歴時は記録してすぐには止めない                             |
+|  03  | ブレイクまでのカウント数 | 0:シングル。1～255: その回数で停止。直近16履歴が記録される   |
+|  04  | アドレス24-31            | 監視アドレス                                                 |
+|  05  | アドレス16-23            | 監視アドレス                                                 |
+|  06  | アドレス8-15             | 監視アドレス                                                 |
+|  07  | アドレス0-7              | 監視アドレス                                                 |
+|  08  | データ8-15               |                                                              |
+|  09  | データ0-7                | 値比較データ（IO／命令では無視可）                           |
+|      |                          |                                                              |
+
+ここまではヘッダー
+ここから先は、履歴格納領域
+
+```c
+#define HISTORY_CNT 16 // 16件履歴/1ブレイク
+#define BP_USER_NUM 6 // ユーザ用ブレイク6個
+
+// HandShake.mdc のレジスタ集合
+struct RegisterSet {
+  uint16_t R0;
+  uint16_t R1;
+  uint16_t R2;
+  uint16_t R3;
+  uint16_t R4;
+  uint16_t SP;
+  uint16_t STR;
+  uint16_t IC;
+  uint8_t CSBR;
+  uint8_t SSBR;
+  uint8_t TSR0;
+  uint8_t TSR1;
+  uint8_t NPP;
+  uint8_t IISR;
+  // 必要に応じて拡張
+};
+
+struct BreakHistoryEntry {
+  uint64_t timestamp; // 64bit: ハンドシェイクで取得時刻(すべて0だと空き履歴)
+  struct RegisterSet regs; // レジスタ値全て
+  uint16_t SP_dump[16]; // SP先頭16ワード分
+  uint16_t wr_prev_value; // 前回書き込み値
+};
+
+struct BreakHistory {
+  struct BreakHistoryEntry hist[HISTORY_CNT]; // 16個分
+  uint8_t cur; // リングバッファ用INDEX
+};
+```
+
+リングバッファは、0-15まで 0-15を順番に使って15まで使うと0に戻る
+
+- `BreakHistory` を6ブレイク分用意する（BP0～BP5用）
+
+---
+
+### 物理レイアウト（メモリ配置サンプル）
+
+```
+
+.area \_WORK
+BP_addr: .ds 8 ; 各2バイト(16b)アドレス
+BP_enable: .ds 8 ; 各1バイト
+
+BP_hist: ; --- 以下6個分 ---
+; BP_USER_NUM = 6
+; BREAKpoint i の履歴
+; [hist_0]
+; timestamp: .ds 4 ; 64bit
+; regs: .ds 12 ; RegisterSet (12ワード)
+; SP_dump: .ds 16 ; 16ワード分
+; wr_addr: .ds 1
+; wr_prev_value: .ds 1
+; ... × 16
+;
+
+; （例：1つの履歴エントリの構造イメージ）
+BP_hist0_entry0_timestamp: .ds 4 ; 64ビット
+BP_hist0_entry0_regs: .ds 12 ; HandShake列記載分
+BP_hist0_entry0_SPdump: .ds 16
+BP_hist0_entry0_wraddr: .ds 1
+BP_hist0_entry0_wrprev: .ds 1
+; ... ×16 → BP_hist0の全エントリ
+; ... BP_hist1 ... BP_hist5 まで同様
+
+BP_hist_cur: .ds 6 ; 各BP履歴用current index
+
+```
+
+- RegisterSetはHandShake.mdc (385-395) 行のレジスタ定義に完全対応
+
+---
+
+## 設定・履歴の保存
+
+- `.area _WORK`の一部領域、もしくはOS用設定ファイル/バイナリに直列化し保存
+- 時刻は外部のハンドシェイクで得られる64bit値を格納
+- 履歴保存はブレイクごと独立したリングバッファ
+- 書き込みアドレス・直前値はWRITEブレイク時のみ有効（通常/READ等は0で埋める）
+
+## 検討事項
+
+- 書き込み監視以外の用途拡張
+- RegisterSet拡張（MN1613の全レジスタ網羅/HandShakeに合わせ拡張）
+- サイズ最適化/履歴拡張時のメモリ節約手段
+
+---
+
+```
+
+```

@@ -1,0 +1,7 @@
+# アセンブラはスペース整列を壊さない
+[*.{asm,s,inc,mn1613,mn1610}]
+indent_style = tab
+indent_size = 8
+tab_width = 8
+trim_trailing_whitespace = false
+insert_final_newline = false

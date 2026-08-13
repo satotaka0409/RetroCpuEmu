@@ -1,0 +1,99 @@
+{
+  "Program skeleton": {
+    "prefix": "prog",
+    "body": [
+      "; ${1:description}",
+      "        .org ${2:0}",
+      "",
+      "${3:START}:",
+      "        ${0:H}",
+      ""
+    ],
+    "description": "MN1613 プログラム骨格"
+  },
+  "Subroutine with calling convention doc": {
+    "prefix": "sub",
+    "body": [
+      ";; @brief ${1:description}",
+      ";; @param R0 ${2:first argument}",
+      ";; @param R1 ${3:second argument}",
+      ";; @return R0 ${4:result}",
+      "${5:SUB}:",
+      "        PSHM",
+      "        ${0:; body}",
+      "        POPM",
+      "        RET"
+    ],
+    "description": "呼び出し規約コメント付きサブルーチン（R4-R7 は PSHM/POPM で退避）"
+  },
+  "Word data": {
+    "prefix": "word",
+    "body": [
+      "${1:LABEL}: .word ${2:0}"
+    ],
+    "description": ".word データ定義"
+  },
+  "Reserve storage": {
+    "prefix": "ds",
+    "body": [
+      "${1:LABEL}:\t.ds\t${2:1}"
+    ],
+    "description": ".ds 領域予約（LABEL: 必須。イメージに出さない）"
+  },
+  "Equate": {
+    "prefix": "equ",
+    "body": [
+      "${1:NAME}: .equ ${2:0}"
+    ],
+    "description": ".equ 定数定義"
+  },
+  "Include": {
+    "prefix": "inc",
+    "body": [
+      "        .INCLUDE \"${1:file.inc}\""
+    ],
+    "description": "INCLUDE ディレクティブ"
+  },
+  "Load immediate": {
+    "prefix": "mvi",
+    "body": [
+      "MVI ${1:R0}, #${2:0}"
+    ],
+    "description": "MVI 即値ロード（8bit。# 必須）"
+  },
+  "Load word immediate": {
+    "prefix": "mvwi",
+    "body": [
+      "MVWI ${1:R0}, #${2:0}"
+    ],
+    "description": "MVWI ワード即値ロード（16bit。# 必須）"
+  },
+  "Branch": {
+    "prefix": "b",
+    "body": [
+      "B   ${1:LABEL}"
+    ],
+    "description": "無条件分岐"
+  },
+  "Call BAL": {
+    "prefix": "bal",
+    "body": [
+      "BAL ${1:SUB}"
+    ],
+    "description": "サブルーチン呼び出し (BAL)"
+  },
+  "Halt": {
+    "prefix": "h",
+    "body": [
+      "H"
+    ],
+    "description": "HALT 命令"
+  },
+  "Checkpoint": {
+    "prefix": "@cp",
+    "body": [
+      "; @cp ${1:checkpoint_name}"
+    ],
+    "description": "デバッグチェックポイント（CDB / テストログ）"
+  }
+}

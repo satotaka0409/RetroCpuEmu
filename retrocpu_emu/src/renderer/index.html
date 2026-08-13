@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IO Board</title>
+    <link rel="stylesheet" href="./styles/index.css" />
+    <link rel="stylesheet" href="./styles/hex-keyboard.css" />
+    <link rel="stylesheet" href="./styles/lcd1602.css" />
+    <link rel="stylesheet" href="./styles/seven-segment.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div class="emu-shell io-board-shell">
+        <header class="emu-header panel">
+          <h1>IO Board</h1>
+        </header>
+
+        <main class="io-board-main panel">
+          <div class="led-stack">
+            <section class="led-card">
+              <h3>7-Segment (ADDR 8 + DATA 4)</h3>
+              <div class="led-bank-split">
+                <div class="led-group">
+                  <div id="addr-bank" class="led-bank led-bank-addr"></div>
+                  <div class="led-group-footer">
+                    <div id="bullet-e-slot" class="focus-bullet-slot"></div>
+                    <span class="led-caption">ADDRESS</span>
+                  </div>
+                </div>
+                <div class="led-group">
+                  <div class="led-data-with-status">
+                    <div id="data-bank" class="led-bank"></div>
+                    <div id="status-led-col" class="status-led-col"></div>
+                  </div>
+                  <div class="led-group-footer">
+                    <div id="bullet-f-slot" class="focus-bullet-slot"></div>
+                    <span class="led-caption">DATA</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="led-card">
+              <h3>Bullet LEDs (0–A)</h3>
+              <div class="bullet-leds-wrap">
+                <div id="bullet-row" class="bullet-led-row"></div>
+              </div>
+            </section>
+          </div>
+
+          <section class="led-card lcd-card">
+            <h3>LCD1602</h3>
+            <div id="lcd1602-root" class="lcd1602-root"></div>
+          </section>
+
+          <div id="hex-keyboard-root" class="hex-keyboard-root"></div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

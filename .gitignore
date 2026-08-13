@@ -1,0 +1,8 @@
+node_modules/
+dist/
+logs/
+*.rel
+*.lst
+*.ihx
+*.bin
+*.cdb

@@ -1,0 +1,57 @@
+---
+alwaysApply: true
+---
+
+# コードコメント規約
+
+## JSDoc は必須
+
+TypeScript / JavaScript の **すべての関数・メソッド・アロー関数** に JSDoc を付ける。
+対象は `retrocpu_emu` / `retrocpu_asm` / `cursor_expand` 配下の実装コードとテストコード。
+
+| 対象 | 必須か |
+| :--- | :--- |
+| `function` 宣言（export / 内部とも） | 必須 |
+| クラスのメソッド・getter・setter | 必須 |
+| `constructor` | 必須（引数の意味を書く） |
+| 関数を代入する `const`（アロー関数・関数式） | 必須 |
+| コールバックとして渡す無名アロー関数 | 任意（意図が非自明なら書く） |
+| テストの `describe` / `it` の中身 | 不要（テスト名で説明する） |
+| テスト内のヘルパ関数 | 必須 |
+
+## 書き方
+
+```ts
+/**
+ * 論理アドレスとセグメントから 18bit 物理ワードアドレスを求める。
+ * @param logAddr 論理ワードアドレス（16bit）
+ * @param seg セグメントレジスタ値（下位 4bit）
+ * @returns 物理ワードアドレス（桁上がりは捨てる）
+ */
+function _phys(logAddr: number, seg: number): number { /* ... */ }
+```
+
+- 1 行目は「何をするか」を日本語で 1 文。型の言い換え（`@param x number` 等）は書かない。
+- 引数があれば `@param`、戻り値があれば `@returns` を書く。`void` のみなら `@returns` は省略。
+- 例外を投げるなら `@throws` に条件を書く。
+- **単位・ビット幅・値域・前提条件**（ワード／バイト、16bit、ミリ秒、HALT 中のみ可 など）を必ず書く。これが JSDoc の一番の価値。
+- 引数も戻り値も無く 1 文で足りる場合は 1 行 JSDoc（`/** スタック実行を止めてタイマーを解除する */`）でよい。
+- 根拠となる仕様がある場合は文書名を書く（例: `HandShake.mdc の位置表に合わせる`）。
+
+## 書いてはいけないこと
+
+- コードをなぞるだけの説明（`// カウンタを増やす`）。
+- 変更履歴・作業経緯（`// 修正した`、`// 前は〜だった`）。差分は Git で追う。
+- 実装の逐次手順の羅列。処理の流れはコード自体で読ませる。
+
+## 確認方法
+
+`retrocpu_emu/scripts/jsdoc_audit.mjs` で未記載を検出できる。
+
+```bash
+cd retrocpu_emu
+node scripts/jsdoc_audit.mjs --list   # 未記載の一覧
+node scripts/jsdoc_audit.mjs          # total / missing の件数のみ
+```
+
+`missing=0` を保つこと。

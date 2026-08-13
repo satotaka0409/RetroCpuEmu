@@ -1,0 +1,87 @@
+.lcd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 18px 10px 10px;
+  gap: 0;
+}
+
+.lcd-card h3 {
+  position: absolute;
+  top: 4px;
+  left: 10px;
+}
+
+.lcd1602-root {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.lcd1602-module {
+  background: linear-gradient(180deg, #3a424a 0%, #2a3036 100%);
+  border: 1px solid #5a6570;
+  border-radius: 8px;
+  padding: 4px 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.lcd1602-bezel {
+  background: #1a2214;
+  border: 2px solid #0d120c;
+  border-radius: 4px;
+  padding: 10px 12px;
+  box-shadow: inset 0 0 0 1px #4a5c32;
+}
+
+.lcd1602-screen {
+  background: linear-gradient(180deg, #9db56a 0%, #87a050 100%);
+  border: 1px solid #6d8540;
+  border-radius: 2px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  box-shadow: inset 0 0 10px rgba(40, 55, 16, 0.35);
+}
+
+.lcd1602-line {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 3px;
+}
+
+.lcd1602-cell {
+  width: 14px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 48, 12, 0.1);
+  color: #1c330e;
+  font-family: "Courier New", "Lucida Console", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 0 1px rgba(28, 51, 14, 0.4);
+  user-select: none;
+}
+
+.lcd1602-cell.lcd-cursor {
+  box-shadow: inset 0 -3px 0 #1c330e;
+}
+
+.lcd1602-cell.lcd-cursor-blink {
+  animation: lcd-cursor-blink 1s step-end infinite;
+}
+
+@keyframes lcd-cursor-blink {
+  50% {
+    box-shadow: none;
+  }
+}

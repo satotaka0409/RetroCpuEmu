@@ -1,0 +1,35 @@
+{
+  "editor.tabSize": 8,
+  "editor.insertSpaces": false,
+  "editor.detectIndentation": false,
+  "editor.indentSize": "tabSize",
+  "files.associations": {
+    "*.asm": "mn1613asm",
+    "*.s": "mn1613asm",
+    "*.mn1613": "mn1613asm",
+    "*.mn1610": "mn1613asm",
+    "*.inc": "mn1613asm"
+  },
+  "editor.formatOnSave": false,
+  "[mn1613asm]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false,
+    "editor.formatOnType": false,
+    "editor.defaultFormatter": null,
+    "editor.codeActionsOnSave": {},
+    "editor.tabSize": 8,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize",
+    "files.trimTrailingWhitespace": false,
+    "files.insertFinalNewline": false
+  },
+  "[asm-intel-x86-generic]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": null,
+    "editor.tabSize": 8,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "files.trimTrailingWhitespace": false
+  }
+}
