@@ -20,8 +20,18 @@ import {
   withMn1613CpuLog,
 } from "../mn1613_mon_settings.js";
 
-/** ユーザ RAM 上の未定義命令置き場（ワード） */
+/** ユーザ RAM 上の未定義命令置き場（論理ワード。実行時 CSBR=PRE_CSBR） */
 const UNDEF_WORD_ADDR = 0x1800;
+
+/**
+ * 論理アドレスと SBR から 18bit 物理ワードアドレスを求める。
+ * @param logAddr 論理ワードアドレス（16bit）
+ * @param sbr セグメント（下位 4bit）
+ * @returns 物理ワードアドレス
+ */
+function physWord(logAddr: number, sbr: number): number {
+  return (((sbr & 0xf) << 14) + (logAddr & 0xffff)) & 0x3ffff;
+}
 
 /** 未定義命令語（op=0x00） */
 const UNDEF_OPCODE = 0x0000;
@@ -88,7 +98,7 @@ async function runUndefUntilMainLoop(
   s: Mn1613AsmSession,
   mock: IoBoardHandshakeMock,
 ): Promise<void> {
-  s.writeWord(UNDEF_WORD_ADDR, UNDEF_OPCODE);
+  s.writeWord(physWord(UNDEF_WORD_ADDR, PRE_CSBR), UNDEF_OPCODE);
   setState({
     R: [...PRE_R],
     SP: PRE_SP,
@@ -139,7 +149,7 @@ test("GL_UNDEF_INST_REG に割り込み直前のレジスタが退避される",
       (UNDEF_WORD_ADDR + 1) & 0xffff,
       packHL(PRE_CSBR, PRE_SSBR),
       packHL(PRE_TSR0, PRE_TSR1),
-      (PRE_NPP & 0xff00) | 0x0080,
+      (PRE_NPP & 0xff) << 8,
     ];
     expect(expected.length).toBe(HSHK_REG_WORDS);
     s.expectLabelWords("GL_UNDEF_INST_REG", expected);

@@ -3,7 +3,7 @@
 ; 根拠: HandShake.mdc「CPU状態取得」/ boot_monitor.mdc
 ;
 ; R0 = 構造体先頭（ワードアドレス、HSHK_REG_WORDS ワード）。
-; 線上は 0x16 バイト（ビッグエンディアン、11 ワード）＋ OK/NG 1B。
+; 線上は 0x15 バイト（R0–TSR 各2 + NPP 1）＋ OK/NG 1B。
 ; g_* は BALD / RET。R0 が構造体先頭。構造体ポインタは R2/X1 に保持。
 
 	.cpu	mn1613
@@ -14,6 +14,7 @@
 
 	.global g_hshk_get_register
 	.global g_hshk_send_word
+	.global g_hshk_send_byte
 	.global g_hshk_recv_byte
 
 ; -------------------------------------------------------
@@ -48,8 +49,10 @@ g_hshk_get_register:
 	bald	g_hshk_send_word
 	l	R0, HSHK_REG_W_TSR0_1(X1)
 	bald	g_hshk_send_word
-	l	R0, HSHK_REG_W_NPP_IISR(X1)
-	bald	g_hshk_send_word
+	l	R0, HSHK_REG_W_NPP(X1)
+	bswp	R0, R0
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
 
 	bald	g_hshk_recv_byte
 	pop	R4

@@ -521,11 +521,8 @@ l_bp_ha_ct:
 	str	R0, TSR0, (R4)
 	ai	X1, #1
 	cpys	R0, NPP
-	andi	R0, #0xff00
-	cpyh	R1, IISR
-	andi	R1, #0x8000
-	bswp	R1, R1
-	or	R0, R1
+	andi	R0, #0x00ff
+	bswp	R0, R0
 	str	R0, TSR0, (R4)
 
 	; メタ更新。_WORK は CSBR（TSR0 は C のまま触らない）

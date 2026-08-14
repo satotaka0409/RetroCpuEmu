@@ -20,6 +20,13 @@ export {
 } from "./assemble_link.js";
 export { Mn1613AsmSession, createMn1613AsmSession } from "./mn1613_session.js";
 export {
+  MEM_MSEQ_TAP,
+  createMSequenceMemory,
+  fillMemoryMSequence,
+  memMseqSeedFromTime,
+  mseqStep,
+} from "./m_sequence.js";
+export {
   attachHandshakeMock,
   createInertTimerScheduler,
   withFrameworkIoMockDefaults,

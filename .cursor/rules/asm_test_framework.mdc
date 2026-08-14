@@ -72,7 +72,7 @@ Makefile: .asm (+ .inc) -> assemble/link -> .ihx + .cdb
 
 ### 実行モデル
 
-1. メモリ確保（必要に応じてゼロクリア）
+1. メモリ確保（256K ワードを M系列で埋める。種は現在時刻。その後 HEX が上書き）
 2. Intel HEX ロード
 3. CDB ロード
 4. 既定 `SP=0xFFFF` で初期化
@@ -184,7 +184,7 @@ L:__CP$uart_initialized$0001:812A
 
 | API                                                  | 内容                                                       |
 | :--------------------------------------------------- | :--------------------------------------------------------- |
-| `session.reload()`                                   | HEX 再ロード + CPU reset + ioMock 再適用                   |
+| `session.reload()`                                   | 現在時刻の種で M系列埋め + HEX 再ロード + CPU reset + ioMock 再適用 |
 | `session.runInit()`                                  | `initLabel`（既定 `g_main`）を HALT まで実行              |
 | `session.call(label, opts)`                          | `.global` ラベルを `callMode` 指定で実行（既定 `bal`=`BALD`） |
 | `session.expectRegisters()`                          | レジスタ検証                                               |

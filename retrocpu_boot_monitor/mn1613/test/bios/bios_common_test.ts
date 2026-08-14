@@ -1,8 +1,12 @@
 /**
- * g_rnd_init / g_get_rnd / g_malloc_init / g_malloc / g_free
+ * g_rnd_init / g_get_rnd / g_mem_cpy / g_malloc_init / g_malloc / g_free
  * / g_malloc2_init / g_malloc2 / g_free2（bios_common.asm）
  * 根拠: boot_monitor.mdc / test_framework.mdc
  */
+import {
+  getState,
+  setState,
+} from "../../../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
 import {
   createSessionFromSettings,
   expect,
@@ -178,6 +182,139 @@ test("R1–R4 は g_get_rnd の前後で保たれる", async () => {
   await withCase(async (s) => {
     await s.call("g_get_rnd", { registers: { ...BASE_REGS } });
     s.expectRegisters({ R1: 0x1111, R3: 0x3333, R4: 0x4444 });
+  });
+});
+
+/** 同一セグメント内コピーの元（ユーザ領域） */
+const CPY_SRC = 0x1800;
+
+/** 同一セグメント内コピーの先 */
+const CPY_DST = 0x1900;
+
+/** コピーするワード列 */
+const CPY_WORDS = [0x1111, 0x2222, 0x3333, 0x4444] as const;
+
+test("g_mem_cpy は同一セグメントの語列をコピーする", async () => {
+  await withCase(async (s) => {
+    for (let i = 0; i < CPY_WORDS.length; i += 1) {
+      s.writeWord(CPY_SRC + i, CPY_WORDS[i]!);
+      s.writeWord(CPY_DST + i, 0xdead);
+    }
+    await s.call("g_mem_cpy", {
+      registers: {
+        ...BASE_REGS,
+        R0: 0,
+        R1: CPY_SRC,
+        R2: CPY_WORDS.length,
+      },
+      stack: [CPY_DST, 0],
+    });
+    s.expectMemoryWords(CPY_DST, [...CPY_WORDS]);
+    s.expectMemoryWords(CPY_SRC, [...CPY_WORDS]);
+  });
+});
+
+test("g_mem_cpy は語数 0 なら先を変えない", async () => {
+  await withCase(async (s) => {
+    s.writeWord(CPY_SRC, 0xcafe);
+    s.writeWord(CPY_DST, 0xdead);
+    await s.call("g_mem_cpy", {
+      registers: { ...BASE_REGS, R0: 0, R1: CPY_SRC, R2: 0 },
+      stack: [CPY_DST, 0],
+    });
+    expect(s.readWord(CPY_DST)).toBe(0xdead);
+  });
+});
+
+test("g_mem_cpy はセグメントをまたいでコピーする", async () => {
+  await withCase(async (s) => {
+    const dstPhys = physWord(HEAP2_LOG, HEAP2_SBR);
+    for (let i = 0; i < CPY_WORDS.length; i += 1) {
+      s.writeWord(CPY_SRC + i, CPY_WORDS[i]!);
+      s.writeWord(dstPhys + i, 0xdead);
+    }
+    await s.call("g_mem_cpy", {
+      registers: {
+        ...BASE_REGS,
+        R0: 0,
+        R1: CPY_SRC,
+        R2: CPY_WORDS.length,
+      },
+      stack: [HEAP2_LOG, HEAP2_SBR >> 2],
+    });
+    s.expectMemoryWords(dstPhys, [...CPY_WORDS]);
+    s.expectMemoryWords(CPY_SRC, [...CPY_WORDS]);
+  });
+});
+
+/**
+ * 18bit 物理ワードアドレスを g_mem_cpy の A16–A17 と論理アドレスに分ける。
+ * @param phys 物理ワードアドレス
+ * @returns a17 は phys[17:16]（0–3）、log は下位 16bit
+ */
+function physToCpyArgs(phys: number): { a17: number; log: number } {
+  const p = phys & 0x3ffff;
+  return { a17: (p >>> 16) & 3, log: p & 0xffff };
+}
+
+/**
+ * 指定物理アドレス間で CPY_WORDS をコピーして検証する。
+ * @param s セッション
+ * @param srcPhys 元の物理ワードアドレス
+ * @param dstPhys 先の物理ワードアドレス
+ */
+async function expectMemCpyPhys(
+  s: Mn1613AsmSession,
+  srcPhys: number,
+  dstPhys: number,
+): Promise<void> {
+  const src = physToCpyArgs(srcPhys);
+  const dst = physToCpyArgs(dstPhys);
+  for (let i = 0; i < CPY_WORDS.length; i += 1) {
+    s.writeWord(srcPhys + i, CPY_WORDS[i]!);
+    s.writeWord(dstPhys + i, 0xdead);
+  }
+  await s.call("g_mem_cpy", {
+    registers: {
+      ...BASE_REGS,
+      R0: src.a17,
+      R1: src.log,
+      R2: CPY_WORDS.length,
+    },
+    stack: [dst.log, dst.a17],
+  });
+  s.expectMemoryWords(dstPhys, [...CPY_WORDS]);
+  s.expectMemoryWords(srcPhys, [...CPY_WORDS]);
+}
+
+test("g_mem_cpy は 0x20000 から 0x38000 へコピーする", async () => {
+  await withCase(async (s) => {
+    await expectMemCpyPhys(s, 0x20000, 0x38000);
+  });
+});
+
+test("g_mem_cpy は 0x3F000 から 0x0E000 へコピーする", async () => {
+  await withCase(async (s) => {
+    await expectMemCpyPhys(s, 0x3f000, 0x0e000);
+  });
+});
+
+test("R3/R4 と TSR0/TSR1 は g_mem_cpy の前後で保たれる", async () => {
+  await withCase(async (s) => {
+    s.writeWord(CPY_SRC, 0x0001);
+    setState({ TSR0: 0x8, TSR1: 0xc });
+    await s.call("g_mem_cpy", {
+      registers: {
+        ...BASE_REGS,
+        R0: 0,
+        R1: CPY_SRC,
+        R2: 1,
+      },
+      stack: [CPY_DST, 0],
+    });
+    s.expectRegisters({ R3: 0x3333, R4: 0x4444 });
+    expect(getState().TSR0 & 0xf).toBe(0x8);
+    expect(getState().TSR1 & 0xf).toBe(0xc);
   });
 });
 

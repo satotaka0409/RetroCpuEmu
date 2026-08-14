@@ -210,7 +210,7 @@ export type Mn1613SessionOptions = {
   returnStubWordAddr?: number;
   /** run 最大サイクル。既定 2_000_000（ハンドシェイク待ち込み） */
   maxCycles?: number;
-  /** メモリバイト数。既定 0x20000（64K ワード） */
+  /** メモリバイト数。既定 0x80000（256K ワード＝512KB。確保時は現在時刻の種で M系列埋め） */
   memoryBytes?: number;
   /**
    * IO モック（emulater_code_test.mdc §7）。

@@ -17,6 +17,7 @@
 
 	.global g_rnd_init
 	.global g_get_rnd
+	.global g_mem_cpy
 	.global g_malloc_init
 	.global g_malloc
 	.global g_free
@@ -67,6 +68,43 @@ g_get_rnd:
 ; ヒープブロック: [+0]=ワード数（ヘッダ含む） [+1]=0 free / 1 used [+2…]=ユーザ
 GL_HEAP_HDR	.equ	2
 GL_HEAP_USED	.equ	1
+
+; -------------------------------------------------------
+; メモリコピー（BLK。TSR0:R1 → TSR1:R2、語数 R0）
+; @param R0 - コピー元 A16–A17（物理ワードの上位 2bit。TSR は <<2）
+; @param R1 - コピー元 A0–A15（論理ワードアドレス）
+; @param R2 - 語数（0 なら何もしない）
+; @param SP+2 - コピー先 A16–A17
+; @param SP+3 - コピー先 A0–A15
+; @Destruction なし
+; -------------------------------------------------------
+g_mem_cpy:
+	pshm
+	cpyb	R0, TSR0
+	cpyb	R1, TSR1
+	push	R0
+	push	R1
+	mv	X0, SP
+	l	R0, 7(X0)		; 元 A16–A17
+	andi	R0, #0x0003
+	sl	R0, RE
+	sl	R0, RE
+	setb	R0, TSR0
+	l	R1, 6(X0)		; 元 A0–A15
+	l	R0, 9(X0)		; 先 A16–A17
+	andi	R0, #0x0003
+	sl	R0, RE
+	sl	R0, RE
+	setb	R0, TSR1
+	l	R2, 10(X0)		; 先 A0–A15
+	l	R0, 5(X0)		; 語数
+	blk
+	pop	R1
+	pop	R0
+	setb	R1, TSR1
+	setb	R0, TSR0
+	popm
+	ret
 
 ; -------------------------------------------------------
 ; malloc 初期化（first-fit ヒープ）
@@ -525,14 +563,11 @@ g_write_cpu_registers:
 	andi	R1, #0x000f
 	or	R0, R1
 	st	R0, HSHK_REG_W_TSR0_1(X1)
-	; NPP(H)|IISR(L)。未定義経路なので IISR 欄は 0x80 として格納
+	; NPP を値H（上位 8bit）へ。線上は 1 バイト、下位は未使用
 	cpys	R0, NPP
-	andi	R0, #0xff00
-	cpyh	R1, IISR
-	andi	R1, #0x8000
-	bswp	R1, R1
-	or	R0, R1
-	st	R0, HSHK_REG_W_NPP_IISR(X1)
+	andi	R0, #0x00ff
+	bswp	R0, R0
+	st	R0, HSHK_REG_W_NPP(X1)
 	pop	R3
 	pop	R4
 	ret

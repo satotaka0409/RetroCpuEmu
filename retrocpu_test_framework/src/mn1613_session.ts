@@ -26,6 +26,7 @@ import { defaultHexCdbPaths } from "./assemble_link.js";
 import { CpuExecutionLog } from "./cpu_log.js";
 import { clearCpuLogTestMark, setActiveCpuLogMarker } from "./cpu_log_mark.js";
 import { withFrameworkIoMockDefaults } from "./handshake_mock.js";
+import { createMSequenceMemory } from "./m_sequence.js";
 import type {
   CallOptions,
   CallRegisters,
@@ -170,6 +171,8 @@ export class Mn1613AsmSession {
   readonly returnStubWordAddr: number;
   readonly maxCycles: number;
   readonly memoryBytes: number;
+  /** 直近の reload でメモリ埋めに使った M系列の種（1〜0xFFFF） */
+  memoryMseqSeed = 0;
   private readonly ioMockEntries: CodeTestIoMockEntry[] | undefined;
   private cdb: CdbTable;
   private lastResult: CallResult | null = null;
@@ -297,12 +300,14 @@ export class Mn1613AsmSession {
 
   /**
    * HEX をメモリへ再ロードし、戻りスタブ（H）を書く。CPU は reset。
+   * 確保直後は 256K ワードを M系列で埋める（種は現在時刻）。その上に HEX を載せる。
    * `ioMock` があれば RD/WT を付け直す（emulater_code_test.mdc §7）。
    */
   reload(): void {
     this.bindCpuLogHooks();
-    const buf = new ArrayBuffer(this.memoryBytes);
-    setMemory(buf);
+    const filled = createMSequenceMemory(this.memoryBytes);
+    this.memoryMseqSeed = filled.seed;
+    setMemory(filled.buffer);
     setPins({
       HLT: false,
       RST: false,

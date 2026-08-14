@@ -22,13 +22,13 @@ const BASE_REGS = {
 /** ユーザ RAM 上の構造体先頭（ワードアドレス） */
 const STRUCT_ADDR = 0x1800;
 
-/** 48h 線上バイト数（11 ワード。HSHK_IRQ_STATUS_BYTES） */
-const WIRE_BYTES = 0x16;
+/** 48h 線上バイト数（R0–TSR 20B + NPP 1B。HSHK_IRQ_STATUS_BYTES） */
+const WIRE_BYTES = 0x15;
 
-/** 構造体 11 ワード（R0…NPP|IISR） */
+/** 構造体 11 ワード（末尾は NPP が上位 8bit、下位未使用） */
 const SAMPLE_STRUCT = [
   0x1111, 0x1010, 0x2222, 0x3333, 0x4444, 0x5555, 0x00e0, 0xbeef, 0x0102,
-  0x0304, 0x0a0b,
+  0x0304, 0x0a00,
 ] as const;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
@@ -45,13 +45,15 @@ function be16(v: number): number[] {
 }
 
 /**
- * 構造体 11 ワードを 48h 線上 0x16 バイトにする。
- * CSBR/SSBR・TSR0/TSR1・NPP/IISR は各 1 ワード（H/L）。
- * @param w R0…NPP|IISR
+ * 構造体 11 ワードを 48h 線上 0x15 バイトにする。
+ * CSBR/SSBR・TSR0/TSR1 は各 1 ワード（H/L）。NPP は上位 8bit だけ 1 バイト。
+ * @param w R0…NPP
  * @returns ビッグエンディアン・バイト列
  */
 function structToWire(w: readonly number[]): number[] {
-  return w.flatMap((v) => be16(v));
+  const words = [...w];
+  const npp = words.pop() ?? 0;
+  return [...words.flatMap((v) => be16(v)), (npp >>> 8) & 0xff];
 }
 
 /**
@@ -104,7 +106,7 @@ async function waitReq1(
   }
 }
 
-test("R0 の構造体 11 ワードを 0x16 バイトで送る", async () => {
+test("R0 の構造体 11 ワードを 0x15 バイトで送る", async () => {
   await withCase(async (s, mock) => {
     writeStruct(s, STRUCT_ADDR, SAMPLE_STRUCT);
     const io = mock.exchangeWithCpu(

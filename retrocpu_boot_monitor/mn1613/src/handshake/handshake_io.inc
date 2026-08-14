@@ -124,10 +124,10 @@ HSHK_IRQ_PAY_43		.equ	1
 HSHK_IRQ_PAY_49		.equ	4
 HSHK_IRQ_PAY_50		.equ	8
 HSHK_IRQ_PAY_51		.equ	8
-HSHK_IRQ_STATUS_BYTES	.equ	0x16
+HSHK_IRQ_STATUS_BYTES	.equ	0x15
 HSHK_MEM_BLOCK		.equ	256
 
-; CPU状態構造体（ワードオフセット。R0 = 先頭。48h 線上はここから 0x16 バイト）
+; CPU状態構造体（ワードオフセット。R0 = 先頭。48h 線上は 0x15 バイト）
 HSHK_REG_W_R0		.equ	0
 HSHK_REG_W_R1		.equ	1
 HSHK_REG_W_R2		.equ	2
@@ -138,7 +138,7 @@ HSHK_REG_W_STR		.equ	6
 HSHK_REG_W_IC		.equ	7
 HSHK_REG_W_CSBR_SSBR	.equ	8
 HSHK_REG_W_TSR0_1	.equ	9
-HSHK_REG_W_NPP_IISR	.equ	10
+HSHK_REG_W_NPP		.equ	10	; 上位 8bit=NPP。下位は未使用（線上は 1B）
 HSHK_REG_WORDS		.equ	11
 
 ; レベル2割り込み退避（MN1613_CPUボードメモリ_IOマップ.mdc 0004/0005）

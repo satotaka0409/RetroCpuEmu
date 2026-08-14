@@ -109,15 +109,15 @@ test("49h 実行指示は 4B を読み NG を返す", async () => {
   });
 });
 
-test("48h 割り込みはバッファなしで 0x16 ゼロを返し OK を受け取る", async () => {
+test("48h 割り込みはバッファなしで 0x15 ゼロを返し OK を受け取る", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
       Uint8Array.from([0x48]),
-      0x16,
+      0x15,
       Uint8Array.from([0x00]),
     );
-    expect(Array.from(reply)).toEqual(Array(0x16).fill(0));
+    expect(Array.from(reply)).toEqual(Array(0x15).fill(0));
     s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
 });

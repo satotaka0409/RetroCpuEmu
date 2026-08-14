@@ -139,7 +139,7 @@ l_hshk_irq_43:
 	bald	g_hshk_send_byte
 	ret
 
-; 48h CPU状態取得（構造体は R0。割り込みではバッファを持たない）
+; 48h CPU状態取得（構造体は R0。割り込みではバッファを持たない。0x15 ゼロ）
 l_hshk_irq_48:
 	mvwi	R0, #HSHK_IRQ_STATUS_BYTES
 	bald	l_hshk_irq_send_zeros

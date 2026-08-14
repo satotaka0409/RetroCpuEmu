@@ -1132,8 +1132,7 @@ function _handleIRQ(): void {
  * HALT にはしない（MN1610 の「未定義＝H」とは異なる）。
  */
 function _trapUndefinedInsn(): void {
-  // 未定義命令は IISR の未定義通知（bit15）を立て、さらに bit0=1 を付ける。
-  // boot monitor 側は INT0 退避時に IISR の bit0 を NPP(H)|IISR(L の L 側として保存するため。
+  // 未定義命令は IISR の未定義通知（bit15）を立てる。
   cpuRegister.IISR |= 0x8000;
   cpuRegister.IISR |= 0x0001;
   _acceptIrq(0);
