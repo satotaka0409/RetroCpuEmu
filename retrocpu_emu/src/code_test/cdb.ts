@@ -31,6 +31,9 @@ export function emptyCdbTable(): CdbTable {
  * CDB テキストをパースする。
  * 対応: L:G$name$level$block:addr / L:F$... / L:L$... /
  * L:__CP$checkpoint$serial:addr および L:G$__CP$...（チェックポイント。ラベル表には混ぜない）
+ * @param cdbText CDB 全文
+ * @returns ラベル表とチェックポイント
+ * @throws 奇数バイトアドレス、または `__CP$` なのに `$serial4` が無いレコード
  */
 export function parseCdb(cdbText: string): CdbTable {
   const byName = new Map<string, CdbSymbol>();
@@ -60,8 +63,11 @@ export function parseCdb(cdbText: string): CdbTable {
     }
 
     const cpLeft = left.startsWith("G$") ? left.slice(2) : left;
-    const cpMatch = cpLeft.match(CP_LEFT);
-    if (cpMatch) {
+    if (cpLeft.startsWith("__CP$")) {
+      const cpMatch = cpLeft.match(CP_LEFT);
+      if (!cpMatch) {
+        throw new Error(`Invalid checkpoint CDB record "${left}"`);
+      }
       const name = cpMatch[1]!;
       const serial = cpMatch[2]!;
       checkpoints.push({

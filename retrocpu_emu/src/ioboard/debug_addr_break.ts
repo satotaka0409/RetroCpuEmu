@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（40h / 41h）
+ * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（10h / 11h）
  * 根拠: retrocpu_debug.mdc「アドレスブレイク設定」「メモリ/IOブレイク解除」
  * 線上レイアウトは HandShake.mdc と同じ。TCP も同じバイナリを載せる。
  */
@@ -13,7 +13,7 @@ import {
   RESPONSE_CODE,
 } from "../shared/handshake/handshake_type";
 
-/** 40h 設定フレーム（コマンド除くフィールド） */
+/** 10h 設定フレーム（コマンド除くフィールド） */
 export type AddrBreakSetFields = {
   /** スロット 0–7 */
   slot: number;
@@ -28,7 +28,7 @@ export type AddrBreakSetFields = {
 };
 
 /**
- * 40h の TCP／線上フレーム（10 バイト）を組み立てる。
+ * 10h の TCP／線上フレーム（10 バイト）を組み立てる。
  * @param fields スロット・フラグ・アドレス・比較データ
  * @returns cmd + 9 バイト
  */
@@ -50,8 +50,8 @@ export function encodeAddrBreakSetFrame(fields: AddrBreakSetFields): Uint8Array 
 }
 
 /**
- * 40h フレームからフィールドを読む。長さ・コマンドが違うと null。
- * @param frame 受信バイト（先頭が 40h、長さ 10）
+ * 10h フレームからフィールドを読む。長さ・コマンドが違うと null。
+ * @param frame 受信バイト（先頭が 10h、長さ 10）
  * @returns フィールド。不正なら null
  */
 export function parseAddrBreakSetFrame(
@@ -74,7 +74,7 @@ export function parseAddrBreakSetFrame(
 }
 
 /**
- * 40h のコマンド除く 9 バイトを取り出す。
+ * 10h のコマンド除く 9 バイトを取り出す。
  * @param frame 10 バイトフレーム
  * @returns payload。不正なら null
  */
@@ -84,7 +84,7 @@ export function addrBreakSetPayload(frame: Uint8Array): Uint8Array | null {
 }
 
 /**
- * 41h フレーム（cmd + slot）を組み立てる。
+ * 11h フレーム（cmd + slot）を組み立てる。
  * @param slot ブレイク設定番号（0–7）
  * @returns 2 バイト
  */
@@ -93,8 +93,8 @@ export function encodeAddrBreakClrFrame(slot: number): Uint8Array {
 }
 
 /**
- * 41h のスロット番号を読む。
- * @param frame 受信バイト（先頭が 41h、長さ 2）
+ * 11h のスロット番号を読む。
+ * @param frame 受信バイト（先頭が 11h、長さ 2）
  * @returns スロット。不正なら null
  */
 export function parseAddrBreakClrSlot(frame: Uint8Array): number | null {

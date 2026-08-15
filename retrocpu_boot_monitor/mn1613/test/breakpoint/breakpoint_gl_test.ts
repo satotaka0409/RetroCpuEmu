@@ -1,9 +1,9 @@
 /**
- * 命令ブレイク結合（40h 設定 → フェッチヒット → INT2 → 18h / 60h）
- * 根拠: HandShake.mdc（40h / 18h / 60h）/ breakpoint.mdc /
+ * 命令ブレイク結合（10h 設定 → フェッチヒット → INT2 → 1Ah / 17h / 18h）
+ * 根拠: HandShake.mdc（10h / 1Ah / 17h / 18h）/ breakpoint.mdc /
  * MN1613_CPUボードメモリ_IOマップ.mdc（比較器 0030–0034）
  *
- * 40h は BIOS 表（GL_HSHK_ADDR_BREAK）へ書く。CPLD 比較器は BIOS が
+ * 10h は BIOS 表（GL_HSHK_ADDR_BREAK）へ書く。CPLD 比較器は BIOS が
  * 0030–0032 へまだ出さないため、テストが同じスロットへ MEM+READ を載せる。
  */
 import {
@@ -14,6 +14,7 @@ import {
   IO_PORT_BREAK_ADDR_LO,
   IO_PORT_BREAK_CTRL,
 } from "../../../../retrocpu_emu/src/cpuboard/mn1613/addr_comparator.js";
+import { stepBreak } from "../../../../retrocpu_emu/src/cpuboard/mn1613/step_break.js";
 import {
   run,
   setState,
@@ -38,7 +39,7 @@ const BASE_REGS = {
 
 /** ユーザ領域の監視ワードアドレス（CSBR=0） */
 const WATCH_WORD = 0x1800;
-/** 40h / 18h の監視アドレス（バイト、ビッグエンディアン） */
+/** 10h / 1Ah の監視アドレス（バイト、ビッグエンディアン） */
 const WATCH_BYTE = WATCH_WORD * 2;
 /** B $-1（フェッチ後 IC から -1 → 自分自身へ戻る） */
 const OP_B_SELF = 0xcfff;
@@ -46,14 +47,14 @@ const OP_B_SELF = 0xcfff;
 const FLAGS_INST_RD = 0x42;
 /** 命令ブレイク + 履歴 */
 const FLAGS_INST_RD_HIST = 0xc2;
-/** 履歴ヒット回数（40h の count。1 減らし 0 で停止） */
+/** 履歴ヒット回数（10h の count。1 減らし 0 で停止） */
 const HIST_COUNT = 4;
 const SLOT_WORDS = 6;
 const STR_IRQ_ENABLE = 0x0700;
 const IDLE_SP = 0xff00;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
-/** 60h: ヘッダ 8B ＋ エントリ 34B×件数 ＋ 終端 1B */
-const HIST_ENTRY_BYTES = 34;
+/** 17h: ヘッダ 8B ＋ エントリ 66B×件数 ＋ 終端 1B */
+const HIST_ENTRY_BYTES = 66;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
   withMn1613CpuLog(mn1613MonHandshakeSettings, import.meta.url),
@@ -71,7 +72,7 @@ function readSlot(s: Mn1613AsmSession, slot: number): number[] {
 }
 
 /**
- * 40h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
+ * 10h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
  * @param slot 設定番号 0–7
  * @param flags Bit0 MEM/IO, Bit1 RD, Bit2 WR, Bit6 INST, Bit7 履歴
  * @param count 0=即停止。1–255=その回数で停止
@@ -89,7 +90,7 @@ function breakSetFrame(
   const a = addr >>> 0;
   const d = data & 0xffff;
   return Uint8Array.from([
-    0x40,
+    0x10,
     slot & 0xff,
     flags & 0xff,
     count & 0xff,
@@ -141,7 +142,7 @@ async function callHandler(
 }
 
 /**
- * 40h と同じスロットへ CPLD 比較器（MEM READ）を載せる。
+ * 10h と同じスロットへ CPLD 比較器（MEM READ）を載せる。
  * @param slot 0–7
  * @param wordAddr 監視する 18bit 物理ワードアドレス
  */
@@ -185,7 +186,7 @@ async function withCase(
   }
 }
 
-test("命令ブレイク（通常）はフェッチで INT2 し 18h を送る", async () => {
+test("命令ブレイク（通常）はフェッチで INT2 し 1Ah を送る", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
@@ -221,7 +222,7 @@ test("命令ブレイク（通常）はフェッチで INT2 し 18h を送る", 
   });
 });
 
-test("命令ブレイク（回数4・履歴）は 4 件残して 18h する", async () => {
+test("命令ブレイク（回数4・履歴）は 4 件残して 1Ah する", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     const reply = await callHandler(
@@ -255,7 +256,7 @@ test("命令ブレイク（回数4・履歴）は 4 件残して 18h する", as
     );
     const hist = await callHandler(
       mock,
-      Uint8Array.from([0x60, 0x00, 0x00]),
+      Uint8Array.from([0x17, 0x00, 0x00]),
       8 + HIST_COUNT * HIST_ENTRY_BYTES + 1,
     );
     expect(hist.length).toBe(8 + HIST_COUNT * HIST_ENTRY_BYTES + 1);
@@ -275,5 +276,72 @@ test("命令ブレイク（回数4・履歴）は 4 件残して 18h する", as
       expect((hist[off + 10]! << 8) | hist[off + 11]!).toBe(0);
     }
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(HIST_COUNT);
+  });
+});
+
+test("10h 設置→1Ah 停止→17h 履歴→18h 通常復帰", async () => {
+  await withCase(async (s, mock) => {
+    mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+    const setReply = await callHandler(
+      mock,
+      breakSetFrame(0, FLAGS_INST_RD_HIST, 0, WATCH_BYTE, 0),
+      1,
+    );
+    expect(Array.from(setReply)).toEqual([0x00]);
+    expect(readSlot(s, 0)).toEqual([
+      1,
+      FLAGS_INST_RD_HIST,
+      0,
+      (WATCH_BYTE >>> 16) & 0xffff,
+      WATCH_BYTE & 0xffff,
+      0,
+    ]);
+
+    armCpldFetchBreak(0, WATCH_WORD);
+    loadSelfLoop(s);
+    mock.start();
+    try {
+      const status = await run(WATCH_WORD, s.maxCycles);
+      expect(status).toBe("halted");
+    } finally {
+      await mock.stop();
+    }
+
+    expect(mock.state.lastBreakNotify).toEqual({
+      kind: 0,
+      slot: 0,
+      addr: WATCH_BYTE,
+    });
+    expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
+
+    addrComparators.writePort(
+      IO_PORT_BREAK_CTRL,
+      encodeBreakCtrl(0, false, false, BREAK_RDWR_RD),
+    );
+
+    const hist = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + HIST_ENTRY_BYTES + 1,
+    );
+    expect(hist.length).toBe(8 + HIST_ENTRY_BYTES + 1);
+    expect(hist[0]).toBe(1);
+    expect(hist[1]).toBe(0);
+    expect(hist[2]).toBe(FLAGS_INST_RD_HIST);
+    expect(hist[3]).toBe(0);
+    expect(hist[4]).toBe(0);
+    expect(hist[5]).toBe(0);
+    expect(hist[6]).toBe((WATCH_BYTE >>> 8) & 0xff);
+    expect(hist[7]).toBe(WATCH_BYTE & 0xff);
+    expect(hist[hist.length - 1]).toBe(0x00);
+    expect(Array.from(hist.slice(8, 16))).toEqual([...SAMPLE_TIME]);
+    expect((hist[16]! << 8) | hist[17]!).toBe(OP_B_SELF);
+    expect((hist[18]! << 8) | hist[19]!).toBe(0);
+
+    const resume = await callHandler(mock, Uint8Array.from([0x18, 0]), 1);
+    expect(Array.from(resume)).toEqual([0x00]);
+    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(stepBreak.getEnable()).toBe(0);
+    s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
 });

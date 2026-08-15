@@ -64,7 +64,7 @@ g_set_int_adr:
 
 ; -------------------------------------------------------
 ; INT0 割り込みハンドラー
-; 未定義命令（IISR bit15）なら 17h で UNDEF LED を点灯しメインループへ。
+; 未定義命令（IISR bit15）なら 13h で UNDEF LED を点灯しメインループへ。
 ; 通常のレベル0は LPSW 0 で復帰する。
 ; -------------------------------------------------------
 g_int0_handler:
@@ -204,7 +204,7 @@ l_int2_epilogue:
 	pop	R0
 	setb	R1, TSR1
 	setb	R0, TSR0
-	; 61h ステップなら LPSW 2 の直前に CPLD を武装する
+	; 18h ステップなら LPSW 2 の直前に CPLD を武装する
 	bald	g_step_arm_cpld
 	popm
 	lpsw	2

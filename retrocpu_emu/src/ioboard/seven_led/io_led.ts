@@ -2,7 +2,7 @@
  * IO ボード上の表示ラッチ（7セグ + 砲弾 LED）
  *
  * ブートモニタは LED を使わない。
- * ユーザープログラムがハンドシェイク LED表示依頼 (0x13) で更新する。
+ * ユーザープログラムがハンドシェイク LED表示依頼 (0x16) で更新する。
  * RAM やレジスタを覗いて点灯させない。
  */
 
@@ -25,7 +25,7 @@ function emptyLed(): LedDisplayData {
 
 let _led: LedDisplayData = emptyLed();
 
-/** ハンドシェイク 0x13 受信時に呼ぶ */
+/** ハンドシェイク 0x16 受信時に呼ぶ */
 export function applyLedDisplayCommand(data: LedDisplayData): void {
   const segs = new Uint8Array(LED_SEVEN_SEG_COUNT);
   segs.set(data.sevenSeg.subarray(0, LED_SEVEN_SEG_COUNT));

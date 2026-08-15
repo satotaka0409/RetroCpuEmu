@@ -94,7 +94,7 @@ describe("ボードリンク: IO→CPU 割り込み要求 / CPU→IO フレー�
       return new Uint8Array([0x00]);
     });
 
-    const frame = new Uint8Array([0x15, 0x01, 0x00, 0x0a, 0x00, 0x02]);
+    const frame = new Uint8Array([0x12, 0x01, 0x00, 0x0a, 0x00, 0x02]);
     const response = await sendCpuToIoFrame(frame);
 
     expect([...response]).toEqual([0x00]);
@@ -104,7 +104,7 @@ describe("ボードリンク: IO→CPU 割り込み要求 / CPU→IO フレー�
 
   it("IO 側にハンドラ未登録ならエラーになる", async () => {
     client.setCpuToIoFrameHandler(null);
-    await expect(sendCpuToIoFrame(new Uint8Array([0x15]))).rejects.toThrow(
+    await expect(sendCpuToIoFrame(new Uint8Array([0x12]))).rejects.toThrow(
       /handler not set/,
     );
   });
@@ -140,7 +140,7 @@ describe("ボードリンク: IO→CPU 割り込み要求 / CPU→IO フレー�
     );
   });
 
-  it("エージェント無しの hshk 50h は拒否する（DMA では読まない）", async () => {
+  it("エージェント無しの hshk 13h は拒否する（DMA では読まない）", async () => {
     await expect(client.memReadBytes(0x10, 2)).rejects.toThrow(
       /handshake agent/i,
     );

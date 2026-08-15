@@ -1,9 +1,9 @@
 ; breakpoint_hist.asm
 ; 比較器ヒット時の履歴追記（Bit7、3F000h / SBR C）
-; 根拠: HandShake.mdc 60h エントリ / breakpoint.mdc / boot_monitor.mdc
+; 根拠: HandShake.mdc 17h エントリ / breakpoint.mdc / boot_monitor.mdc
 ;
 ; g_breakpoint_interrupt_handler が比較一致のあと BALD する。
-; 16h で時刻を取り、リング 16 件へ 17 ワードを書く。失敗しても時刻 0 で書く。
+; 11h で時刻を取り、リング 16 件へ 33 ワードを書く。失敗しても時刻 0 で書く。
 ; ステップ実行はここへ来ない。
 
 	.cpu	mn1613
@@ -18,14 +18,15 @@
 	.global GL_BP_HIT_PREV
 	.global GL_BP_SNAP_R3
 	.global GL_BP_SNAP_TSR0
+	.global GL_BP_SNAP_SP
 	.global GL_BP_HIST_META
 
 BP_KIND_IO		.equ	2
 
 ; -------------------------------------------------------
-; Bit7 履歴 1 件を 3F000h へ追記（60h エントリ）。
-; @note 入口: R2=区分、R3=スロット、X1=40h 表。比較一致済み。
-; @note 16h の応答待ち前に BUSY を下ろす。
+; Bit7 履歴 1 件を 3F000h へ追記（17h エントリ）。
+; @note 入口: R2=区分、R3=スロット、X1=10h 表。比較一致済み。
+; @note 11h の応答待ち前に BUSY を下ろす。
 ; @Destruction R0, R1（R2 / R3 / X1 は保存）
 ; -------------------------------------------------------
 g_bp_hist_append:
@@ -70,7 +71,7 @@ l_bp_ha_prev_st:
 	mvwi	X0, #GL_BP_HIT_PREV_W
 	st	R1, 0(X0)
 
-	; 16h。INT2 中は BUSY=1 のままでは IO が応答しない
+	; 11h。INT2 中は BUSY=1 のままでは IO が応答しない
 	eor	R0, R0
 	wt	R0, INTERRUPT_BUSY
 	si	SP, #4
@@ -82,7 +83,8 @@ l_bp_ha_prev_st:
 	st	R0, 4(X0)
 	bald	g_hshk_get_time
 
-	; スロット → メタ。dest = F000h + slot*272 + head*17
+	; スロット → メタ。dest = F000h + slot*528 + head*33
+	; *33 = <<5 + n、*528 = <<9 + <<4
 	mv	X0, SP
 	l	R3, 6(X0)		; スロット（時刻 4 + 表の下）
 	mv	R0, R3
@@ -94,13 +96,28 @@ l_bp_ha_prev_st:
 	st	R0, 0(X1)
 	mv	X1, R0			; メタ
 	l	R0, 1(X1)		; head
-	mvwi	R2, #GL_BP_K17
-	m	DR0, (R2)		; head*17（下位 R1）
+	mv	R1, R0
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	a	R1, R0			; head*33
 	mv	R2, R1
 	mv	R0, R3			; slot
-	mvwi	X1, #GL_BP_K272
-	m	DR0, (R4)		; slot*272（X1≡R4）
-	a	R1, R2			; + head*17
+	mv	R1, R0
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE			; *16
+	mv	R0, R1
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE
+	sl	R1, RE			; *512
+	a	R1, R0			; slot*528
+	a	R1, R2			; + head*33
 	mvwi	R0, #HSHK_BH_BASE
 	a	R1, R0			; 論理 dest
 	mv	X1, R1
@@ -127,7 +144,7 @@ l_bp_ha_ct:
 	str	R0, TSR0, (R4)
 	ai	X1, #1
 
-	; 48h レジスタ 11 ワード（R0–R2 は 0。R3/R4 は入口スナップ）
+	; レジスタ 11 ワード（R0–R2 は 0。R3/R4 は入口スナップ）
 	eor	R0, R0
 	str	R0, TSR0, (R4)
 	ai	X1, #1
@@ -142,7 +159,8 @@ l_bp_ha_ct:
 	l	R0, 1(X0)
 	str	R0, TSR0, (R4)
 	ai	X1, #1
-	eor	R0, R0			; SP（call 経路では再構成しない）
+	mvwi	X0, #GL_BP_SNAP_SP
+	l	R0, 0(X0)
 	str	R0, TSR0, (R4)
 	ai	X1, #1
 	l	R0, *HSHK_L2_STR_SAVE
@@ -159,9 +177,10 @@ l_bp_ha_ct:
 	or	R0, R1
 	str	R0, TSR0, (R4)
 	ai	X1, #1
-	l	R0, 2(X0)		; SNAP TSR0。X0 はまだ SNAP_R3
+	mvwi	X0, #GL_BP_SNAP_TSR0
+	l	R0, 0(X0)
 	bswp	R0, R0
-	l	R1, 3(X0)
+	l	R1, 1(X0)
 	or	R0, R1
 	str	R0, TSR0, (R4)
 	ai	X1, #1
@@ -170,7 +189,30 @@ l_bp_ha_ct:
 	bswp	R0, R0
 	str	R0, TSR0, (R4)
 
-	; メタ更新。_WORK は CSBR（TSR0 は C のまま触らない）
+	; スタック 16 ワード（SNAP_SP=0 なら 0 埋め）
+	mvwi	X0, #GL_BP_SNAP_SP
+	l	R2, 0(X0)
+	or	R2, R2, Z
+	b	l_bp_ha_stk
+	mvi	R2, #HSHK_BH_STACK_WORDS
+	eor	R0, R0
+l_bp_ha_stk_z:
+	ai	X1, #1
+	str	R0, TSR0, (R4)
+	si	R2, #1, Z
+	b	l_bp_ha_stk_z
+	b	l_bp_ha_meta
+l_bp_ha_stk:
+	mv	X0, R2
+	mvi	R2, #HSHK_BH_STACK_WORDS
+l_bp_ha_stk_lp:
+	ai	X0, #1
+	l	R0, 0(X0)
+	ai	X1, #1
+	str	R0, TSR0, (R4)
+	si	R2, #1, Z
+	b	l_bp_ha_stk_lp
+l_bp_ha_meta:
 	mvwi	X0, #GL_BP_HIST_MPTR
 	l	X1, 0(X0)
 	l	R0, 1(X1)
@@ -195,10 +237,6 @@ l_bp_ha_meta_ok:
 	pop	R3
 	pop	R2
 	ret
-
-	.area	_DATA		(REL,CON)
-GL_BP_K17:		.dw	HSHK_BH_ENTRY_WORDS
-GL_BP_K272:		.dw	HSHK_BH_SLOT_WORDS
 
 	.area	_WORK		(REL,NOLOAD)
 ; 履歴に書く AFTER / フィルタ後 PREV

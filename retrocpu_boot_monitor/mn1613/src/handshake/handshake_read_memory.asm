@@ -1,5 +1,5 @@
 ; handshake_read_memory.asm
-; メモリ読み出し（ハンドシェイク 50h、IO→CPU）
+; メモリ読み出し（ハンドシェイク 13h、IO→CPU）
 ; 根拠: HandShake.mdc「メモリ読み出し」/ boot_monitor.mdc
 ;
 ; コマンド 1B は IRQ ディスパッチ済み。残りヘッダ 8B:
@@ -33,7 +33,7 @@ HSHK_RM_SUM		.equ	6
 HSHK_RM_TSR0		.equ	7
 
 ; -------------------------------------------------------
-; メモリ読み出し（50h ペイロード）
+; メモリ読み出し（13h ペイロード）
 ; @note コマンドバイトは呼び出し前に受信済み
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1, R2

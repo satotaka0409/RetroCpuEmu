@@ -2,7 +2,7 @@
  * IO ボードのタイマー割り込み配送
  * 根拠: HandShake.mdc「タイマー設定」/ MN1613_CPUボードメモリ_IOマップ.mdc（INT_CAUSE）
  *
- * 15h の受理はアセンブラ（handshake_timer）側。ここでは IoTimer.configure
+ * 12h の受理はアセンブラ（handshake_timer）側。ここでは IoTimer.configure
  * 後の満了 → INT_CAUSE / IRQ2 / INTERRUPT_BUSY 保留を確認する。
  */
 
@@ -103,7 +103,7 @@ describe("IO ボードタイマー割り込み", () => {
   });
 
   /**
-   * タイマー番号 0/1 を設定する（15h ハンドラ相当。線上の送受信はしない）。
+   * タイマー番号 0/1 を設定する（12h ハンドラ相当。線上の送受信はしない）。
    * @param timerNo タイマー番号（0 または 1）
    * @param periodMs 周期 (ms)。0 で停止
    * @param count 割り込み回数。0 で無限

@@ -62,11 +62,27 @@ export type IoBoardMockState = {
   pcKey: { ascii: number; keyCode: number };
   lastBeep: BeepParams | null;
   lastTimer: TimerParams | null;
-  /** 未定義命令LED（17h）。true=点灯 */
+  /** 未定義命令LED（13h）。true=点灯 */
   undefLed: boolean;
   addrBreakNo: number;
-  /** 直近のブレイク通知（18h）。未受信は null */
+  /** 直近のブレイク通知（1Ah）。未受信は null */
   lastBreakNotify: { kind: number; slot: number; addr: number } | null;
+  /** 直近のステップ通知（1Bh）。未受信は null */
+  lastStepNotify: {
+    addr: number;
+    r0: number;
+    r1: number;
+    r2: number;
+    r3: number;
+    r4: number;
+    sp: number;
+    str: number;
+    ic: number;
+    csbrSsbr: number;
+    tsr: number;
+    npp: number;
+    stack: number[];
+  } | null;
   /** 64bit タイマー（上位バイトが [0]） */
   timestamp: Uint8Array;
   log: IoBoardMockLogEntry[];
@@ -81,7 +97,7 @@ export type IoBoardMockOptions = {
   /** ログ最大件数（既定 64） */
   maxLog?: number;
   onLog?: (entry: IoBoardMockLogEntry) => void;
-  /** タイマー割り込み（15h）の駆動スケジューラ。既定はグローバル setTimeout */
+  /** タイマー割り込み（12h）の駆動スケジューラ。既定はグローバル setTimeout */
   timerScheduler?: IoTimerScheduler;
 };
 
@@ -113,6 +129,7 @@ export function createIoBoardCommandState(): IoBoardMockState {
     undefLed: false,
     addrBreakNo: 0,
     lastBreakNotify: null,
+    lastStepNotify: null,
     timestamp: new Uint8Array(8),
     log: [],
   };
@@ -134,6 +151,7 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
   state.undefLed = fresh.undefLed;
   state.addrBreakNo = fresh.addrBreakNo;
   state.lastBreakNotify = fresh.lastBreakNotify;
+  state.lastStepNotify = fresh.lastStepNotify;
   state.timestamp = fresh.timestamp;
   state.log = fresh.log;
   resetUndefLed();
@@ -143,9 +161,9 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
 /**
  * 状態を持つ既定 CpuToIoHandlers（モニター相手のモック挙動）。
  * @param state 更新対象のモック状態
- * @param timers タイマー設定 (15h) を実際に反映する IO ボードタイマー（番号 0/1 の 2 本）。
+ * @param timers タイマー設定 (12h) を実際に反映する IO ボードタイマー（番号 0/1 の 2 本）。
  *   省略した場合は設定値を state に記録するだけで割り込みは発生しない
- * @param timeSource 時刻取得 (16h) の 64bit タイマー。省略時は state.timestamp（テスト差し込み用）
+ * @param timeSource 時刻取得 (11h) の 64bit タイマー。省略時は state.timestamp（テスト差し込み用）
  */
 export function createDefaultCpuToIoHandlers(
   state: IoBoardMockState,
@@ -220,6 +238,24 @@ export function createDefaultCpuToIoHandlers(
       };
       return RESPONSE_CODE.OK;
     },
+    onStepNotify(info) {
+      state.lastStepNotify = {
+        addr: info.addr >>> 0,
+        r0: info.r0 & 0xffff,
+        r1: info.r1 & 0xffff,
+        r2: info.r2 & 0xffff,
+        r3: info.r3 & 0xffff,
+        r4: info.r4 & 0xffff,
+        sp: info.sp & 0xffff,
+        str: info.str & 0xffff,
+        ic: info.ic & 0xffff,
+        csbrSsbr: info.csbrSsbr & 0xffff,
+        tsr: info.tsr & 0xffff,
+        npp: info.npp & 0xff,
+        stack: info.stack.slice(0, 16),
+      };
+      return RESPONSE_CODE.OK;
+    },
     onLcdControl(frame) {
       return lcdConsole.handleControlFrame(frame);
     },
@@ -269,7 +305,7 @@ export class IoBoardHandshakeMock {
   readonly state: IoBoardMockState;
   readonly io: IoControlHandshake;
   /**
-   * IO ボード側タイマー 2 本（ハンドシェイク 15h のタイマー番号 0 / 1）。
+   * IO ボード側タイマー 2 本（ハンドシェイク 12h のタイマー番号 0 / 1）。
    * 満了で INT_CAUSE=番号 のレベル 2 割り込みを上げる。
    */
   readonly timers: readonly [IoTimer, IoTimer];
@@ -467,10 +503,10 @@ export class IoBoardHandshakeMock {
 
   /**
    * IO→CPU を送り、同一トランザクションで CPU→IO 応答を受け取る。
-   * 41h（送信＋NG 1B）や 48h（送信＋レジスタ列＋OK）向け。
+   * 11h（送信＋NG 1B）など、応答後に IO→CPU を足す場合向け。
    * @param toCpu IO→CPU バイト列
    * @param fromCpu CPU→IO で待つバイト数
-   * @param thenToCpu 応答後の追加 IO→CPU（48h の OK/NG など）
+   * @param thenToCpu 応答後の追加 IO→CPU（OK/NG など）
    * @returns CPU→IO で受け取ったバイト
    */
   exchangeWithCpu(
@@ -512,7 +548,7 @@ export class IoBoardHandshakeMock {
   }
 
   /**
-   * 16進キーの押下ビットマップを差し込む（コマンド 11h の応答値）。
+   * 16進キーの押下ビットマップを差し込む（コマンド 14h の応答値）。
    * @param columns 列 0〜7 のビットマップ。8 要素を超える分は捨てる
    */
   setHexKeys(columns: Uint8Array | number[]): void {
@@ -523,7 +559,7 @@ export class IoBoardHandshakeMock {
   }
 
   /**
-   * PC キー入力を差し込む（コマンド 12h の応答値）。
+   * PC キー入力を差し込む（コマンド 15h の応答値）。
    * @param ascii ASCII コード
    * @param keyCode ホスト側キーコード
    */
@@ -532,7 +568,7 @@ export class IoBoardHandshakeMock {
   }
 
   /**
-   * 時刻取得（16h）で返す 64bit タイマー値を設定する。
+   * 時刻取得（11h）で返す 64bit タイマー値を設定する。
    * @param bytes bigint なら上位バイト先頭の 8 バイトに展開、Uint8Array ならそのまま先頭 8 バイト
    */
   setTimestamp(bytes: Uint8Array | bigint): void {

@@ -1,5 +1,5 @@
 /**
- * g_hshk_get_time（CPU→IO コマンド 16h）
+ * g_hshk_get_time（CPU→IO コマンド 11h）
  * 根拠: HandShake.mdc / boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -46,7 +46,7 @@ async function withCase(
   }
 }
 
-test("16h で 64bit 時刻がスタック 4 ワードに格納される", async () => {
+test("11h で 64bit 時刻がスタック 4 ワードに格納される", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     await Promise.all([

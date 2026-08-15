@@ -1,5 +1,5 @@
 /**
- * g_bios_lcd_text（CPU→IO コマンド 1Ah）
+ * g_bios_lcd_text（CPU→IO コマンド 18h）
  * 根拠: HandShake.mdc「LCD文字列表示」/ boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -86,7 +86,7 @@ async function callLcd2(
   ]);
 }
 
-test("1Ah フレームを20バイトで送り、len以降は空白で埋める", async () => {
+test("18h フレームを20バイトで送り、len以降は空白で埋める", async () => {
   await withCase(async (s, mock) => {
     writeByteWords(s, TEXT_BUF, [0x41, 0x42, 0x43, 0x44, 0x45]); // ABCDE
 
@@ -94,10 +94,10 @@ test("1Ah フレームを20バイトで送り、len以降は空白で埋める",
 
     const last = mock.state.log.at(-1);
     expect(last).toBeTruthy();
-    expect(last!.cmd).toBe(0x1a);
+    expect(last!.cmd).toBe(0x18);
     expect(last!.frame.length).toBe(20);
     expect(Array.from(last!.frame.slice(0, 4))).toEqual([
-      0x1a, 0x01, 0x02, 0x05,
+      0x18, 0x01, 0x02, 0x05,
     ]);
     expect(Array.from(last!.frame.slice(4, 9))).toEqual([
       0x41, 0x42, 0x43, 0x44, 0x45,
@@ -118,7 +118,7 @@ test("len が 16 を超えると先頭16文字だけ送る", async () => {
 
     const last = mock.state.log.at(-1);
     expect(last).toBeTruthy();
-    expect(last!.cmd).toBe(0x1a);
+    expect(last!.cmd).toBe(0x18);
     expect(Array.from(last!.frame.slice(4))).toEqual(chars.slice(0, 16));
   });
 });

@@ -1,8 +1,8 @@
 /**
  * IO ボードのタイマー（1階ボードのハードウェアタイマー相当）
- * 根拠: HandShake.mdc「タイマー設定」(15h) / ioboard.mdc
+ * 根拠: HandShake.mdc「タイマー設定」(12h) / ioboard.mdc
  *
- * リセット直後は停止状態。CPU ボードからハンドシェイク 15h で
+ * リセット直後は停止状態。CPU ボードからハンドシェイク 12h で
  * 周期 (ms) と回数を受け取ったときだけ動き出す。周期 0 または
  * stop() で停止する。満了ごとに onExpire を呼ぶだけで、
  * レベル 2 割り込みの実配送は呼び出し側（IO ボード結線側）の責務。
@@ -12,7 +12,7 @@ import { RESPONSE_CODE } from "../../shared/handshake/handshake_type";
 
 /**
  * タイマー 1 本の設定値。
- * ハンドシェイク 15h の TimerParams からタイマー番号を除いた形。
+ * ハンドシェイク 12h の TimerParams からタイマー番号を除いた形。
  */
 export type IoTimerConfig = {
   /** タイマー周期 (ms)。0 で停止。16bit */
@@ -91,7 +91,7 @@ export class IoTimer {
   }
 
   /**
-   * ハンドシェイク 15h の設定を適用する。
+   * ハンドシェイク 12h の設定を適用する。
    * 稼働中に呼ばれた場合は現在の予約を捨てて新しい設定で開始し直す。
    * @param params 周期 (ms、0 で停止) と回数 (0 で無限)。ともに 16bit
    * @returns RESPONSE_CODE.OK / 値が不正なら RESPONSE_CODE.NG_OTHER_ERROR

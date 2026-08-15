@@ -43,6 +43,7 @@ function makeMockHandlers(): CpuToIoHandlers {
     }),
     onUndefLed: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onBreakNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
+    onStepNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdControl: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdText: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
   };
@@ -69,8 +70,9 @@ describe("CPU_FRAME_SIZE", () => {
   it("未定義命令LED は 2 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED]).toBe(2);
   });
-  it("ブレイク通知は 7 バイト", () => {
+  it("ブレイク通知は 7 バイト、ステップ通知は 59 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(7);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(59);
   });
   it("LCD制御は 5 バイト、文字列表示は 20 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(5);
@@ -117,7 +119,7 @@ describe("CpuToIoCommandDispatcher — モード設定(0x10)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — 16進キー入力取得(0x11)", () => {
+describe("CpuToIoCommandDispatcher — 16進キー入力取得(0x14)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -161,7 +163,7 @@ describe("CpuToIoCommandDispatcher — 16進キー入力取得(0x11)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — PCキー入力取得(0x12)", () => {
+describe("CpuToIoCommandDispatcher — PCキー入力取得(0x15)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -193,7 +195,7 @@ describe("CpuToIoCommandDispatcher — PCキー入力取得(0x12)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — LED表示依頼(0x13)", () => {
+describe("CpuToIoCommandDispatcher — LED表示依頼(0x16)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
   const sevenSeg = new Uint8Array([
@@ -209,7 +211,7 @@ describe("CpuToIoCommandDispatcher — LED表示依頼(0x13)", () => {
    * LED 表示依頼フレームを組み立てる。
    * @param bullet0_7 砲弾 0–7
    * @param bullet8_F 砲弾 8–F
-   * @returns cmd 0x13 + 7seg×12 + 砲弾 2 バイト
+   * @returns cmd 0x16 + 7seg×12 + 砲弾 2 バイト
    */
   function ledFrame(bullet0_7: number, bullet8_F: number): Uint8Array {
     const frame = new Uint8Array(15);
@@ -235,7 +237,7 @@ describe("CpuToIoCommandDispatcher — LED表示依頼(0x13)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — BEEP音(0x14)", () => {
+describe("CpuToIoCommandDispatcher — BEEP音(0x19)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -270,7 +272,7 @@ describe("CpuToIoCommandDispatcher — BEEP音(0x14)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — タイマー設定(0x15)", () => {
+describe("CpuToIoCommandDispatcher — タイマー設定(0x12)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -314,7 +316,7 @@ describe("CpuToIoCommandDispatcher — タイマー設定(0x15)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — 時刻取得(0x16)", () => {
+describe("CpuToIoCommandDispatcher — 時刻取得(0x11)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -337,7 +339,7 @@ describe("CpuToIoCommandDispatcher — 時刻取得(0x16)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — 未定義命令LED(0x17)", () => {
+describe("CpuToIoCommandDispatcher — 未定義命令LED(0x13)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -368,7 +370,7 @@ describe("CpuToIoCommandDispatcher — 未定義命令LED(0x17)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
+describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -377,7 +379,7 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
     dispatcher = new CpuToIoCommandDispatcher(handlers);
   });
 
-  it("18h を onBreakNotify へ渡し OK を返す", () => {
+  it("1Ah を onBreakNotify へ渡し OK を返す", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
       1,
@@ -396,7 +398,7 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("ステップ（区分 3・スロット FFh）も onBreakNotify へ渡し OK を返す", () => {
+  it("区分 3（旧ステップ）は NG", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
       3,
@@ -407,12 +409,8 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
       0x00,
     ]);
     const response = dispatcher.dispatch(frame);
-    expect(handlers.onBreakNotify).toHaveBeenCalledWith({
-      kind: 3,
-      slot: 0xff,
-      addr: 0x00001800,
-    });
-    expect(response[0]).toBe(RESPONSE_CODE.OK);
+    expect(handlers.onBreakNotify).not.toHaveBeenCalled();
+    expect(response[0]).toBe(RESPONSE_CODE.NG);
   });
 
   it("区分やスロットが範囲外なら NG", () => {
@@ -424,7 +422,7 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — LCD(0x19/0x1A)", () => {
+describe("CpuToIoCommandDispatcher — ステップ通知(0x1B)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
 
@@ -433,14 +431,55 @@ describe("CpuToIoCommandDispatcher — LCD(0x19/0x1A)", () => {
     dispatcher = new CpuToIoCommandDispatcher(handlers);
   });
 
-  it("19h を onLcdControl へ渡し OK を返す", () => {
+  it("1Bh を onStepNotify へ渡し OK を返す", () => {
+    const frame = new Uint8Array(59);
+    frame[0] = CMD_CPU_TO_IO.STEP_NOTIFY;
+    frame[3] = 0x18;
+    frame[4] = 0x00;
+    frame[5] = 0x11;
+    frame[6] = 0x11;
+    frame[0x0f] = 0xff;
+    frame[0x10] = 0x00;
+    frame[0x13] = 0x18;
+    frame[0x14] = 0x00;
+    frame[0x19] = 0x0a;
+    frame[0x1b] = 0xaa;
+    frame[0x1c] = 0xbb;
+    const response = dispatcher.dispatch(frame);
+    expect(handlers.onStepNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        addr: 0x00001800,
+        r0: 0x1111,
+        sp: 0xff00,
+        ic: 0x1800,
+        npp: 0x0a,
+      }),
+    );
+    const arg = (handlers.onStepNotify as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as { stack: number[] };
+    expect(arg.stack).toHaveLength(16);
+    expect(arg.stack[0]).toBe(0xaabb);
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
+});
+
+describe("CpuToIoCommandDispatcher — LCD(0x17/0x18)", () => {
+  let handlers: CpuToIoHandlers;
+  let dispatcher: CpuToIoCommandDispatcher;
+
+  beforeEach(() => {
+    handlers = makeMockHandlers();
+    dispatcher = new CpuToIoCommandDispatcher(handlers);
+  });
+
+  it("17h を onLcdControl へ渡し OK を返す", () => {
     const frame = new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0, 0, 0]);
     const response = dispatcher.dispatch(frame);
     expect(handlers.onLcdControl).toHaveBeenCalledWith(frame);
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("1Ah を onLcdText へ渡し OK を返す", () => {
+  it("18h を onLcdText へ渡し OK を返す", () => {
     const frame = new Uint8Array(20);
     frame[0] = CMD_CPU_TO_IO.LCD_TEXT;
     const response = dispatcher.dispatch(frame);
@@ -448,7 +487,7 @@ describe("CpuToIoCommandDispatcher — LCD(0x19/0x1A)", () => {
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("19h のフレーム不足は NG でハンドラを呼ばない", () => {
+  it("17h のフレーム不足は NG でハンドラを呼ばない", () => {
     const response = dispatcher.dispatch(
       new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0]),
     );

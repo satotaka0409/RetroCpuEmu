@@ -1,8 +1,8 @@
 ; handshake_beep.asm
-; BEEP音（ハンドシェイク 14h）
+; BEEP音（ハンドシェイク 19h）
 ; 根拠: HandShake.mdc「BEEP音」/ boot_monitor.mdc
 ;
-; 線上 送信 5B: 14h, freqH, freqL, durH, durL → 受信 1B: status
+; 線上 送信 5B: 19h, freqH, freqL, durH, durL → 受信 1B: status
 ; 周波数 0 で停止、長さ 0 で無限。モード不問。
 ;
 ; 引数は第1=R0、第2=R1（asm-rules.mdc の呼び出し規約）。
@@ -28,7 +28,7 @@
 BIOS_BEEP_FRAME_LEN	.equ	5
 
 ; -------------------------------------------------------
-; BEEP音（14h）
+; BEEP音（19h）
 ; @note 応答はハンドシェイク割り込みを使わず REQ_1 のポーリングで受け取る
 ; @param R0 - 周波数 Hz（16bit、0 で停止）
 ; @param R1 - 長さ ms（16bit、0 で無限）

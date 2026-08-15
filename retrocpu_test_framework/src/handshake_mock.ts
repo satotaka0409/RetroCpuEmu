@@ -10,7 +10,7 @@ import type { IoBoardMockOptions } from "../../retrocpu_emu/src/ioboard/handshak
 import type { IoTimerHandle, IoTimerScheduler } from "../../retrocpu_emu/src/ioboard/timer/io_timer.js";
 
 /**
- * タイマー満了を起こさないスケジューラ（15h 設定の検証専用）。
+ * タイマー満了を起こさないスケジューラ（12h 設定の検証専用）。
  * @returns 何もしないスケジューラ
  */
 export function createInertTimerScheduler(): IoTimerScheduler {

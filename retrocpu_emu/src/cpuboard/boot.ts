@@ -5,7 +5,7 @@
  * 動作モデル:
  *   - ブートモニタは LED を使わない
  *   - CPU は基本 HALT。IO ボードからの DMA／ハンドシェイク指示で動く
- *   - LED(0x13) はユーザープログラム実行時のみ
+ *   - LED(0x16) はユーザープログラム実行時のみ
  *
  * 本番起動は IO ボード（F7 RST / 電源投入）がブートモニタを DMA して RST する。
  * `coldBootHaltStub` は CPU 単体試験用。Worker では `enterResetWait` のみ使う。

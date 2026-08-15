@@ -1,7 +1,7 @@
 /**
  * IO ボード Worker（1階相当）
  * - ファンクションキー／16進コンソール（ioboard.mdc）
- * - メモリ R/W はハンドシェイク（50h/51h）
+ * - メモリ R/W はハンドシェイク（13h/14h）
  * - Cursor の Intel HEX は DMA 書き込み
  * - F7 RST / 電源投入: ブートモニタ IHX を DMA して CPU リセット
  */
@@ -225,20 +225,20 @@ function raiseTimerInterrupt(timerNo: 0 | 1): void {
 }
 
 /**
- * IO ボードのタイマー 2 本（ハンドシェイク 15h のタイマー番号 0 / 1）。
- * 初期化直後は停止しており、15h を受けたときだけ動き出す。
+ * IO ボードのタイマー 2 本（ハンドシェイク 12h のタイマー番号 0 / 1）。
+ * 初期化直後は停止しており、12h を受けたときだけ動き出す。
  */
 const intervalTimers: readonly [IoTimer, IoTimer] = [
   new IoTimer({ onExpire: () => raiseTimerInterrupt(0) }),
   new IoTimer({ onExpire: () => raiseTimerInterrupt(1) }),
 ];
 
-/** 64bit 時刻（16h）。IO ボード開始で 0 クリア、だいたい 10µs ごとに +1 */
+/** 64bit 時刻（11h）。IO ボード開始で 0 クリア、だいたい 10µs ごとに +1 */
 const wallClock = new IoTimeCounter();
 
 /**
  * CPU→IO コマンド状態と既定ハンドラ。
- * 現在は 10h〜17h と 19h/1Ah（LCD制御/文字列表示）を受理する。
+ * 現在は 10h〜1Bh（HandShake.mdc 概要表の順）を受理する。
  */
 const cmdState = createIoBoardCommandState();
 const cmdDispatcher = new CpuToIoCommandDispatcher(
@@ -252,7 +252,7 @@ link.setCpuToIoFrameHandler((frame) => {
   if (cmd === CMD_CPU_TO_IO.TIMER_SET) {
     const timerNo = frame[1] ?? 0;
     const state = intervalTimers[timerNo]?.getState();
-    log.info("タイマー設定を受理 (15h)", {
+    log.info("タイマー設定を受理 (12h)", {
       timerNo,
       periodMs: state?.periodMs ?? 0,
       count: state?.count ?? 0,
@@ -263,7 +263,7 @@ link.setCpuToIoFrameHandler((frame) => {
     if (response[0] === 0) {
       consolePanel.setUndefLed(cmdState.undefLed);
     }
-    log.info("未定義命令LED (17h)", {
+    log.info("未定義命令LED (13h)", {
       on: cmdState.undefLed,
       status: response[0],
     });
@@ -272,7 +272,7 @@ link.setCpuToIoFrameHandler((frame) => {
     cmd === CMD_CPU_TO_IO.LCD_TEXT
   ) {
     const lcd = getLcdWire();
-    log.info("LCD (19h/1Ah)", {
+    log.info("LCD (17h/18h)", {
       cmd: `0x${cmd.toString(16)}`,
       status: response[0],
       line0: lcd.lines[0],
@@ -379,10 +379,10 @@ function slice(): void {
     tickIoBoard();
   }
 
-  // UNDEF LED は 17h / RST が正本（IISR ポーリングでは点灯しない）
+  // UNDEF LED は 13h / RST が正本（IISR ポーリングでは点灯しない）
   const undefInsn = getUndefLed();
   if (undefInsn !== lastUndefInsn) {
-    if (undefInsn) log.warn("未定義命令LED点灯", { via: "17h" });
+    if (undefInsn) log.warn("未定義命令LED点灯", { via: "13h" });
     lastUndefInsn = undefInsn;
   }
 
@@ -435,7 +435,7 @@ function stop(): void {
 
 /**
  * PC（Cursor 拡張）向けデバッグ TCP を 29000 で待つ。
- * 40h/41h は CPU ハンドシェイクの結果を待って OK/NG を返す。
+ * 10h/11h は CPU ハンドシェイクの結果を待って OK/NG を返す。
  */
 async function startDebugHost(): Promise<void> {
   await stopDebugHost();

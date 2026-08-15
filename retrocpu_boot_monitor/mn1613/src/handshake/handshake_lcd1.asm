@@ -1,8 +1,8 @@
 ; handshake_lcd1.asm
-; LCD制御（ハンドシェイク 19h）
+; LCD制御（ハンドシェイク 17h）
 ; 根拠: HandShake.mdc「LCD制御」/ boot_monitor.mdc
 ;
-; 線上 送信 5B: 19h, kind, argA, argB, argC → 受信 1B: status
+; 線上 送信 5B: 17h, kind, argA, argB, argC → 受信 1B: status
 ; モード制約なし（モニター/フリー共通）。
 ;
 ; 引数は第1=R0、第2=R1、第3=R2。argC は R3 を使う。
@@ -28,7 +28,7 @@
 BIOS_LCD1_FRAME_LEN	.equ	5
 
 ; -------------------------------------------------------
-; LCD制御（19h）
+; LCD制御（17h）
 ; @param R0 - 種別（0:Clear 1:Home 2:DisplayCtrl 3:SetCursor）
 ; @param R1 - 引数A（DisplayCtrl: Bit0=DisplayOn Bit1=CursorOn Bit2=Blink）
 ; @param R2 - 引数B（SetCursor: 行 0/1）

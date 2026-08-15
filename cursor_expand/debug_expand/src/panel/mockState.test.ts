@@ -8,10 +8,10 @@ import { createMockDebugState } from "./mockState";
 import { getDebugHtml } from "./getHtml";
 
 describe("createMockDebugState", () => {
-  test("命令 BP 8 / アドレス BP 6 / 履歴枠がある", () => {
+  test("比較器スロットは命令／アドレスとも 8（0–7）", () => {
     const s = createMockDebugState();
     assert.equal(s.bpInstr.length, 8);
-    assert.equal(s.bpAddr.length, 6);
+    assert.equal(s.bpAddr.length, 8);
     assert.equal(s.instrHistory.length, 8);
     assert.equal(s.current.stack.length, 16);
     assert.ok(s.disasm.length > 0);

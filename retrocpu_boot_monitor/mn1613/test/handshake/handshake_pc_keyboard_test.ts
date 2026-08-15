@@ -1,5 +1,5 @@
 /**
- * g_bios_pc_key_get（CPU→IO コマンド 12h）
+ * g_bios_pc_key_get（CPU→IO コマンド 15h）
  * 根拠: HandShake.mdc「PCキー入力取得」/ boot_monitor.mdc / test_framework.mdc
  */
 import {

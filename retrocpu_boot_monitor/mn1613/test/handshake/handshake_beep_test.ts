@@ -1,5 +1,5 @@
 /**
- * g_bios_beep（CPU→IO コマンド 14h）
+ * g_bios_beep（CPU→IO コマンド 19h）
  * 根拠: HandShake.mdc「BEEP音」/ boot_monitor.mdc / test_framework.mdc
  *
  * 正常系はホストで実際に音を鳴らす（WSL なら Windows Console.Beep）。

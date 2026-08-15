@@ -1,8 +1,8 @@
 /**
  * IO ボード前面パネル（ioboard.mdc ファンクションキー）
  *
- * キーボードからのメモリ R/W はハンドシェイク（50h/51h）。
- * 実行は 49h。表示はパネル自身が 7セグを駆動（モニタは 0x13 を使わない）。
+ * キーボードからのメモリ R/W はハンドシェイク（13h/14h）。
+ * 実行は 12h。表示はパネル自身が 7セグを駆動（モニタは 0x16 を使わない）。
  */
 
 import { wordToSegDigits, wordToSegDigitsPadded } from "../seven_led/seg_font";
@@ -41,15 +41,15 @@ export { FN_KEY_LABELS };
 
 /** CPU ボードへのハンドシェイク／制御（IO Worker が実装） */
 export type ConsoleCpuBridge = {
-  /** ハンドシェイク MEM_READ (0x50): ワードアドレスから 1 ワード読む */
+  /** ハンドシェイク MEM_READ (0x13): ワードアドレスから 1 ワード読む */
   memReadWord(wordAddr: number): Promise<number>;
-  /** ハンドシェイク MEM_WRITE (0x51): 1 ワード書く */
+  /** ハンドシェイク MEM_WRITE (0x14): 1 ワード書く */
   memWriteWord(wordAddr: number, word: number): Promise<void>;
   /** 設定エリア（00h-FFh）から 1 バイト読む */
   readSettingByte(byteAddr: number): Promise<number>;
   /** 設定エリア（00h-FFh）へ 1 バイト書く */
   writeSettingByte(byteAddr: number, value: number): Promise<void>;
-  /** ハンドシェイク EXEC (0x49) */
+  /** ハンドシェイク EXEC (0x12) */
   exec(wordAddr: number): Promise<void>;
   setHalt(halt: boolean): Promise<void>;
   /** F7 RST: HALT → ブートモニタ DMA → CPU RST パルス */
@@ -130,7 +130,7 @@ export class IoConsole {
   }
 
   /**
-   * ハンドシェイク 17h で UNDEF LED（砲弾 B）を明示設定する。
+   * ハンドシェイク 13h で UNDEF LED（砲弾 B）を明示設定する。
    * sticky: 消灯指示または RST まで点灯を維持する。
    * @param on true=点灯 / false=消灯
    */
@@ -138,7 +138,7 @@ export class IoConsole {
     const changed = on !== getUndefLed();
     applyUndefLedCommand(on);
     if (on) this.halted = true;
-    if (changed && on) log.warn("未定義命令LED点灯（17h）");
+    if (changed && on) log.warn("未定義命令LED点灯（13h）");
     this.refreshLeds();
   }
 
@@ -171,7 +171,7 @@ export class IoConsole {
 
   /**
    * ファンクションキーを処理する（ioboard.mdc の F0〜F7）。
-   * メモリ R/W はハンドシェイク 50h/51h、実行は 49h を使う。
+   * メモリ R/W はハンドシェイク 13h/14h、実行は 12h を使う。
    * @param fn "F0"=ADS "F1"=CLR "F2"=INC "F3"=DEC "F4"=WINC "F5"=RUN "F6"=H/ST "F7"=RST
    */
   async onFunction(fn: ConsoleFnKey): Promise<void> {

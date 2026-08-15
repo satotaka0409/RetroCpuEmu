@@ -1,5 +1,5 @@
 /**
- * デバッグ TCP のアドレス／IO ブレイク（40h / 41h）
+ * デバッグ TCP のアドレス／IO ブレイク（10h / 11h）
  * 根拠: retrocpu_debug.mdc
  */
 
@@ -20,7 +20,7 @@ import {
 } from "../../src/shared/handshake/handshake_type";
 
 describe("debug_addr_break フレーム", () => {
-  it("40h をビッグエンディアンで組み立てて読める", () => {
+  it("10h をビッグエンディアンで組み立てて読める", () => {
     const frame = encodeAddrBreakSetFrame({
       slot: 3,
       flags: 0x22,
@@ -41,9 +41,9 @@ describe("debug_addr_break フレーム", () => {
     expect(addrBreakSetPayload(frame)?.length).toBe(9);
   });
 
-  it("41h はコマンドとスロットだけ", () => {
+  it("11h はコマンドとスロットだけ", () => {
     const frame = encodeAddrBreakClrFrame(5);
-    expect(frame).toEqual(Uint8Array.from([0x41, 5]));
+    expect(frame).toEqual(Uint8Array.from([CMD_IO_TO_CPU.BREAK_MEM_IO_CLR, 5]));
     expect(parseAddrBreakClrSlot(frame)).toBe(5);
   });
 
@@ -82,7 +82,7 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     });
   }
 
-  it("40h を受けて CPU 中継ハンドラへ 9 バイトを渡し、OK を返す", async () => {
+  it("10h を受けて CPU 中継ハンドラへ 9 バイトを渡し、OK を返す", async () => {
     const seen: Uint8Array[] = [];
     host = new DebugHost({
       port: 0,
@@ -108,7 +108,7 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     expect(seen[0]).toEqual(frame.subarray(1));
   });
 
-  it("41h はスロットを中継する", async () => {
+  it("11h はスロットを中継する", async () => {
     let clrSlot = -1;
     host = new DebugHost({
       port: 0,

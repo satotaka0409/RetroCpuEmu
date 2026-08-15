@@ -1,8 +1,8 @@
 ; handshake_lcd2.asm
-; LCD文字列表示（ハンドシェイク 1Ah）
+; LCD文字列表示（ハンドシェイク 18h）
 ; 根拠: HandShake.mdc「LCD文字列表示」/ boot_monitor.mdc
 ;
-; 線上 送信 20B: 1Ah, row, col, len, ch0..ch15 → 受信 1B: status
+; 線上 送信 20B: 18h, row, col, len, ch0..ch15 → 受信 1B: status
 ; モード制約なし（モニター/フリー共通）。
 ;
 ; 引数は第1=R0、第2=R1、第3=R2。文字列先頭ポインタは R3 を使う。
@@ -27,7 +27,7 @@
 BIOS_LCD2_FRAME_LEN	.equ	20
 
 ; -------------------------------------------------------
-; LCD文字列表示（1Ah）
+; LCD文字列表示（18h）
 ; @param R0 - 行（0:1行目 / 1:2行目）
 ; @param R1 - 列（0-15）
 ; @param R2 - 文字数（0-16）

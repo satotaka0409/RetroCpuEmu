@@ -1,8 +1,8 @@
 ; handshake_pc_keyboard.asm
-; PCキー入力取得（ハンドシェイク 12h）
+; PCキー入力取得（ハンドシェイク 15h）
 ; 根拠: HandShake.mdc「PCキー入力取得」/ boot_monitor.mdc / asm-rules.mdc
 ;
-; 線上 送信 1B: 12h → 受信 3B: ascii, keyCode, status
+; 線上 送信 1B: 15h → 受信 3B: ascii, keyCode, status
 ; モード不問。未入力時は ASCII/コードとも 0、status=OK もあり得る。
 ;
 ; 戻り: R0=OK/NG、R1=ASCII（下位 8bit）、R2=キーコード（下位 8bit）。
@@ -26,7 +26,7 @@
 	.global g_hshk_finalize_recv
 
 ; -------------------------------------------------------
-; PCキー入力取得（12h）
+; PCキー入力取得（15h）
 ; @note 応答はハンドシェイク割り込みを使わず REQ_1 のポーリングで受け取る
 ; @return R0 - OK / NG
 ; @return R1 - ASCII（下位 8bit）

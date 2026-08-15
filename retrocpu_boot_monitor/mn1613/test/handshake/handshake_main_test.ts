@@ -1,5 +1,5 @@
 /**
- * g_handshake_interrupt_handler（IO→CPU コマンド 40h–61h）
+ * g_handshake_interrupt_handler（IO→CPU コマンド 10h–18h）
  * 根拠: HandShake.mdc / boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -81,9 +81,9 @@ async function callHandler(
   return io;
 }
 
-test("0x10（<0x40）はディスパッチせず完了する", async () => {
+test("0x0F（<0x10）はディスパッチせず完了する", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(mock, Uint8Array.from([0x10]), 0);
+    const reply = await callHandler(mock, Uint8Array.from([0x0F]), 0);
     expect(reply.length).toBe(0);
     s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
@@ -97,11 +97,11 @@ test("0x44 未実装コマンドは NG も返さず完了する", async () => {
   });
 });
 
-test("49h 実行指示は 4B を読み NG を返す", async () => {
+test("12h 実行指示は 4B を読み NG を返す", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x49, 0, 0, 0x02, 0x00]),
+      Uint8Array.from([0x12, 0, 0, 0x02, 0x00]),
       1,
     );
     expect(Array.from(reply)).toEqual([0x01]);
@@ -109,15 +109,10 @@ test("49h 実行指示は 4B を読み NG を返す", async () => {
   });
 });
 
-test("48h 割り込みはバッファなしで 0x15 ゼロを返し OK を受け取る", async () => {
+test("0x48（廃止の CPU状態取得）は NG も返さず完了する", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(
-      mock,
-      Uint8Array.from([0x48]),
-      0x15,
-      Uint8Array.from([0x00]),
-    );
-    expect(Array.from(reply)).toEqual(Array(0x15).fill(0));
+    const reply = await callHandler(mock, Uint8Array.from([0x48]), 0);
+    expect(reply.length).toBe(0);
     s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
 });

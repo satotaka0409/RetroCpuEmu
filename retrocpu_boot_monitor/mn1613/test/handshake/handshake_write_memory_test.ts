@@ -1,5 +1,5 @@
 /**
- * g_hshk_write_memory（IO→CPU コマンド 51h）
+ * g_hshk_write_memory（IO→CPU コマンド 14h）
  * 根拠: HandShake.mdc「メモリ書き込み」/ boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -38,7 +38,7 @@ function blockChecksum(data: readonly number[]): number {
 }
 
 /**
- * 51h ヘッダ＋データ＋チェックサム。
+ * 14h ヘッダ＋データ＋チェックサム。
  * @param byteAddr バイトアドレス
  * @param data 書き込みバイト
  * @returns IO→CPU フレーム
@@ -46,7 +46,7 @@ function blockChecksum(data: readonly number[]): number {
 function memWriteFrame(byteAddr: number, data: readonly number[]): Uint8Array {
   const count = data.length;
   return Uint8Array.from([
-    0x51,
+    0x14,
     (byteAddr >>> 24) & 0xff,
     (byteAddr >>> 16) & 0xff,
     (byteAddr >>> 8) & 0xff,
@@ -95,7 +95,7 @@ async function waitReq1(
 }
 
 /**
- * 51h を IRQ ハンドラ経由で実行する。
+ * 14h を IRQ ハンドラ経由で実行する。
  * @param mock IO モック
  * @param toCpu IO→CPU（ヘッダ＋データ＋checksum。件数0はヘッダのみ）
  * @param fromCpu CPU→IO 待ちバイト数（status。件数0は 0）
@@ -114,7 +114,7 @@ async function callWrite(
   return io;
 }
 
-test("51h は指定バイトをビッグエンディアンで書き OK を返す", async () => {
+test("14h は指定バイトをビッグエンディアンで書き OK を返す", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0);
     s.writeWord(WORD_ADDR + 1, 0);
@@ -130,7 +130,7 @@ test("51h は指定バイトをビッグエンディアンで書き OK を返す
   });
 });
 
-test("51h 奇数バイトアドレスへ 1 バイト書ける", async () => {
+test("14h 奇数バイトアドレスへ 1 バイト書ける", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0x1234);
     const reply = await callWrite(mock, memWriteFrame(BYTE_ADDR + 1, [0xaa]));
@@ -139,13 +139,13 @@ test("51h 奇数バイトアドレスへ 1 バイト書ける", async () => {
   });
 });
 
-test("51h バイト数 0 はデータなしで完了する", async () => {
+test("14h バイト数 0 はデータなしで完了する", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0x5555);
     const reply = await callWrite(
       mock,
       Uint8Array.from([
-        0x51,
+        0x14,
         (BYTE_ADDR >>> 24) & 0xff,
         (BYTE_ADDR >>> 16) & 0xff,
         (BYTE_ADDR >>> 8) & 0xff,

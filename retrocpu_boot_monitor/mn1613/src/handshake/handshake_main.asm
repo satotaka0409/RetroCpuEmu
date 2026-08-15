@@ -4,7 +4,7 @@
 ;
 ; g_int2_handler から BALD で呼ばれるので、戻りは RET。
 ; 受理 → コマンド 1 バイト受信 → 1 ワード表 + ゼロページ BAL で分岐 → finalize。
-; IO→CPU コマンド 0x40–0x61。g_* は BALD / RET。コードはセグメント 0。
+; IO→CPU コマンド 0x10–0x18。g_* は BALD / RET。コードはセグメント 0。
 
 	.cpu	mn1613
 
@@ -93,86 +93,46 @@ l_hshk_irq_rn_go:
 	b	l_hshk_irq_rn_lp
 
 ; -------------------------------------------------------
-; 0 を R0 バイト送る
-; @param R0 - バイト数
-; @Destruction R0, R1, R2
-; -------------------------------------------------------
-l_hshk_irq_send_zeros:
-	mv	R2, R0
-l_hshk_irq_sz_lp:
-	mv	R0, R2, Z
-	b	l_hshk_irq_sz_go
-	ret
-l_hshk_irq_sz_go:
-	eor	R0, R0
-	bald	g_hshk_send_byte
-	si	R2, #1
-	b	l_hshk_irq_sz_lp
-
-; -------------------------------------------------------
 ; 未実装コマンド（ペイロードは読まず NG も返さない）
 ; -------------------------------------------------------
 l_hshk_irq_unknown:
 	ret
 
-; 40h アドレスブレイク設定
-l_hshk_irq_40:
+; 10h アドレスブレイク設定
+l_hshk_irq_10:
 	bald	g_hshk_addr_break_set
 	ret
 
-; 41h アドレスブレイク解除
-l_hshk_irq_41:
+; 11h アドレスブレイク解除
+l_hshk_irq_11:
 	bald	g_hshk_addr_break_clr
 	ret
 
-; 42h 命令ブレイク設定
-l_hshk_irq_42:
-	mvwi	R0, #HSHK_IRQ_PAY_42
+; 12h 実行指示
+l_hshk_irq_12:
+	mvwi	R0, #HSHK_IRQ_PAY_EXEC
 	bald	l_hshk_irq_recv_n
 	mvwi	R0, #HSHK_NG
 	bald	g_hshk_send_byte
 	ret
 
-; 43h 命令ブレイク解除
-l_hshk_irq_43:
-	mvwi	R0, #HSHK_IRQ_PAY_43
-	bald	l_hshk_irq_recv_n
-	mvwi	R0, #HSHK_NG
-	bald	g_hshk_send_byte
-	ret
-
-; 48h CPU状態取得（構造体は R0。割り込みではバッファを持たない。0x15 ゼロ）
-l_hshk_irq_48:
-	mvwi	R0, #HSHK_IRQ_STATUS_BYTES
-	bald	l_hshk_irq_send_zeros
-	bald	g_hshk_recv_byte
-	ret
-
-; 49h 実行指示
-l_hshk_irq_49:
-	mvwi	R0, #HSHK_IRQ_PAY_49
-	bald	l_hshk_irq_recv_n
-	mvwi	R0, #HSHK_NG
-	bald	g_hshk_send_byte
-	ret
-
-; 50h メモリ読み出し
-l_hshk_irq_50:
+; 13h メモリ読み出し
+l_hshk_irq_13:
 	bald	g_hshk_read_memory
 	ret
 
-; 51h メモリ書き込み
-l_hshk_irq_51:
+; 14h メモリ書き込み
+l_hshk_irq_14:
 	bald	g_hshk_write_memory
 	ret
 
-; 60h ブレイク履歴取得
-l_hshk_irq_60:
+; 17h ブレイク履歴取得
+l_hshk_irq_17:
 	bald	g_hshk_break_hist_get
 	ret
 
-; 61h ブレイク復帰（0=通常 / 1=ステップ）
-l_hshk_irq_61:
+; 18h ブレイク復帰（0=通常 / 1=ステップ）
+l_hshk_irq_18:
 	bald	g_hshk_break_resume
 	ret
 
@@ -182,39 +142,14 @@ l_hshk_irq_bal_tmp:
 	.ds	1
 
 	.area	_DATA		(REL,CON)
-; IO→CPU コマンド 0x40–0x61（1 エントリ = ハンドラアドレス。ゼロページ BAL）
+; IO→CPU コマンド 0x10–0x18（1 エントリ = ハンドラアドレス。ゼロページ BAL）
 l_hshk_irq_cmd_tab:
-	.dw	l_hshk_irq_40			; 40
-	.dw	l_hshk_irq_41			; 41
-	.dw	l_hshk_irq_42			; 42
-	.dw	l_hshk_irq_43			; 43
-	.dw	l_hshk_irq_unknown		; 44
-	.dw	l_hshk_irq_unknown		; 45
-	.dw	l_hshk_irq_unknown		; 46
-	.dw	l_hshk_irq_unknown		; 47
-	.dw	l_hshk_irq_48			; 48
-	.dw	l_hshk_irq_49			; 49
-	.dw	l_hshk_irq_unknown		; 4A
-	.dw	l_hshk_irq_unknown		; 4B
-	.dw	l_hshk_irq_unknown		; 4C
-	.dw	l_hshk_irq_unknown		; 4D
-	.dw	l_hshk_irq_unknown		; 4E
-	.dw	l_hshk_irq_unknown		; 4F
-	.dw	l_hshk_irq_50			; 50
-	.dw	l_hshk_irq_51			; 51
-	.dw	l_hshk_irq_unknown		; 52
-	.dw	l_hshk_irq_unknown		; 53
-	.dw	l_hshk_irq_unknown		; 54
-	.dw	l_hshk_irq_unknown		; 55
-	.dw	l_hshk_irq_unknown		; 56
-	.dw	l_hshk_irq_unknown		; 57
-	.dw	l_hshk_irq_unknown		; 58
-	.dw	l_hshk_irq_unknown		; 59
-	.dw	l_hshk_irq_unknown		; 5A
-	.dw	l_hshk_irq_unknown		; 5B
-	.dw	l_hshk_irq_unknown		; 5C
-	.dw	l_hshk_irq_unknown		; 5D
-	.dw	l_hshk_irq_unknown		; 5E
-	.dw	l_hshk_irq_unknown		; 5F
-	.dw	l_hshk_irq_60			; 60
-	.dw	l_hshk_irq_61			; 61
+	.dw	l_hshk_irq_10			; 10 比較器ブレイク設定
+	.dw	l_hshk_irq_11			; 11 比較器ブレイク解除
+	.dw	l_hshk_irq_12			; 12 実行指示
+	.dw	l_hshk_irq_13			; 13 メモリ読み出し
+	.dw	l_hshk_irq_14			; 14 メモリ書き込み
+	.dw	l_hshk_irq_unknown		; 15 IO読み出し（未実装）
+	.dw	l_hshk_irq_unknown		; 16 IO書き込み（未実装）
+	.dw	l_hshk_irq_17			; 17 ブレイク履歴取得
+	.dw	l_hshk_irq_18			; 18 ブレイク復帰

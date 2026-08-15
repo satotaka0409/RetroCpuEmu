@@ -16,8 +16,6 @@
  *   await io.send(response);
  *
  * ■ フレームバイトレイアウト（位置は HandShake.mdc の位置列に準拠）
- *   BEEP / タイマーの位置列は仕様書にずれがあるため、本実装では
- *   データ長の説明（16bit 指定）を優先し cmd+2+2 = 5 バイトとした。
  */
 
 import {
@@ -30,7 +28,7 @@ import {
 // 型定義
 // ─────────────────────────────────────────────
 
-/** LEDディスプレイデータ（HandShake.mdc LED表示依頼 0x13） */
+/** LEDディスプレイデータ（HandShake.mdc LED表示依頼 0x16） */
 export interface LedDisplayData {
   /**
    * 7セグメントLED 0〜11番のビットパターン (length=12)
@@ -77,47 +75,47 @@ export interface CpuToIoHandlers {
   onModeSet(mode: number): number;
 
   /**
-   * 16進キー入力取得 (cmd=0x11): フリーモード時のみ有効。
+   * 16進キー入力取得 (cmd=0x14): フリーモード時のみ有効。
    * columns: 列0〜7のキー状態（各バイトの各Bitが1=ON）
    */
   getHexKeys(): { columns: Uint8Array; status: number };
 
   /**
-   * PCキー入力取得 (cmd=0x12): PCのキー入力を中継する。
+   * PCキー入力取得 (cmd=0x15): PCのキー入力を中継する。
    * ascii: ASCIIコード値 / keyCode: キーコード値
    */
   getPcKey(): { ascii: number; keyCode: number; status: number };
 
-  /** LED表示依頼 (cmd=0x13): フリーモード／ユーザープログラム用。モニタは使わない */
+  /** LED表示依頼 (cmd=0x16): フリーモード／ユーザープログラム用。モニタは使わない */
   onLedDisplay(data: LedDisplayData): number;
 
   /**
-   * BEEP音 (cmd=0x14): モード問わず使用可。
+   * BEEP音 (cmd=0x19): モード問わず使用可。
    * frequencyHz=0 で停止、durationMs=0 で無限
    */
   onBeep(params: BeepParams): number;
 
   /**
-   * タイマー設定 (cmd=0x15): タイマー割り込み周期を設定。
+   * タイマー設定 (cmd=0x12): タイマー割り込み周期を設定。
    * timerNo=0/1 でタイマーを選ぶ。periodMs=0 で停止、count=0 で無限
    */
   onTimerSet(params: TimerParams): number;
   /**
-   * 時刻取得 (cmd=0x16):
+   * 時刻取得 (cmd=0x11):
    * 64bit タイマーを上位バイトから順に [7..0] で返す。
    */
   getTime(): { timestamp: Uint8Array; status: number };
 
   /**
-   * 未定義命令LED (cmd=0x17): 砲弾 B (UNDEF) の点灯/消灯。
+   * 未定義命令LED (cmd=0x13): 砲弾 B (UNDEF) の点灯/消灯。
    * on=true で点灯、false で消灯。モード不問。
    */
   onUndefLed(on: boolean): number;
 
   /**
-   * ブレイク通知 (cmd=0x18): 比較器ヒットまたはステップで CPU がモニタへ戻るとき。
-   * kind: 0=命令 / 1=メモリ / 2=IO / 3=ステップ。slot: 比較器 0–7。ステップは 0xFF。
-   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。ステップは IC 退避値。
+   * ブレイク通知 (cmd=0x1A): 比較器ヒットで CPU がモニタへ戻るとき。
+   * kind: 0=命令 / 1=メモリ / 2=IO。slot: 比較器 0–7。
+   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。
    */
   onBreakNotify(info: {
     kind: number;
@@ -126,13 +124,33 @@ export interface CpuToIoHandlers {
   }): number;
 
   /**
-   * LCD制御 (cmd=0x19): Clear/Home/DisplayCtrl/SetCursor。モード不問。
+   * ステップ通知 (cmd=0x1B): 1 命令実行後。addr はレベル2 IC 退避（バイト相当の 32bit）。
+   * レジスタは 16bit。stack は SP+1 から 16 ワード。
+   */
+  onStepNotify(info: {
+    addr: number;
+    r0: number;
+    r1: number;
+    r2: number;
+    r3: number;
+    r4: number;
+    sp: number;
+    str: number;
+    ic: number;
+    csbrSsbr: number;
+    tsr: number;
+    npp: number;
+    stack: number[];
+  }): number;
+
+  /**
+   * LCD制御 (cmd=0x17): Clear/Home/DisplayCtrl/SetCursor。モード不問。
    * @param frame コマンドを含む 5 バイト
    */
   onLcdControl(frame: Uint8Array): number;
 
   /**
-   * LCD文字列表示 (cmd=0x1A): 行・列・長さ・ASCII。モード不問。
+   * LCD文字列表示 (cmd=0x18): 行・列・長さ・ASCII。モード不問。
    * @param frame コマンドを含む 20 バイト
    */
   onLcdText(frame: Uint8Array): number;
@@ -169,6 +187,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
   [CMD_CPU_TO_IO.LCD_TEXT]: 20,
+  /** ステップ通知: cmd(1) + addr32(4) + レジスタ 22B + スタック 32B = 59バイト */
+  [CMD_CPU_TO_IO.STEP_NOTIFY]: 59,
 };
 
 /**
@@ -188,6 +208,7 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.BREAK_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY] - 1,
   [CMD_CPU_TO_IO.LCD_CTRL]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL] - 1,
   [CMD_CPU_TO_IO.LCD_TEXT]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_TEXT] - 1,
+  [CMD_CPU_TO_IO.STEP_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY] - 1,
 };
 
 // ─────────────────────────────────────────────
@@ -269,6 +290,8 @@ export class CpuToIoCommandDispatcher {
         return this._handleLcdControl(frame);
       case CMD_CPU_TO_IO.LCD_TEXT:
         return this._handleLcdText(frame);
+      case CMD_CPU_TO_IO.STEP_NOTIFY:
+        return this._handleStepNotify(frame);
       default:
         // 未対応コマンドは仕様通り NG を返す。
         return new Uint8Array([RESPONSE_CODE.NG]);
@@ -292,7 +315,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * 16進キー入力取得 (0x11)
+   * 16進キー入力取得 (0x14)
    * フリーモード時のみ有効。
    * 応答: 9バイト = 列0〜7のキー状態(8) + ステータス(1)
    */
@@ -314,7 +337,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * PCキー入力取得 (0x12)
+   * PCキー入力取得 (0x15)
    * 応答: 3バイト = ASCII値(1) + キーコード値(1) + ステータス(1)
    */
   private _handlePcKeyGet(): Uint8Array {
@@ -323,7 +346,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * LED表示依頼 (0x13)
+   * LED表示依頼 (0x16)
    * フリーモード時のみ有効。
    * 応答: 1バイト (OK / NG モードエラー / NG その他)
    */
@@ -338,7 +361,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * BEEP音 (0x14)
+   * BEEP音 (0x19)
    * モード問わず使用可。
    * 応答: 1バイト (OK / NG)
    */
@@ -352,7 +375,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * タイマー設定 (0x15)
+   * タイマー設定 (0x12)
    * タイマー番号は 0 / 1 のみ有効。
    * 応答: 1バイト (OK / NG)
    */
@@ -371,7 +394,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * 時刻取得 (0x16)
+   * 時刻取得 (0x11)
    * 応答: 9バイト = 時刻バイト[7..0](8) + ステータス(1)
    */
   private _handleTimeGet(): Uint8Array {
@@ -391,7 +414,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * 未定義命令LED (0x17)
+   * 未定義命令LED (0x13)
    * Bit0=0 消灯 / Bit0=1 点灯。それ以外の値は NG。
    * 応答: 1バイト (OK / NG)
    */
@@ -405,14 +428,13 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * ブレイク通知 (0x18)
-   * 区分 0–2 はスロット 0–7。区分 3（ステップ）はスロット 0xFF。応答: 1バイト (OK / NG)
+   * ブレイク通知 (0x1A)
+   * 区分 0–2、スロット 0–7。応答: 1バイト (OK / NG)
    */
   private _handleBreakNotify(frame: Uint8Array): Uint8Array {
     const kind = frame[0x01]! & 0xff;
     const slot = frame[0x02]! & 0xff;
-    const slotOk = kind === 3 ? slot === 0xff : slot <= 7;
-    if (kind > 3 || !slotOk) {
+    if (kind > 2 || slot > 7) {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
     const addr =
@@ -425,7 +447,39 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * LCD制御 (0x19)
+   * ステップ通知 (0x1B)
+   * 応答: 1バイト (OK / NG)
+   */
+  private _handleStepNotify(frame: Uint8Array): Uint8Array {
+    const addr =
+      ((frame[0x01]! & 0xff) << 24) |
+      ((frame[0x02]! & 0xff) << 16) |
+      ((frame[0x03]! & 0xff) << 8) |
+      (frame[0x04]! & 0xff);
+    const stack: number[] = [];
+    for (let i = 0; i < 16; i += 1) {
+      stack.push(read16(frame, 0x1b + i * 2));
+    }
+    const result = this.handlers.onStepNotify({
+      addr,
+      r0: read16(frame, 0x05),
+      r1: read16(frame, 0x07),
+      r2: read16(frame, 0x09),
+      r3: read16(frame, 0x0b),
+      r4: read16(frame, 0x0d),
+      sp: read16(frame, 0x0f),
+      str: read16(frame, 0x11),
+      ic: read16(frame, 0x13),
+      csbrSsbr: read16(frame, 0x15),
+      tsr: read16(frame, 0x17),
+      npp: frame[0x19]! & 0xff,
+      stack,
+    });
+    return new Uint8Array([result & 0xff]);
+  }
+
+  /**
+   * LCD制御 (0x17)
    * 応答: 1バイト (OK / NG)
    */
   private _handleLcdControl(frame: Uint8Array): Uint8Array {
@@ -434,7 +488,7 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * LCD文字列表示 (0x1A)
+   * LCD文字列表示 (0x18)
    * 応答: 1バイト (OK / NG)
    */
   private _handleLcdText(frame: Uint8Array): Uint8Array {

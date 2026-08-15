@@ -1,15 +1,15 @@
 /**
  * IO ボード上の未定義命令 LED（砲弾 B / UNDEF）
  *
- * ハンドシェイク 17h（HandShake.mdc「未定義命令LED」）で点灯／消灯する。
- * sticky: 17h 消灯または RST まで点灯を維持する（IISR をポーリングしない）。
+ * ハンドシェイク 13h（HandShake.mdc「未定義命令LED」）で点灯／消灯する。
+ * sticky: 13h 消灯または RST まで点灯を維持する（IISR をポーリングしない）。
  */
 
 /** 砲弾 B (UNDEF) の点灯状態 */
 let _undefLedOn = false;
 
 /**
- * ハンドシェイク 0x17 受信時に呼ぶ。
+ * ハンドシェイク 0x13 受信時に呼ぶ。
  * @param on true=点灯 / false=消灯
  */
 export function applyUndefLedCommand(on: boolean): void {

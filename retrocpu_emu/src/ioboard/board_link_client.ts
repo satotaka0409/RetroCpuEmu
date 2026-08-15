@@ -122,7 +122,7 @@ export class BoardLinkClient {
   }
 
   /**
-   * ハンドシェイク MEM_READ (0x50) でメモリを読む（DMA ではない。DMA に read は無い）。
+   * ハンドシェイク MEM_READ (0x13) でメモリを読む（DMA ではない。DMA に read は無い）。
    * @param wordAddr 読み出し開始ワードアドレス
    * @param byteCount 読み出しバイト数
    * @returns 読み出したバイト列
@@ -142,7 +142,7 @@ export class BoardLinkClient {
   }
 
   /**
-   * ハンドシェイク MEM_WRITE (0x51) でメモリへ書く。
+   * ハンドシェイク MEM_WRITE (0x14) でメモリへ書く。
    * @param wordAddr 書き込み開始ワードアドレス
    * @param data 書き込むバイト列
    */
@@ -163,7 +163,7 @@ export class BoardLinkClient {
   }
 
   /**
-   * ハンドシェイク EXEC (0x49) で指定アドレスから実行させる。
+   * ハンドシェイク EXEC (0x12) で指定アドレスから実行させる。
    * @param wordAddr 実行開始ワードアドレス
    */
   async exec(wordAddr: number): Promise<void> {
@@ -179,7 +179,7 @@ export class BoardLinkClient {
   }
 
   /**
-   * ハンドシェイク 40h でメモリ／IO ブレイクを設定する。
+   * ハンドシェイク 10h でメモリ／IO ブレイクを設定する。
    * CPU の応答を待って status を返す（中継。retrocpu_debug.mdc）。
    * @param payload コマンド除く 9 バイト（slot, flags, count, addr32 BE, data16 BE）
    * @returns OK=0 / NG=1。リンク失敗時も NG
@@ -205,7 +205,7 @@ export class BoardLinkClient {
   }
 
   /**
-   * ハンドシェイク 41h でメモリ／IO ブレイクを解除する。
+   * ハンドシェイク 11h でメモリ／IO ブレイクを解除する。
    * @param slot ブレイク設定番号（0–7）
    * @returns OK=0 / NG=1。リンク失敗時も NG
    */

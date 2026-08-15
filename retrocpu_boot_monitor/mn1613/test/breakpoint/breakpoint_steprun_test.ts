@@ -1,6 +1,6 @@
 /**
- * ステップ実行（61h / 要因 4 / CPLD 0036・0037）
- * 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 61h・18h 区分 3 /
+ * ステップ実行（18h / 要因 4 / CPLD 0036・0037）
+ * 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
  * MN1613_CPUボードメモリ_IOマップ.mdc（STEP_BRK_ENA / STEP_BRK_COM）
  */
 import { stepBreak } from "../../../../retrocpu_emu/src/cpuboard/mn1613/step_break.js";
@@ -93,10 +93,10 @@ async function callHandler(
   return io;
 }
 
-test("61h 方式 0 は OK で ARM を落とす（ENA は上げない）", async () => {
+test("18h 方式 0 は OK で ARM を落とす（ENA は上げない）", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(s.wordAddr("GL_STEP_ARM"), 1);
-    const reply = await callHandler(mock, Uint8Array.from([0x61, 0]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x18, 0]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
     expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
     expect(stepBreak.getEnable()).toBe(0);
@@ -104,9 +104,9 @@ test("61h 方式 0 は OK で ARM を落とす（ENA は上げない）", async 
   });
 });
 
-test("61h 方式 1 は ARM を立て、ENA はまだ 0", async () => {
+test("18h 方式 1 は ARM を立て、ENA はまだ 0", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(mock, Uint8Array.from([0x61, 1]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x18, 1]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
     expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
     expect(stepBreak.getEnable()).toBe(0);
@@ -114,10 +114,10 @@ test("61h 方式 1 は ARM を立て、ENA はまだ 0", async () => {
   });
 });
 
-test("61h 方式 2 は NG で ARM を変えない", async () => {
+test("18h 方式 2 は NG で ARM を変えない", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(s.wordAddr("GL_STEP_ARM"), 0);
-    const reply = await callHandler(mock, Uint8Array.from([0x61, 2]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x18, 2]), 1);
     expect(Array.from(reply)).toEqual([0x01]);
     expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
     expect(stepBreak.getEnable()).toBe(0);
@@ -147,7 +147,7 @@ test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", as
   });
 });
 
-test("g_step_interrupt_handler は 18h 区分 3・スロット FFh を送り R0=1", async () => {
+test("g_step_interrupt_handler は 1Bh を送り R0=1", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(IC_SAVE, USER_IC);
     await Promise.all([
@@ -157,11 +157,10 @@ test("g_step_interrupt_handler は 18h 区分 3・スロット FFh を送り R0=
       mock.handleOneRequest(),
     ]);
     s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 3,
-      slot: 0xff,
-      addr: USER_IC,
-    });
+    expect(mock.state.lastBreakNotify).toBe(null);
+    expect(mock.state.lastStepNotify?.addr).toBe(USER_IC);
+    expect(mock.state.lastStepNotify?.ic).toBe(USER_IC);
+    expect(mock.state.lastStepNotify?.stack?.length).toBe(16);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(0);
   });
 });
@@ -184,8 +183,9 @@ test("INT2 要因 4 で停止すると main_loop の H に入る", async () => {
       mock.handleOneRequest(),
     ]);
     expect(status).toBe("halted");
-    expect(mock.state.lastBreakNotify?.kind).toBe(3);
-    expect(mock.state.lastBreakNotify?.slot).toBe(0xff);
+    expect(mock.state.lastStepNotify?.addr).toBe(IDLE);
+    expect(mock.state.lastStepNotify?.ic).toBe(IDLE);
+    expect(mock.state.lastStepNotify?.stack?.length).toBe(16);
     const ic = getState().IC & 0xffff;
     expect(s.readWord((ic - 1) & 0xffff)).toBe(OP_H);
   });

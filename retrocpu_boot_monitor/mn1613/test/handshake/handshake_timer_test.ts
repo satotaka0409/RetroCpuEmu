@@ -1,5 +1,5 @@
 /**
- * g_bios_timer_set（CPU→IO コマンド 15h）
+ * g_bios_timer_set（CPU→IO コマンド 12h）
  * 根拠: HandShake.mdc / boot_monitor.mdc / test_framework.mdc
  */
 import {

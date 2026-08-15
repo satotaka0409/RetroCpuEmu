@@ -1,5 +1,5 @@
 /**
- * g_hshk_break_hist_get（IO→CPU コマンド 60h）
+ * g_hshk_break_hist_get（IO→CPU コマンド 17h）
  * 根拠: HandShake.mdc「ブレイク履歴取得」
  */
 import {
@@ -78,24 +78,24 @@ async function callHandler(
   return io;
 }
 
-test("60h スロット 8 はヘッダ 0 のあと NG", async () => {
+test("17h スロット 8 はヘッダ 0 のあと NG", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(mock, Uint8Array.from([0x60, 0x08, 0x00]), 9);
+    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x08, 0x00]), 9);
     expect(Array.from(reply)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
 });
 
-test("60h 履歴未設定は件数 0 で 02h", async () => {
+test("17h 履歴未設定は件数 0 で 02h", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       Uint8Array.from([
-        0x40, 0x00, 0x42, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0x42, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
       ]),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x60, 0x00, 0x00]), 9);
+    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x00, 0x00]), 9);
     expect(reply[0]).toBe(0);
     expect(reply[1]).toBe(0x02);
     expect(reply[2]).toBe(0x42);
@@ -106,16 +106,16 @@ test("60h 履歴未設定は件数 0 で 02h", async () => {
   });
 });
 
-test("60h 履歴設定で件数 0 なら OK", async () => {
+test("17h 履歴設定で件数 0 なら OK", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       Uint8Array.from([
-        0x40, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
       ]),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x60, 0x00, 0x00]), 9);
+    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x00, 0x00]), 9);
     expect(reply[0]).toBe(0);
     expect(reply[1]).toBe(0);
     expect(reply[2]).toBe(0xc2);
@@ -125,12 +125,37 @@ test("60h 履歴設定で件数 0 なら OK", async () => {
   });
 });
 
-test("60h 履歴 1 件を新しい順で返す", async () => {
+/**
+ * 履歴エントリ 33 語を物理 3F000h 領域へ置く。
+ * @param s セッション
+ * @param slot 0–7
+ * @param index リング index 0–15
+ * @param mark 先頭ワード（識別用）
+ */
+function plantEntry(
+  s: Mn1613AsmSession,
+  slot: number,
+  index: number,
+  mark: number,
+): void {
+  const base = 0x3f000 + slot * 528 + index * 33;
+  s.writeWord(base, mark);
+  s.writeWord(base + 1, 0x4567);
+  s.writeWord(base + 2, 0x89ab);
+  s.writeWord(base + 3, 0xcdef);
+  s.writeWord(base + 4, 0xa5a5);
+  s.writeWord(base + 5, 0x0000);
+  for (let i = 6; i < 33; i += 1) {
+    s.writeWord(base + i, 0x1000 + i);
+  }
+}
+
+test("17h 履歴 1 件を新しい順で返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       Uint8Array.from([
-        0x40, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
       ]),
       1,
     );
@@ -138,25 +163,122 @@ test("60h 履歴 1 件を新しい順で返す", async () => {
     s.writeWord(meta, 1);
     s.writeWord(meta + 1, 1);
     s.writeWord(meta + 2, 0);
-    const base = 0x3f000;
-    s.writeWord(base, 0x0123);
-    s.writeWord(base + 1, 0x4567);
-    s.writeWord(base + 2, 0x89ab);
-    s.writeWord(base + 3, 0xcdef);
-    s.writeWord(base + 4, 0xa5a5);
-    s.writeWord(base + 5, 0x0000);
-    for (let i = 6; i < 17; i += 1) {
-      s.writeWord(base + i, 0x1000 + i);
-    }
+    plantEntry(s, 0, 0, 0x0123);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x60, 0x00, 0x00]),
-      8 + 34 + 1,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + 66 + 1,
     );
     expect(reply[0]).toBe(1);
     expect(reply[1]).toBe(0);
     expect((reply[8]! << 8) | reply[9]!).toBe(0x0123);
     expect((reply[16]! << 8) | reply[17]!).toBe(0xa5a5);
+    expect(reply[reply.length - 1]).toBe(0x00);
+  });
+});
+
+test("17h は 2 件を新しい順（後に書いた方から）で返す", async () => {
+  await withCase(async (s, mock) => {
+    await callHandler(
+      mock,
+      Uint8Array.from([
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+      ]),
+      1,
+    );
+    const meta = s.wordAddr("GL_BP_HIST_META");
+    s.writeWord(meta, 2);
+    s.writeWord(meta + 1, 2);
+    s.writeWord(meta + 2, 0);
+    plantEntry(s, 0, 0, 0x0001);
+    plantEntry(s, 0, 1, 0x0002);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + 66 * 2 + 1,
+    );
+    expect(reply[0]).toBe(2);
+    expect((reply[8]! << 8) | reply[9]!).toBe(0x0002);
+    expect((reply[8 + 66]! << 8) | reply[9 + 66]!).toBe(0x0001);
+    expect(reply[reply.length - 1]).toBe(0x00);
+  });
+});
+
+test("17h スロット 7 は slot×528 先のエントリを返す", async () => {
+  await withCase(async (s, mock) => {
+    await callHandler(
+      mock,
+      Uint8Array.from([
+        0x10, 0x07, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+      ]),
+      1,
+    );
+    const meta = s.wordAddr("GL_BP_HIST_META") + 7 * 3;
+    s.writeWord(meta, 1);
+    s.writeWord(meta + 1, 1);
+    s.writeWord(meta + 2, 0);
+    plantEntry(s, 7, 0, 0x7777);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x07, 0x00]),
+      8 + 66 + 1,
+    );
+    expect(reply[0]).toBe(1);
+    expect((reply[8]! << 8) | reply[9]!).toBe(0x7777);
+    expect(reply[reply.length - 1]).toBe(0x00);
+  });
+});
+
+test("17h Bit0=1 は取得後に当該スロットの履歴をクリアする", async () => {
+  await withCase(async (s, mock) => {
+    await callHandler(
+      mock,
+      Uint8Array.from([
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+      ]),
+      1,
+    );
+    const meta = s.wordAddr("GL_BP_HIST_META");
+    s.writeWord(meta, 1);
+    s.writeWord(meta + 1, 1);
+    s.writeWord(meta + 2, 1);
+    plantEntry(s, 0, 0, 0x0123);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x01]),
+      8 + 66 + 1,
+    );
+    expect(reply[0]).toBe(1);
+    expect(reply[1]).toBe(0x01);
+    expect(reply[reply.length - 1]).toBe(0x00);
+    expect(s.readWord(meta)).toBe(0);
+    expect(s.readWord(meta + 1)).toBe(0);
+    expect(s.readWord(meta + 2)).toBe(0);
+  });
+});
+
+test("17h オーバフロー済みはステータス Bit0 を立てる", async () => {
+  await withCase(async (s, mock) => {
+    await callHandler(
+      mock,
+      Uint8Array.from([
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+      ]),
+      1,
+    );
+    const meta = s.wordAddr("GL_BP_HIST_META");
+    s.writeWord(meta, 1);
+    s.writeWord(meta + 1, 1);
+    s.writeWord(meta + 2, 1);
+    plantEntry(s, 0, 0, 0x00aa);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + 66 + 1,
+    );
+    expect(reply[0]).toBe(1);
+    expect(reply[1]).toBe(0x01);
+    expect((reply[8]! << 8) | reply[9]!).toBe(0x00aa);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });

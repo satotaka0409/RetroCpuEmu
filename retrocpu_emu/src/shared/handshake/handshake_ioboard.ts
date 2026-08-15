@@ -42,7 +42,7 @@ export class IoControlHandshake {
 
   /**
    * IO→CPU を送ったあと同一 ENA セッションで CPU→IO 応答を受け取る。
-   * 48h のように応答後に IO→CPU を足す場合は `thenToCpu` を使う。
+   * 応答後に IO→CPU を足す場合は `thenToCpu` を使う。
    * @param toCpu IO→CPU 先頭バイト列（コマンド含む）
    * @param fromCpu CPU→IO で待つバイト数（0 なら受信しない）
    * @param thenToCpu 応答後に追加する IO→CPU（省略可）
@@ -77,7 +77,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ読み出し（コマンド 50h）。同一 ENA でヘッダ→ブロック+checksum→OK/NG。
+   * IO→CPU メモリ読み出し（コマンド 13h）。同一 ENA でヘッダ→ブロック+checksum→OK/NG。
    * アドレス・バイト数は線上ビッグエンディアン。端数はパディングしない。
    * @param byteAddr 読み出し開始バイトアドレス
    * @param byteCount 読み出しバイト数（0 ならヘッダのみ）
@@ -112,7 +112,7 @@ export class IoControlHandshake {
       }
       if (!accepted) {
         await this.finalizeSend();
-        throw new Error("handshake 50h checksum failed");
+        throw new Error("handshake 13h checksum failed");
       }
       offset += blk;
     }
@@ -121,7 +121,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU アドレス／IO ブレイク設定（コマンド 40h）。
+   * IO→CPU アドレス／IO ブレイク設定（コマンド 10h）。
    * 同一 ENA で 10 バイト送り、CPU の status 1 バイトを待つ。
    * @param payload コマンド除く 9 バイト（slot, flags, count, addr32 BE, data16 BE）
    * @returns OK=0 / NG=1（受信失敗時も NG）
@@ -138,7 +138,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU アドレス／IO ブレイク解除（コマンド 41h）。
+   * IO→CPU アドレス／IO ブレイク解除（コマンド 11h）。
    * @param slot ブレイク設定番号（0–7）
    * @returns OK=0 / NG=1
    */
@@ -152,7 +152,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ書き込み（コマンド 51h）。同一 ENA でヘッダ→データ+checksum→OK/NG。
+   * IO→CPU メモリ書き込み（コマンド 14h）。同一 ENA でヘッダ→データ+checksum→OK/NG。
    * @param byteAddr 書き込み開始バイトアドレス
    * @param data 書き込むバイト列（0 長ならヘッダのみ）
    */
@@ -183,7 +183,7 @@ export class IoControlHandshake {
       }
       if (!accepted) {
         await this.finalizeSend();
-        throw new Error("handshake 51h NG");
+        throw new Error("handshake 14h NG");
       }
       offset += blk;
     }

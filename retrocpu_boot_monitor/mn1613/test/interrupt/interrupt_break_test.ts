@@ -1,5 +1,5 @@
 /**
- * g_breakpoint_interrupt_handler（INT2 / INT_CAUSE=3 → 18h）
+ * g_breakpoint_interrupt_handler（INT2 / INT_CAUSE=3 → 1Ah）
  * 根拠: HandShake.mdc「ブレイク通知」/ breakpoint.mdc /
  * MN1613_CPUボードメモリ_IOマップ.mdc（0033/0034）
  */
@@ -41,7 +41,7 @@ const PREV_WR = 0xbeef;
 const AFTER_WR = 0xcafe;
 const HIST_SBR = 0x0c;
 const HIST_LOG = 0xf000;
-const HIST_ENTRY_WORDS = 17;
+const HIST_ENTRY_WORDS = 33;
 const HIST_SLOT_WORDS = 16 * HIST_ENTRY_WORDS;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const SAMPLE_TIME_WORDS = [0x0123, 0x4567, 0x89ab, 0xcdef] as const;
@@ -155,7 +155,7 @@ test("スロット 0 無効はスルー", async () => {
   });
 });
 
-test("スロット 0 有効・回数 0 は 18h を送り R0=1", async () => {
+test("スロット 0 有効・回数 0 は 1Ah を送り R0=1", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
     writeSlot(s, 0, [1, 0, 0, 0, WATCH_BYTE, 0]);
     await Promise.all([
@@ -198,7 +198,7 @@ test("回数 2 の 1 回目はデクリメントして継続", async () => {
   });
 });
 
-test("スロット 6 もユーザ比較器として 18h", async () => {
+test("スロット 6 もユーザ比較器として 1Ah", async () => {
   await withCase(sessionSlot6, async (s, mock) => {
     writeSlot(s, 6, [1, 0, 0, 0, WATCH_BYTE, 0]);
     await Promise.all([
@@ -228,7 +228,7 @@ test("0034 は履歴なしでも GL_BP_HIT_PREV に残る", async () => {
   });
 });
 
-test("Bit7 WRITE は 16h のあと 0034 と AFTER を 3F000h に書く", async () => {
+test("Bit7 WRITE は 11h のあと 0034 と AFTER を 3F000h に書く", async () => {
   await withCase(sessionPrev, async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     s.writeWord(WATCH_WORD, AFTER_WR);

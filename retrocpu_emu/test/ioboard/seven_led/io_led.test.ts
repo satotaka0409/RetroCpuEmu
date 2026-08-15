@@ -1,5 +1,5 @@
 /**
- * IO LED ラッチ（ハンドシェイク 0x13）
+ * IO LED ラッチ（ハンドシェイク 0x16）
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -22,7 +22,7 @@ describe("io_led", () => {
     expect(led.bulletLed8_F).toBe(0);
   });
 
-  it("0x13 相当のデータをラッチする", () => {
+  it("0x16 相当のデータをラッチする", () => {
     applyLedDisplayCommand({
       sevenSeg: new Uint8Array([
         0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c,

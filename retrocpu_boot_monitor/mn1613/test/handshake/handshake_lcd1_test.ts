@@ -1,5 +1,5 @@
 /**
- * g_bios_lcd_control（CPU→IO コマンド 19h）
+ * g_bios_lcd_control（CPU→IO コマンド 17h）
  * 根拠: HandShake.mdc「LCD制御」/ boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -67,15 +67,15 @@ async function callLcd1(
   ]);
 }
 
-test("19h フレーム（kind/argA/argB/argC）を正しく送る", async () => {
+test("17h フレーム（kind/argA/argB/argC）を正しく送る", async () => {
   await withCase(async (s, mock) => {
     await callLcd1(mock, 3, 0x05, 0x01, 0x0f);
 
     const last = mock.state.log.at(-1);
     expect(last).toBeTruthy();
     expect(last!.dir).toBe("cpu_to_io");
-    expect(last!.cmd).toBe(0x19);
-    expect(Array.from(last!.frame)).toEqual([0x19, 0x03, 0x05, 0x01, 0x0f]);
+    expect(last!.cmd).toBe(0x17);
+    expect(Array.from(last!.frame)).toEqual([0x17, 0x03, 0x05, 0x01, 0x0f]);
 
     const status = last!.response?.[0] ?? 0;
     s.expectRegisters({ R0: status & 0xff });

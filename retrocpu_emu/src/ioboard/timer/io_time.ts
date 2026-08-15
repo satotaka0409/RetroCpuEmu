@@ -1,5 +1,5 @@
 /**
- * IO ボードの 64bit 時刻タイマー（ハンドシェイク 16h）
+ * IO ボードの 64bit 時刻タイマー（ハンドシェイク 11h）
  * 根拠: HandShake.mdc「時刻取得」/ ioboard.mdc
  *
  * IO ボード開始時に 0 クリアし、だいたい 10µs ごとに +1。
@@ -13,10 +13,10 @@ export const IO_TIME_TICK_NS = 10_000n;
 /** 64bit 符号なしのマスク */
 const UINT64_MASK = 0xffff_ffff_ffff_ffffn;
 
-/** 時刻取得（16h）が読む 64bit タイマーの供給元 */
+/** 時刻取得（11h）が読む 64bit タイマーの供給元 */
 export type IoTimeSource = {
   /**
-   * 64bit 時刻を上位バイト先頭の 8 バイトで返す（HandShake.mdc 16h）。
+   * 64bit 時刻を上位バイト先頭の 8 バイトで返す（HandShake.mdc 11h）。
    * @returns 長さ 8。index 0 = 時刻7（MSB）
    */
   readTimestamp(): Uint8Array;

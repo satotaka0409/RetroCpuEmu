@@ -1,5 +1,5 @@
 /**
- * io_undef_led.ts — 未定義命令 LED ラッチ（ハンドシェイク 17h）
+ * io_undef_led.ts — 未定義命令 LED ラッチ（ハンドシェイク 13h）
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import {

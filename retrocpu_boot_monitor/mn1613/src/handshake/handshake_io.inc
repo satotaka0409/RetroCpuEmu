@@ -34,64 +34,65 @@ HSHK_NG_OTHER	.equ	0x02
 HSHK_MODE_MONITOR	.equ	0
 HSHK_MODE_FREE		.equ	1
 
-; CPU→IO コマンド（HandShake.mdc「コマンド概要」）
+; CPU→IO コマンド（HandShake.mdc「コマンド概要」の並び）
 HSHK_CMD_MODE_SET	.equ	0x10
-HSHK_CMD_HEX_KEY	.equ	0x11
-HSHK_CMD_PC_KEY		.equ	0x12
-HSHK_CMD_LED_DISPLAY	.equ	0x13
-HSHK_CMD_BEEP		.equ	0x14
-HSHK_CMD_TIMER_SET	.equ	0x15
-HSHK_CMD_GET_TIME	.equ	0x16
-HSHK_CMD_UNDEF_LED	.equ	0x17
-HSHK_CMD_BREAK_NOTIFY	.equ	0x18
-HSHK_CMD_LCD_CTRL	.equ	0x19
-HSHK_CMD_LCD_TEXT	.equ	0x1A
+HSHK_CMD_GET_TIME	.equ	0x11
+HSHK_CMD_TIMER_SET	.equ	0x12
+HSHK_CMD_UNDEF_LED	.equ	0x13
+HSHK_CMD_HEX_KEY	.equ	0x14
+HSHK_CMD_PC_KEY		.equ	0x15
+HSHK_CMD_LED_DISPLAY	.equ	0x16
+HSHK_CMD_LCD_CTRL	.equ	0x17
+HSHK_CMD_LCD_TEXT	.equ	0x18
+HSHK_CMD_BEEP		.equ	0x19
+HSHK_CMD_BREAK_NOTIFY	.equ	0x1A
+HSHK_CMD_STEP_NOTIFY	.equ	0x1B
 
-; 未定義命令LED（17h）: Bit0 0=消灯 / 1=点灯
+; 未定義命令LED（13h）: Bit0 0=消灯 / 1=点灯
 HSHK_UNDEF_LED_OFF	.equ	0
 HSHK_UNDEF_LED_ON	.equ	1
 
-; 16進キー入力取得（11h）: 列 0–7。バッファは 1 ワード 1 バイト（下位 8bit）
+; 16進キー入力取得（14h）: 列 0–7。バッファは 1 ワード 1 バイト（下位 8bit）
 HSHK_HEX_KEY_COLS	.equ	8
 
-; LED表示依頼（13h）: 7seg×12 + 砲弾×2。バッファは 1 ワード 1 バイト（下位 8bit）
+; LED表示依頼（16h）: 7seg×12 + 砲弾×2。バッファは 1 ワード 1 バイト（下位 8bit）
 HSHK_LED_SEG_LEN	.equ	12
 HSHK_LED_DATA_LEN	.equ	14
 
-; LCD制御（19h）種別
+; LCD制御（17h）種別
 HSHK_LCD_CTRL_CLEAR		.equ	0
 HSHK_LCD_CTRL_HOME		.equ	1
 HSHK_LCD_CTRL_DISPLAY_CTRL	.equ	2
 HSHK_LCD_CTRL_SET_CURSOR	.equ	3
 
-; LCD文字列表示（1Ah）: 1回あたり最大16文字
+; LCD文字列表示（18h）: 1回あたり最大16文字
 HSHK_LCD_TEXT_MAX	.equ	16
 
-; IO→CPU コマンド（HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」）
-HSHK_CMD_BREAK_MEM_IO_SET	.equ	0x40
-HSHK_CMD_BREAK_MEM_IO_CLR	.equ	0x41
+; IO→CPU コマンド（HandShake.mdc 概要表の順。番号は方向ごとに独立）
+HSHK_CMD_BREAK_MEM_IO_SET	.equ	0x10
+HSHK_CMD_BREAK_MEM_IO_CLR	.equ	0x11
+HSHK_CMD_EXEC			.equ	0x12
+HSHK_CMD_MEM_READ		.equ	0x13
+HSHK_CMD_MEM_WRITE		.equ	0x14
+HSHK_CMD_IO_READ		.equ	0x15
+HSHK_CMD_IO_WRITE		.equ	0x16
+HSHK_CMD_BREAK_HIST_GET		.equ	0x17
+HSHK_CMD_BREAK_RESUME		.equ	0x18
+HSHK_CMD_IO_BASE		.equ	0x10
+HSHK_CMD_IO_LAST		.equ	0x18
+HSHK_CMD_IO_LIMIT		.equ	0x19
+; 廃止（ディスパッチ範囲外。INT3 命令パッチ）
 HSHK_CMD_BREAK_INST_SET		.equ	0x42
 HSHK_CMD_BREAK_INST_CLR		.equ	0x43
-HSHK_CMD_CPU_STATUS_GET		.equ	0x48
-HSHK_CMD_EXEC			.equ	0x49
-HSHK_CMD_MEM_READ		.equ	0x50
-HSHK_CMD_MEM_WRITE		.equ	0x51
-HSHK_CMD_IO_READ		.equ	0x52
-HSHK_CMD_IO_WRITE		.equ	0x53
-HSHK_CMD_BREAK_HIST_GET		.equ	0x60
-HSHK_CMD_BREAK_RESUME		.equ	0x61
-HSHK_CMD_IO_BASE		.equ	0x40
-HSHK_CMD_IO_LAST		.equ	0x61
-HSHK_CMD_IO_LIMIT		.equ	0x62
 HSHK_RESUME_RUN			.equ	0
 HSHK_RESUME_STEP		.equ	1
 HSHK_RESUME_LIMIT		.equ	2
 
 ; IO→CPU コマンド後の残り受信バイト（cmd 除く）
-HSHK_IRQ_PAY_40		.equ	9
-HSHK_IRQ_PAY_41		.equ	1
+HSHK_IRQ_PAY_SET	.equ	9
+HSHK_IRQ_PAY_CLR	.equ	1
 
-; アドレスブレイク（40h/41h）スロット表（_WORK、1 スロット 6 ワード × 8）
+; アドレスブレイク（10h/11h）スロット表（_WORK、1 スロット 6 ワード × 8）
 HSHK_AB_SLOTS		.equ	8
 HSHK_AB_SLOT_WORDS	.equ	6
 HSHK_AB_TBL_WORDS	.equ	HSHK_AB_SLOTS * HSHK_AB_SLOT_WORDS
@@ -109,10 +110,11 @@ HSHK_AB_F_COND		.equ	0x38
 HSHK_AB_F_INST		.equ	0x40
 HSHK_AB_F_HIST		.equ	0x80
 
-; 履歴リング（HandShake 60h / breakpoint.mdc）。物理 3F000h＝SBR C + 論理 F000h
-; 1 エントリ 17 ワード: 時刻4 + AFTER + PREV + 48h レジスタ 11
+; 履歴リング（HandShake 17h / breakpoint.mdc）。物理 3F000h＝SBR C + 論理 F000h
+; 1 エントリ 33 ワード: 時刻4 + AFTER + PREV + レジスタ 11 + スタック 16
 HSHK_BH_DEPTH		.equ	16
-HSHK_BH_ENTRY_WORDS	.equ	17
+HSHK_BH_ENTRY_WORDS	.equ	33
+HSHK_BH_STACK_WORDS	.equ	16
 HSHK_BH_SLOT_WORDS	.equ	HSHK_BH_DEPTH * HSHK_BH_ENTRY_WORDS
 HSHK_BH_SBR		.equ	0x000C
 HSHK_BH_BASE		.equ	0xF000
@@ -122,26 +124,23 @@ HSHK_BH_W_TIME		.equ	0
 HSHK_BH_W_DATA		.equ	4
 HSHK_BH_W_PREV		.equ	5
 HSHK_BH_W_REGS		.equ	6
+HSHK_BH_W_STACK		.equ	17	; NPP の次から 16 ワード
+HSHK_BH_ENTRY_BYTES	.equ	66
 ; GL_BP_HIST_META（1 スロット 3 ワード）
 HSHK_BH_MW_COUNT	.equ	0	; 有効件数（0–16）
 HSHK_BH_MW_NEXT		.equ	1	; 次書込 index（最新は (NEXT-1) & 15）
 HSHK_BH_MW_OVF		.equ	2	; Bit0=リングオーバフロー
 
-HSHK_IRQ_PAY_42		.equ	5
-HSHK_IRQ_PAY_43		.equ	1
-HSHK_IRQ_PAY_49		.equ	4
-HSHK_IRQ_PAY_50		.equ	8
-HSHK_IRQ_PAY_51		.equ	8
-HSHK_IRQ_PAY_60		.equ	2
+HSHK_IRQ_PAY_EXEC	.equ	4
+HSHK_IRQ_PAY_MEM	.equ	8
+HSHK_IRQ_PAY_HIST	.equ	2
 HSHK_BH_CLR		.equ	0x01
 HSHK_BH_ST_OVF		.equ	0x01
 HSHK_BH_ST_NOHIST	.equ	0x02
 HSHK_BH_HDR_CPU		.equ	8
-HSHK_BH_ENTRY_BYTES	.equ	34
-HSHK_IRQ_STATUS_BYTES	.equ	0x15
 HSHK_MEM_BLOCK		.equ	256
 
-; CPU状態構造体（ワードオフセット。R0 = 先頭。48h 線上は 0x15 バイト）
+; レジスタ並び（17h 履歴／未定義命令スナップ。ワードオフセット）
 HSHK_REG_W_R0		.equ	0
 HSHK_REG_W_R1		.equ	1
 HSHK_REG_W_R2		.equ	2

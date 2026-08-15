@@ -1,7 +1,7 @@
 /**
  * IOボード画面
  * ファンクションキーは ioboard.mdc（ADS/RD/INC/DEC/WINC/RUN/H/ST/RST）。
- * パネル LED はコンソールが駆動。ユーザープログラムの 0x13 も同じラッチを使う。
+ * パネル LED はコンソールが駆動。ユーザープログラムの 0x16 も同じラッチを使う。
  */
 
 import { createSevenSegment, setSevenSegmentPattern } from "./seven_segment";
@@ -154,7 +154,7 @@ function initDom(): void {
 
 /**
  * スナップショットを画面へ反映する。
- * 表示は LED ラッチ（ハンドシェイク 0x13 / パネル操作）由来で、メモリは覗かない。
+ * 表示は LED ラッチ（ハンドシェイク 0x16 / パネル操作）由来で、メモリは覗かない。
  * @param snap メインプロセスから届いた最新状態
  */
 function renderSnapshot(snap: EmuSnapshotWire): void {

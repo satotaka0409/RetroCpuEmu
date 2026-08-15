@@ -174,7 +174,7 @@ describe("IoConsole", () => {
     expect(c.getState().halted).toBe(true);
   });
 
-  it("setUndefLed(17h) で砲弾 B を点灯/消灯できる", () => {
+  it("setUndefLed(13h) で砲弾 B を点灯/消灯できる", () => {
     const c = new IoConsole(mockBridge());
     c.setUndefLed(true);
     expect(c.getState().undefInsn).toBe(true);

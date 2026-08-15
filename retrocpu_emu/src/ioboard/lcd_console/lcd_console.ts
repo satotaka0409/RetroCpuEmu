@@ -34,8 +34,8 @@ export type LcdConsoleWire = {
 
 /**
  * LCD1602 互換の最小エミュレータ。
- * - 19h: LCD制御（Clear/Home/DisplayCtrl/SetCursor）
- * - 1Ah: LCD文字列表示（行・列・長さ・ASCII列）
+ * - 17h: LCD制御（Clear/Home/DisplayCtrl/SetCursor）
+ * - 18h: LCD文字列表示（行・列・長さ・ASCII列）
  */
 export class LcdConsoleEmulator {
   /** 表示不可能文字を置き換える空白コード */
@@ -123,8 +123,8 @@ export class LcdConsoleEmulator {
   }
 
   /**
-   * HandShake.mdc の 19h（LCD制御）を処理する。
-   * frame = [cmd(19h), kind, argA, argB, argC]
+   * HandShake.mdc の 17h（LCD制御）を処理する。
+   * frame = [cmd(17h), kind, argA, argB, argC]
    * - kind=0: Clear
    * - kind=1: Home
    * - kind=2: DisplayCtrl（argA 使用）
@@ -155,8 +155,8 @@ export class LcdConsoleEmulator {
   }
 
   /**
-   * HandShake.mdc の 1Ah（LCD文字列表示）を処理する。
-   * frame = [cmd(1Ah), row, col, len, ch0..ch15]
+   * HandShake.mdc の 18h（LCD文字列表示）を処理する。
+   * frame = [cmd(18h), row, col, len, ch0..ch15]
    * len は 0..16、有効データは行末までで打ち切る。
    */
   handleTextFrame(frame: Uint8Array): number {
@@ -240,7 +240,7 @@ export class LcdConsoleEmulator {
   }
 }
 
-/** IO ボード共有の LCD1602（19h/1Ah と画面スナップショット） */
+/** IO ボード共有の LCD1602（17h/18h と画面スナップショット） */
 export const lcdConsole = new LcdConsoleEmulator();
 
 /**

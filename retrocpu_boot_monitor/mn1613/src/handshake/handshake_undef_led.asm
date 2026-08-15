@@ -1,8 +1,8 @@
 ; handshake_undef_led.asm
-; 未定義命令LED（ハンドシェイク 17h）
+; 未定義命令LED（ハンドシェイク 13h）
 ; 根拠: HandShake.mdc「未定義命令LED」/ boot_monitor.mdc
 ;
-; 線上 送信 2B: 17h, Bit0(0=消灯 / 1=点灯) → 受信 1B: status
+; 線上 送信 2B: 13h, Bit0(0=消灯 / 1=点灯) → 受信 1B: status
 ; モード不問。INT0（未定義命令）から点灯、RST 等で消灯する想定。
 ;
 ; 引数は第1=R0（asm-rules.mdc の呼び出し規約）。
@@ -24,7 +24,7 @@
 	.global g_hshk_finalize_recv
 
 ; -------------------------------------------------------
-; 未定義命令LED 点灯/消灯（17h）
+; 未定義命令LED 点灯/消灯（13h）
 ; @note 応答はハンドシェイク割り込みを使わず REQ_1 のポーリングで受け取る
 ; @note 呼び出しは BALD、戻りは RET（asm-rules.mdc: g_*）
 ; @param R0 - Bit0: 0=消灯 / 1=点灯（他ビットは無視して Bit0 のみ送る）

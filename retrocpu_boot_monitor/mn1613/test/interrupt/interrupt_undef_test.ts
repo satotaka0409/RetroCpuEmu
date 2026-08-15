@@ -1,6 +1,6 @@
 /**
  * INT0（未定義命令）→ GL_UNDEF_INST_REG 退避
- * 根拠: MN1613.mdc「未定義命令」/ HandShake.mdc「CPU状態取得」並び /
+ * 根拠: MN1613.mdc「未定義命令」/ 17h 履歴と同じレジスタ並び /
  * interrupt.asm g_int0_handler / asm_test_framework.mdc
  */
 import {
@@ -56,7 +56,7 @@ const PRE_TSR0 = 0xc;
 const PRE_TSR1 = 0x4;
 const PRE_NPP = 0x01;
 
-/** HSHK_REG_WORDS（48h / GL_UNDEF_INST_REG と同じ 11 ワード） */
+/** HSHK_REG_WORDS（GL_UNDEF_INST_REG / 17h 履歴と同じ 11 ワード） */
 const HSHK_REG_WORDS = 11;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
@@ -90,9 +90,9 @@ function packHL(hi: number, lo: number): number {
 }
 
 /**
- * 未定義命令を実行し、INT0 が 17h と退避を終えて main_loop で HALT するまで待つ。
+ * 未定義命令を実行し、INT0 が 13h と退避を終えて main_loop で HALT するまで待つ。
  * @param s セッション
- * @param mock IO モック（17h 応答）
+ * @param mock IO モック（13h 応答）
  */
 async function runUndefUntilMainLoop(
   s: Mn1613AsmSession,

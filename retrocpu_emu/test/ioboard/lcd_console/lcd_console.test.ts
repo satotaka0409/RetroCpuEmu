@@ -1,5 +1,5 @@
 /**
- * LCD1602 エミュレータ（19h/1Ah）
+ * LCD1602 エミュレータ（17h/18h）
  * 根拠: HandShake.mdc「LCD制御」「LCD文字列表示」
  */
 
@@ -31,9 +31,9 @@ describe("LcdConsoleEmulator", () => {
     expect(snap.cursorOn).toBe(false);
   });
 
-  it("1Ah で指定位置に文字列を書き、行末で打ち切る", () => {
+  it("18h で指定位置に文字列を書き、行末で打ち切る", () => {
     const frame = new Uint8Array(20);
-    frame[0] = 0x1a;
+    frame[0] = 0x18;
     frame[1] = 0;
     frame[2] = 12;
     frame[3] = 8;
@@ -44,9 +44,9 @@ describe("LcdConsoleEmulator", () => {
     expect(lcd.snapshot().cursorCol).toBe(15);
   });
 
-  it("19h Clear で全消去しカーソルをホームへ戻す", () => {
+  it("17h Clear で全消去しカーソルをホームへ戻す", () => {
     lcd.writeText(1, 0, "ABC");
-    const frame = new Uint8Array([0x19, 0, 0, 0, 0]);
+    const frame = new Uint8Array([0x17, 0, 0, 0, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.OK);
     const snap = lcd.snapshot();
     expect(snap.lines[1]).toBe(" ".repeat(16));
@@ -54,13 +54,13 @@ describe("LcdConsoleEmulator", () => {
     expect(snap.cursorCol).toBe(0);
   });
 
-  it("19h SetCursor の行不正は NG", () => {
-    const frame = new Uint8Array([0x19, 3, 0, 2, 0]);
+  it("17h SetCursor の行不正は NG", () => {
+    const frame = new Uint8Array([0x17, 3, 0, 2, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.NG);
   });
 
   it("DisplayCtrl で表示OFF/カーソル/点滅を切り替える", () => {
-    const frame = new Uint8Array([0x19, 2, 0b110, 0, 0]);
+    const frame = new Uint8Array([0x17, 2, 0b110, 0, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.OK);
     const snap = lcd.snapshot();
     expect(snap.displayOn).toBe(false);

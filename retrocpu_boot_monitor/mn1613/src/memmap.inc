@@ -10,7 +10,7 @@
 ;                       履歴メタ GL_BP_HIST_META（8×3: 件数 / 次書込 / ovf）
 ;   1800-F7FF  ユーザ領域
 ;   F800-FFFF  スタック（SP は FFFF から下方へ伸びる）
-;   3F000-3FFFF  ブレイク履歴エントリ（SBR C、論理 F000h。60h 形式 17 ワード×16×8）
+;   3F000-3FFFF  ブレイク履歴エントリ（SBR C、論理 F000h。17h 形式 33 ワード×16×8）
 
 INT_VECTOR_BASE	.equ	0x0100
 STACK_TOP	.equ	0xffff

@@ -2,7 +2,7 @@
 ; CPLD 比較器ヒット（INT2 / INT_CAUSE=3）の処理
 ;
 ; 根拠:
-;   HandShake.mdc（18h ブレイク通知 / 40h スロット表）
+;   HandShake.mdc（1Ah ブレイク通知 / 10h スロット表）
 ;   MN1613_CPUボードメモリ_IOマップ.mdc（IO 0033 ヒット番号、0034 前回書込値）
 ;   breakpoint.mdc / retrocpu_debug.mdc
 ;
@@ -26,14 +26,14 @@
 ;   4. 区分: INST(Bit6) → 0 / IO(Bit0) → 2 / それ以外 → MEM(1)
 ;   5. 値比較は MEM かつ条件≠0 のみ。IO・命令は条件を無視。
 ;      不一致・条件不正 → スルー（履歴にも書かない）。
-;   6. Bit7 履歴かつ一致なら 16h で時刻を取り、3F000h（SBR C）へ 1 件追記。
-;      エントリ 17 ワード（60h）: 時刻4 + AFTER + PREV + 48h レジスタ 11。
+;   6. Bit7 履歴かつ一致なら 11h で時刻を取り、3F000h（SBR C）へ 1 件追記。
+;      エントリ 33 ワード（17h）: 時刻4 + AFTER + PREV + レジスタ 11 + スタック 16。
 ;      WRITE 以外／命令は PREV=0000h。IO の AFTER は 0。リング 16、メタは _WORK。
-;   7. 停止するとき 18h を CPU→IO で送り、OK/NG 1B を IO→CPU で受ける。
+;   7. 停止するとき 1Ah を CPU→IO で送り、OK/NG 1B を IO→CPU で受ける。
 ;
-; 18h 線上（送信 7B → 受信 1B status）:
-;   18h, 区分(0=命令/1=MEM/2=IO), スロット 0–7, addr32 BE
-;   区分 3（ステップ）はこのハンドラでは出さない。
+; 1Ah 線上（送信 7B → 受信 1B status）:
+;   1Ah, 区分(0=命令/1=MEM/2=IO), スロット 0–7, addr32 BE
+;   ステップ通知は 1Bh（このハンドラでは出さない）。
 ;   応答は IO→CPU なので、待ちの前に INTERRUPT_BUSY を 0 にする。
 ;   BUSY=1 のままだと IO が応答を保留し、互いに待ち合う。
 ;
@@ -45,7 +45,7 @@
 ; Bit7 履歴は回数判定の前に書く。回数そのものは変えない。
 ;
 ; レジスタ（ハンドラ内）:
-;   R3=スロット、R2=18h 区分、X1(R4)=表ポインタ
+;   R3=スロット、R2=1Ah 区分、X1(R4)=表ポインタ
 ;   R0–R2 は破壊可。R3–R4 は入口で PUSH、出口で POP。
 
 	.cpu	mn1613
@@ -69,8 +69,9 @@
 	.global GL_BP_HIT_PREV
 	.global GL_BP_SNAP_R3
 	.global GL_BP_SNAP_TSR0
+	.global GL_BP_SNAP_SP
 
-; 18h 区分（HandShake.mdc）
+; 1Ah 区分（HandShake.mdc）
 BP_KIND_INST		.equ	0
 BP_KIND_MEM		.equ	1
 BP_KIND_IO		.equ	2
@@ -107,6 +108,10 @@ g_breakpoint_interrupt_handler:
 	cpyb	R0, TSR1
 	andi	R0, #0x000f
 	st	R0, 3(X1)
+	; ヒット直前のユーザ SP（INT2: PSHM 5 + TSR 2 + 穴 1 + X1 + 戻り + R3/R4）
+	mv	R0, SP
+	ai	R0, #12
+	st	R0, 4(X1)
 
 	; --- ヒット番号（0033）。0xFFFF をスロット 7 と誤認しない ---
 	rd	R0, IO_BREAK_HIT
@@ -251,7 +256,7 @@ l_bp_count_nz:
 l_bp_count_left:
 	bd	l_bp_cont
 
-; --- 18h ブレイク通知。失敗しても HALT（R0=1）---
+; --- 1Ah ブレイク通知。失敗しても HALT（R0=1）---
 ; 入口: R2=区分、R3=スロット、X1=表
 ; 積む順: kind → slot → 表。SP+1=表、SP+2=slot、SP+3=kind
 ; X0≡R3 なので、表を読むときは先に R4 へ取り、あとで R3 に slot を入れる
@@ -350,4 +355,5 @@ GL_BP_SNAP_R3:		.ds	1
 GL_BP_SNAP_R4:		.ds	1
 GL_BP_SNAP_TSR0:	.ds	1
 GL_BP_SNAP_TSR1:	.ds	1
+GL_BP_SNAP_SP:		.ds	1
 

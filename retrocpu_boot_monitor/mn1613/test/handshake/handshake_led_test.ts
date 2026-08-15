@@ -1,5 +1,5 @@
 /**
- * g_bios_led_display / seven_seg / bullet（CPU→IO コマンド 13h）
+ * g_bios_led_display / seven_seg / bullet（CPU→IO コマンド 16h）
  * 根拠: HandShake.mdc「LED表示依頼」/ boot_monitor.mdc / test_framework.mdc
  */
 import {

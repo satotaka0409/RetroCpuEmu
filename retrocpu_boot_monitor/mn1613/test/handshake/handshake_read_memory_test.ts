@@ -1,5 +1,5 @@
 /**
- * g_hshk_read_memory（IO→CPU コマンド 50h）
+ * g_hshk_read_memory（IO→CPU コマンド 13h）
  * 根拠: HandShake.mdc「メモリ読み出し」/ boot_monitor.mdc / test_framework.mdc
  */
 import {
@@ -38,14 +38,14 @@ function blockChecksum(data: readonly number[]): number {
 }
 
 /**
- * 50h ヘッダ（cmd + addr32 BE + count32 BE）。
+ * 13h ヘッダ（cmd + addr32 BE + count32 BE）。
  * @param byteAddr バイトアドレス
  * @param byteCount バイト数
  * @returns IO→CPU 先頭フレーム
  */
 function memReadHeader(byteAddr: number, byteCount: number): Uint8Array {
   return Uint8Array.from([
-    0x50,
+    0x13,
     (byteAddr >>> 24) & 0xff,
     (byteAddr >>> 16) & 0xff,
     (byteAddr >>> 8) & 0xff,
@@ -92,7 +92,7 @@ async function waitReq1(
 }
 
 /**
- * 50h を IRQ ハンドラ経由で実行する。
+ * 13h を IRQ ハンドラ経由で実行する。
  * @param mock IO モック
  * @param toCpu IO→CPU（ヘッダ）
  * @param fromCpu CPU→IO 待ちバイト数（データ+checksum）
@@ -113,7 +113,7 @@ async function callRead(
   return io;
 }
 
-test("50h は指定バイトをビッグエンディアンで返しチェックサムを付ける", async () => {
+test("13h は指定バイトをビッグエンディアンで返しチェックサムを付ける", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0x1234);
     s.writeWord(WORD_ADDR + 1, 0xabcd);
@@ -129,7 +129,7 @@ test("50h は指定バイトをビッグエンディアンで返しチェック�
   });
 });
 
-test("50h 奇数バイトアドレスから読める", async () => {
+test("13h 奇数バイトアドレスから読める", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0x1234);
     s.writeWord(WORD_ADDR + 1, 0xabcd);
@@ -144,7 +144,7 @@ test("50h 奇数バイトアドレスから読める", async () => {
   });
 });
 
-test("50h バイト数 0 はデータなしで完了する", async () => {
+test("13h バイト数 0 はデータなしで完了する", async () => {
   await withCase(async (s, mock) => {
     const reply = await callRead(mock, memReadHeader(BYTE_ADDR, 0), 0);
     expect(reply.length).toBe(0);

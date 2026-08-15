@@ -1,5 +1,5 @@
 /**
- * 16進キー相当のメモリ R/W は DMA ではなくハンドシェイク 50h/51h。
+ * 16進キー相当のメモリ R/W は DMA ではなくハンドシェイク 13h/14h。
  * 根拠: ioboard.mdc / HandShake.mdc / boot_monitor.mdc
  */
 
@@ -72,7 +72,7 @@ async function waitHalted(timeoutMs = 8000): Promise<void> {
   }
 }
 
-describe("16進キー相当: ハンドシェイク 50h/51h（DMA ではない）", () => {
+describe("16進キー相当: ハンドシェイク 13h/14h（DMA ではない）", () => {
   let channel: MessageChannel;
   let client: BoardLinkClient;
   let agent: CpuHandshakeAgent;
@@ -117,7 +117,7 @@ describe("16進キー相当: ハンドシェイク 50h/51h（DMA ではない）
     stopPump = () => clearInterval(t);
   }
 
-  it("RD 相当: 50h で 1 ワード読み、DMA read は使わない", async () => {
+  it("RD 相当: 13h で 1 ワード読み、DMA read は使わない", async () => {
     const hexPath = loadMonitorOrSkip();
     if (!hexPath) return;
 
@@ -138,7 +138,7 @@ describe("16進キー相当: ハンドシェイク 50h/51h（DMA ではない）
     );
   }, 20_000);
 
-  it("WINC 相当: 51h で 1 ワード書いて 50h で読める", async () => {
+  it("WINC 相当: 14h で 1 ワード書いて 13h で読める", async () => {
     const hexPath = loadMonitorOrSkip();
     if (!hexPath) return;
 

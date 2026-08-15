@@ -1,5 +1,5 @@
 /**
- * g_bios_hex_key_get（CPU→IO コマンド 11h）
+ * g_bios_hex_key_get（CPU→IO コマンド 14h）
  * 根拠: HandShake.mdc「16進キー入力取得」/ boot_monitor.mdc / test_framework.mdc
  */
 import {

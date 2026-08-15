@@ -3,7 +3,7 @@
  *
  * 本番の RAM 書き込みは CPU ボードの `CpuDmaTarget`（書き込み専用）。
  * 本クラスは同一プロセス試験用のバス波形＋書き込みアダプタ。
- * IO→CPU DMA の読み込みは仕様上禁止（read API なし。読みはハンドシェイク 50h）。
+ * IO→CPU DMA の読み込みは仕様上禁止（read API なし。読みはハンドシェイク 13h）。
  *
  * HALT / RUN は CPU の setPins({ HLT }) / getPins().RUN に配線する。
  */

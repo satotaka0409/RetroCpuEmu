@@ -1,5 +1,5 @@
 ; handshake_write_memory.asm
-; メモリ書き込み（ハンドシェイク 51h、IO→CPU）
+; メモリ書き込み（ハンドシェイク 14h、IO→CPU）
 ; 根拠: HandShake.mdc「メモリ書き込み」/ boot_monitor.mdc
 ;
 ; コマンド 1B は IRQ ディスパッチ済み。残りヘッダ 8B:
@@ -37,7 +37,7 @@ HSHK_WM_TSR0		.equ	7
 HSHK_WM_BUF		.equ	8
 
 ; -------------------------------------------------------
-; メモリ書き込み（51h ペイロード）
+; メモリ書き込み（14h ペイロード）
 ; @note コマンドバイトは呼び出し前に受信済み
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1, R2

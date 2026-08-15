@@ -1,10 +1,10 @@
 ; handshake_address_break.asm
-; アドレスブレイク設定・解除（ハンドシェイク 40h / 41h、IO→CPU）
+; アドレスブレイク設定・解除（ハンドシェイク 10h / 11h、IO→CPU）
 ; 根拠: HandShake.mdc「アドレスブレイク設定」「メモリ/IOブレイク解除」
 ;
 ; コマンド 1B は IRQ ディスパッチ済み。
-; 40h 残り 9B: slot, flags, count, addr32 BE, data16 BE → 送信 1B status
-; 41h 残り 1B: slot → 送信 1B status
+; 10h 残り 9B: slot, flags, count, addr32 BE, data16 BE → 送信 1B status
+; 11h 残り 1B: slot → 送信 1B status
 ; スロット 0–7。番号不正は設定を変えず NG。
 ; 比較器設定は _WORK の GL_HSHK_ADDR_BREAK に保持する（CPLD IO は未マップ）。
 ; g_* は BALD / RET。表ポインタは R4 に保持。
@@ -22,7 +22,7 @@
 	.global g_hshk_send_byte
 
 ; -------------------------------------------------------
-; アドレスブレイク設定（40h ペイロード）
+; アドレスブレイク設定（10h ペイロード）
 ; @note コマンドバイトは呼び出し前に受信済み
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1, R2
@@ -99,7 +99,7 @@ l_ab_set_done:
 	pop	R3
 	ret
 ; -------------------------------------------------------
-; アドレスブレイク解除（41h ペイロード）
+; アドレスブレイク解除（11h ペイロード）
 ; @note コマンドバイトは呼び出し前に受信済み
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1, R2

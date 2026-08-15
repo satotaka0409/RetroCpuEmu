@@ -4,7 +4,7 @@
  *
  * CPU 側プロトコルはアセンブラ（handshake_common.asm / handshake_read_memory.asm）。
  * - CPU→IO: REQ_0 を受けフレームを IO Worker へ転送し、応答を同じ線へ返す
- * - IO→CPU: 50h/51h を REQ_1 + IRQ2 でモニタへ渡し、線上でデータ交換する
+ * - IO→CPU: 13h/14h を REQ_1 + IRQ2 でモニタへ渡し、線上でデータ交換する
  * Worker 間で GPIO を共有できないための橋。
  */
 
@@ -47,7 +47,7 @@ export class CpuHandshakeAgent {
   private serving = false;
   private servePromise: Promise<void> | null = null;
   private abortServe = false;
-  /** CPU→IO 受信ループと IO→CPU（50h/51h）を直列化する */
+  /** CPU→IO 受信ループと IO→CPU（13h/14h）を直列化する */
   private busLock: Promise<void> = Promise.resolve();
 
   /**
@@ -90,7 +90,7 @@ export class CpuHandshakeAgent {
   }
 
   /**
-   * IO→CPU メモリ読み出し（50h）。DMA ではない。
+   * IO→CPU メモリ読み出し（13h）。DMA ではない。
    * @param byteAddr 読み出し開始バイトアドレス
    * @param byteCount 読み出しバイト数
    * @returns 読み出したバイト列
@@ -100,7 +100,7 @@ export class CpuHandshakeAgent {
   }
 
   /**
-   * IO→CPU メモリ書き込み（51h）。DMA ではない。
+   * IO→CPU メモリ書き込み（14h）。DMA ではない。
    * @param byteAddr 書き込み開始バイトアドレス
    * @param data 書き込むバイト列
    */
@@ -109,7 +109,7 @@ export class CpuHandshakeAgent {
   }
 
   /**
-   * IO→CPU アドレス／IO ブレイク設定（40h）。
+   * IO→CPU アドレス／IO ブレイク設定（10h）。
    * @param payload コマンド除く 9 バイト
    * @returns CPU が返した status（OK/NG）
    */
@@ -118,7 +118,7 @@ export class CpuHandshakeAgent {
   }
 
   /**
-   * IO→CPU アドレス／IO ブレイク解除（41h）。
+   * IO→CPU アドレス／IO ブレイク解除（11h）。
    * @param slot ブレイク設定番号（0–7）
    * @returns CPU が返した status（OK/NG）
    */

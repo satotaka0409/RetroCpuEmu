@@ -1,5 +1,5 @@
 /**
- * IO ボード 64bit 時刻タイマー（ハンドシェイク 16h）単体試験
+ * IO ボード 64bit 時刻タイマー（ハンドシェイク 11h）単体試験
  */
 
 import { describe, it, expect } from "vitest";

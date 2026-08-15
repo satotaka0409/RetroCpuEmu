@@ -2,8 +2,8 @@
  * IO↔CPU ボードリンク（MessagePort）
  *
  * - DMA は **書き込みのみ**（`dma:writeBytes` / `dma:writeWords`。読み込み不可）
- * - メモリ読みはハンドシェイク 50h（`hshk`）。DMA で読まない（16進キー RD/INC/DEC）
- * - メモリ書き・実行指示（51h / 49h、キーボードコンソール WINC / RUN）
+ * - メモリ読みはハンドシェイク 13h（`hshk`）。DMA で読まない（16進キー RD/INC/DEC）
+ * - メモリ書き・実行指示（14h / 12h、キーボードコンソール WINC / RUN）
  * - HALT / RESET 制御
  *
  * 実機では GPIO ハンドシェイク／DMA ピン。エミュではコマンド番号を保った RPC。
@@ -91,7 +91,7 @@ export type BoardLinkResponse = {
 };
 
 /**
- * CPU→IO コマンド（10h〜16h）のフレーム転送要求。
+ * CPU→IO コマンド（10h〜1Bh）のフレーム転送要求。
  *
  * 実機では 1階ボードが線を直接読む。エミュでは CPU ボード Worker が
  * ビットレベルのハンドシェイクでフレームを組み立て、これで IO ボード Worker へ渡す。

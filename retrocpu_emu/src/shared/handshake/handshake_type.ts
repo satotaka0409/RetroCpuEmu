@@ -28,9 +28,9 @@ export function createHandshakeBus(): CpuIoSignals {
 // ─────────────────────────────────────────────
 
 export const INT_CAUSE_CODE = {
-  /** タイマー0（ハンドシェイク 15h のタイマー番号 0） */
+  /** タイマー0（ハンドシェイク 12h のタイマー番号 0） */
   TIMER0: 0,
-  /** タイマー1（ハンドシェイク 15h のタイマー番号 1） */
+  /** タイマー1（ハンドシェイク 12h のタイマー番号 1） */
   TIMER1: 1,
   /** ハンドシェイクによる割り込み */
   HANDSHAKE: 2,
@@ -56,54 +56,58 @@ export function intCauseForTimer(timerNo: number): 0 | 1 {
 // コマンド定数
 // ─────────────────────────────────────────────
 
-/** CPU -> I/O 方向コマンド */
+/** CPU -> I/O 方向コマンド（HandShake.mdc 概要表の順） */
 export const CMD_CPU_TO_IO = {
   /** モニターモード/フリーモード設定 */
   MODE_SET: 0x10,
-  /** 16進キー入力状態を取得（フリーモード時） */
-  HEX_KEY_GET: 0x11,
-  /** PCのキー入力を中継してキー入力状態を取得 */
-  PC_KEY_GET: 0x12,
-  /** LED表示を指示（フリーモード／ユーザープログラム用。モニタは使わない） */
-  LED_DISPLAY: 0x13,
-  /** BEEP音を鳴らす */
-  BEEP: 0x14,
-  /** タイマー割り込み設定 */
-  TIMER_SET: 0x15,
   /** 時刻取得（64bit タイマー、上位バイト先） */
-  TIME_GET: 0x16,
+  TIME_GET: 0x11,
+  /** タイマー割り込み設定 */
+  TIMER_SET: 0x12,
   /** 未定義命令LED 点灯/消灯（Bit0: 0=消灯 / 1=点灯） */
-  UNDEF_LED: 0x17,
-  /** ブレイク通知（比較器ヒットで CPU が停止するとき） */
-  BREAK_NOTIFY: 0x18,
+  UNDEF_LED: 0x13,
+  /** 16進キー入力状態を取得（フリーモード時） */
+  HEX_KEY_GET: 0x14,
+  /** PCのキー入力を中継してキー入力状態を取得 */
+  PC_KEY_GET: 0x15,
+  /** LED表示を指示（フリーモード／ユーザープログラム用。モニタは使わない） */
+  LED_DISPLAY: 0x16,
   /** LCD1602 制御（Clear/Home/DisplayCtrl/SetCursor）。モード不問 */
-  LCD_CTRL: 0x19,
+  LCD_CTRL: 0x17,
   /** LCD1602 文字列表示。モード不問 */
-  LCD_TEXT: 0x1a,
+  LCD_TEXT: 0x18,
+  /** BEEP音を鳴らす */
+  BEEP: 0x19,
+  /** ブレイク通知（比較器ヒットで CPU が停止するとき） */
+  BREAK_NOTIFY: 0x1a,
+  /** ステップ通知（1 命令実行後の状態。比較器ヒットの 1Ah とは別） */
+  STEP_NOTIFY: 0x1b,
 } as const;
 
-/** I/O -> CPU 方向コマンド */
+/** I/O -> CPU 方向コマンド（HandShake.mdc 概要表の順。番号は CPU→IO と独立） */
 export const CMD_IO_TO_CPU = {
-  /** メモリ/IOブレイクを設定する */
-  BREAK_MEM_IO_SET: 0x40,
-  /** メモリ/IOブレイクを解除する */
-  BREAK_MEM_IO_CLR: 0x41,
-  /** 命令ブレイクを設定する */
-  BREAK_INST_SET: 0x42,
-  /** 命令ブレイクを解除する */
-  BREAK_INST_CLR: 0x43,
-  /** CPUレジスタなどの状態を取得する */
-  CPU_STATUS_GET: 0x48,
+  /** 比較器ブレイク設定（命令／メモリ／IO、スロット 0–7） */
+  BREAK_MEM_IO_SET: 0x10,
+  /** 比較器ブレイク解除（スロット 0–7） */
+  BREAK_MEM_IO_CLR: 0x11,
   /** アドレスを渡してプログラムを実行する */
-  EXEC: 0x49,
+  EXEC: 0x12,
   /** アドレスとバイト数を渡してメモリを読み込む */
-  MEM_READ: 0x50,
+  MEM_READ: 0x13,
   /** アドレスとバイト数、データを渡してメモリを書き込む */
-  MEM_WRITE: 0x51,
+  MEM_WRITE: 0x14,
   /** アドレスとバイト数を渡してIOを読み込む */
-  IO_READ: 0x52,
+  IO_READ: 0x15,
   /** アドレスとバイト数、データを渡してIOを書き込む */
-  IO_WRITE: 0x53,
+  IO_WRITE: 0x16,
+  /** 履歴設定スロットの履歴を取得する */
+  BREAK_HIST_GET: 0x17,
+  /** ブレイクから復帰して実行する（0=通常 / 1=ステップ） */
+  BREAK_RESUME: 0x18,
+  /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */
+  BREAK_INST_SET: 0x42,
+  /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */
+  BREAK_INST_CLR: 0x43,
 } as const;
 
 /** 応答コード */
@@ -127,13 +131,13 @@ export const MODE = {
 /** アドレス／IO ブレイクスロット数（番号 0–7。比較器 8 本すべてユーザ） */
 export const ADDR_BREAK_SLOT_COUNT = 8;
 
-/** 40h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
+/** 10h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
 export const ADDR_BREAK_SET_PAYLOAD_LEN = 9;
 
-/** 40h の線上／TCP 全長（コマンド含む） */
+/** 10h の線上／TCP 全長（コマンド含む） */
 export const ADDR_BREAK_SET_FRAME_LEN = 1 + ADDR_BREAK_SET_PAYLOAD_LEN;
 
-/** 41h の線上／TCP 全長（コマンド＋スロット） */
+/** 11h の線上／TCP 全長（コマンド＋スロット） */
 export const ADDR_BREAK_CLR_FRAME_LEN = 2;
 
 /** ブレイク対象 */
@@ -161,10 +165,10 @@ export const BREAK_CONDITION = {
 // チェックサム・ブロック分割ユーティリティ
 // ─────────────────────────────────────────────
 
-/** メモリ R/W（50h/51h）のブロック長（HandShake.mdc。端数はパディングしない） */
+/** メモリ R/W（13h/14h）のブロック長（HandShake.mdc。端数はパディングしない） */
 export const HSHK_MEM_BLOCK = 256;
 
-/** 50h/51h チェックサム不一致時の同一ブロック再送回数上限 */
+/** 13h/14h チェックサム不一致時の同一ブロック再送回数上限 */
 export const HSHK_MEM_RETRY_MAX = 10;
 
 /**

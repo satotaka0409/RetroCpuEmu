@@ -2,9 +2,9 @@
  * CPU 側ボードリンク処理
  *
  * - DMA（`dma:write*`）: IO→CPU RAM **書き込み専用**。read は拒否（ioboard.mdc）
- * - ハンドシェイク（`hshk` 50h/51h）: パネル RD/INC/DEC/WINC。線上プロトコルで
+ * - ハンドシェイク（`hshk` 13h/14h）: パネル RD/INC/DEC/WINC。線上プロトコルで
  *   ブートモニタの `gl_hshk_read_memory` / `gl_hshk_write_memory` が RAM を触る
- * - 49h EXEC: モニタ未実装のため IC 設定＋ startRun（スタブ）
+ * - 12h EXEC: モニタ未実装のため IC 設定＋ startRun（スタブ）
  */
 
 import type { MessagePort } from "node:worker_threads";
@@ -54,7 +54,7 @@ const _framePending = new Map<number, FramePending>();
  * IO ボードからのリンク要求を受け付けるようポートを開く。
  * @param port IO Worker と対になる MessagePort
  * @param dma DMA 書き込み先（CPU 側 RAM。読み込み API なし）
- * @param hshk 50h/51h を線上ハンドシェイクで処理するエージェント（省略時は 50h/51h NG）
+ * @param hshk 13h/14h を線上ハンドシェイクで処理するエージェント（省略時は 13h/14h NG）
  */
 export function attachCpuBoardLink(
   port: MessagePort,
@@ -162,7 +162,7 @@ async function handle(
         type: "link:result",
         id,
         ok: false,
-        error: "DMA is write-only (ioboard.mdc); use handshake 50h to read",
+        error: "DMA is write-only (ioboard.mdc); use handshake 13h to read",
       });
       return;
     }
@@ -255,7 +255,7 @@ function deliverInterrupt(level: 0 | 1 | 2, cause: number, attempt = 0): void {
 
 /**
  * ハンドシェイクコマンド（MEM_READ / MEM_WRITE / EXEC）を処理する。
- * 50h/51h は DMA ではなく線上ハンドシェイク（ブートモニタ IRQ）。
+ * 13h/14h は DMA ではなく線上ハンドシェイク（ブートモニタ IRQ）。
  * @param msg hshk 種別のリクエスト
  * @param port 応答を返すポート
  */
@@ -272,7 +272,7 @@ async function handleHshk(
         type: "link:result",
         id,
         ok: false,
-        error: "handshake agent not attached; cannot MEM_READ via 50h",
+        error: "handshake agent not attached; cannot MEM_READ via 13h",
       });
       return;
     }
@@ -301,7 +301,7 @@ async function handleHshk(
         type: "link:result",
         id,
         ok: false,
-        error: "handshake agent not attached; cannot MEM_WRITE via 51h",
+        error: "handshake agent not attached; cannot MEM_WRITE via 14h",
       });
       return;
     }
@@ -327,7 +327,7 @@ async function handleHshk(
         type: "link:result",
         id,
         ok: false,
-        error: "handshake agent not attached; cannot 40h",
+        error: "handshake agent not attached; cannot 10h",
       });
       return;
     }
@@ -351,7 +351,7 @@ async function handleHshk(
         type: "link:result",
         id,
         ok: false,
-        error: "handshake agent not attached; cannot 41h",
+        error: "handshake agent not attached; cannot 11h",
       });
       return;
     }

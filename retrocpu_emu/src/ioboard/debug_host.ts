@@ -1,7 +1,7 @@
 /**
  * IO ボード側のデバッグ TCP サーバ（PC＝クライアントがつなぐ）。
  * 根拠: retrocpu_debug.mdc（バイナリ、コマンド番号はハンドシェイクと同じ）。
- * 当面はアドレス／IO ブレイク設定（40h）と解除（41h）のみ。
+ * 当面はアドレス／IO ブレイク設定（10h）と解除（11h）のみ。
  */
 
 import net from "node:net";
@@ -21,16 +21,16 @@ export const DEBUG_TCP_PORT = 29000;
 /** 待ち受けアドレス。WSL 上のエミュへホスト PC からつなぐため全インタフェース */
 export const DEBUG_TCP_HOST = "0.0.0.0";
 
-/** CPU への 40h/41h 中継（ハンドシェイク結果を待って status を返す） */
+/** CPU への 10h/11h 中継（ハンドシェイク結果を待って status を返す） */
 export type DebugHostHandlers = {
   /**
-   * アドレス／IO ブレイク設定（40h）を CPU へ中継する。
+   * アドレス／IO ブレイク設定（10h）を CPU へ中継する。
    * @param payload コマンド除く 9 バイト
    * @returns OK=0 / NG=1
    */
   addrBreakSet: (payload: Uint8Array) => Promise<number>;
   /**
-   * アドレス／IO ブレイク解除（41h）を CPU へ中継する。
+   * アドレス／IO ブレイク解除（11h）を CPU へ中継する。
    * @param slot 設定番号 0–7
    * @returns OK=0 / NG=1
    */
@@ -46,7 +46,7 @@ export type DebugHostOptions = {
 };
 
 /**
- * PC（Cursor 拡張）からのバイナリ接続を受け、40h/41h を CPU ハンドシェイクへ中継する。
+ * PC（Cursor 拡張）からのバイナリ接続を受け、10h/11h を CPU ハンドシェイクへ中継する。
  */
 export class DebugHost {
   private readonly handlers: DebugHostHandlers;
@@ -170,7 +170,7 @@ export class DebugHost {
       if (!isAddrBreakSlot(set.slot)) return RESPONSE_CODE.NG;
       const payload = addrBreakSetPayload(frame);
       if (!payload) return RESPONSE_CODE.NG;
-      getLogger("io").info("デバッグ 40h アドレスブレイク設定", {
+      getLogger("io").info("デバッグ 10h アドレスブレイク設定", {
         slot: set.slot,
         flags: set.flags,
         count: set.count,
@@ -181,7 +181,7 @@ export class DebugHost {
     const slot = parseAddrBreakClrSlot(frame);
     if (slot !== null) {
       if (!isAddrBreakSlot(slot)) return RESPONSE_CODE.NG;
-      getLogger("io").info("デバッグ 41h アドレスブレイク解除", { slot });
+      getLogger("io").info("デバッグ 11h アドレスブレイク解除", { slot });
       return (await this.handlers.addrBreakClr(slot)) & 0xff;
     }
     return RESPONSE_CODE.NG;

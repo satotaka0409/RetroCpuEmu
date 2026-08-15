@@ -1,5 +1,5 @@
 /**
- * g_bios_undef_led（CPU→IO コマンド 17h）
+ * g_bios_undef_led（CPU→IO コマンド 13h）
  * 根拠: HandShake.mdc「未定義命令LED」/ boot_monitor.mdc / test_framework.mdc
  */
 import {

@@ -1,5 +1,5 @@
 /**
- * g_hshk_addr_break_set / clr（IO→CPU コマンド 40h / 41h）
+ * g_hshk_addr_break_set / clr（IO→CPU コマンド 10h / 11h）
  * 根拠: HandShake.mdc「アドレスブレイク設定」「メモリ/IOブレイク解除」
  */
 import {
@@ -93,7 +93,7 @@ async function callHandler(
 }
 
 /**
- * 40h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
+ * 10h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
  * @param slot 設定番号 0–7（範囲外もテスト用にそのまま載せる）
  * @param flags Bit0 MEM/IO, Bit1 RD/WR, Bit2–4 条件, Bit5 履歴
  * @param count ブレイクまでのカウント
@@ -111,7 +111,7 @@ function breakSetFrame(
   const a = addr >>> 0;
   const d = data & 0xffff;
   return Uint8Array.from([
-    0x40,
+    0x10,
     slot & 0xff,
     flags & 0xff,
     count & 0xff,
@@ -143,7 +143,7 @@ test("g_main 後、8 スロットはすべて 0", async () => {
   });
 });
 
-test("40h はスロット 0 に flags/count/addr/data を書き OK を返す", async () => {
+test("10h はスロット 0 に flags/count/addr/data を書き OK を返す", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
@@ -164,7 +164,7 @@ test("40h はスロット 0 に flags/count/addr/data を書き OK を返す", a
   });
 });
 
-test("40h はスロット 7 にも設定できる", async () => {
+test("10h はスロット 7 にも設定できる", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
@@ -176,7 +176,7 @@ test("40h はスロット 7 にも設定できる", async () => {
   });
 });
 
-test("40h スロット 8 は NG で表を変えない", async () => {
+test("10h スロット 8 は NG で表を変えない", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
@@ -189,7 +189,7 @@ test("40h スロット 8 は NG で表を変えない", async () => {
   });
 });
 
-test("41h は指定スロットをクリアして OK を返す", async () => {
+test("11h は指定スロットをクリアして OK を返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -201,27 +201,27 @@ test("41h は指定スロットをクリアして OK を返す", async () => {
       breakSetFrame(1, 0x00, 1, 0x00001800, 0x5555),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x41, 0x00]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x11, 0x00]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
     expect(readSlot(s, 0)).toEqual([0, 0, 0, 0, 0, 0]);
     expect(readSlot(s, 1)).toEqual([1, 0x00, 1, 0x0000, 0x1800, 0x5555]);
   });
 });
 
-test("41h スロット 8 は NG", async () => {
+test("11h スロット 8 は NG", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       breakSetFrame(0, FLAGS_WRITE_HIST, HIT_COUNT, BREAK_ADDR, BREAK_DATA),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x41, 0x08]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x11, 0x08]), 1);
     expect(Array.from(reply)).toEqual([0x01]);
     expect(readSlot(s, 0)[0]).toBe(1);
   });
 });
 
-test("R3/R4 は 40h/41h の前後で保たれる", async () => {
+test("R3/R4 は 10h/11h の前後で保たれる", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -229,7 +229,7 @@ test("R3/R4 は 40h/41h の前後で保たれる", async () => {
       1,
     );
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    await callHandler(mock, Uint8Array.from([0x41, 0x02]), 1);
+    await callHandler(mock, Uint8Array.from([0x11, 0x02]), 1);
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
   });
 });

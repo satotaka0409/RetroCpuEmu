@@ -92,7 +92,7 @@ describe("IoBoardHandshakeMock", () => {
     expect(ok[8]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("時刻取得(0x16)は timeSource があればそのティックを返す", () => {
+  it("時刻取得(0x11)は timeSource があればそのティックを返す", () => {
     let now = 0n;
     const clock = new IoTimeCounter({ nowNs: () => now });
     clock.reset();
@@ -105,7 +105,7 @@ describe("IoBoardHandshakeMock", () => {
     expect(resp[8]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("未定義命令LED(0x17)で state.undefLed を更新する", () => {
+  it("未定義命令LED(0x13)で state.undefLed を更新する", () => {
     expect(mock.state.undefLed).toBe(false);
     const on = dispatcher.dispatch(
       new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 1]),

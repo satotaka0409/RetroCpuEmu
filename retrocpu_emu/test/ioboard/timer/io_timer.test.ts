@@ -1,5 +1,5 @@
 /**
- * IO ボードタイマー（ハンドシェイク 15h の実体）単体試験
+ * IO ボードタイマー（ハンドシェイク 12h の実体）単体試験
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -54,7 +54,7 @@ describe("IoTimer", () => {
     expect(timer.getState().fired).toBe(3);
   });
 
-  it("周期 0 を設定すると停止する（15h の停止指定）", () => {
+  it("周期 0 を設定すると停止する（12h の停止指定）", () => {
     const onExpire = vi.fn();
     const timer = new IoTimer({ onExpire });
     timer.configure({ periodMs: 10, count: 0 });
