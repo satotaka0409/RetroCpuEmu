@@ -727,7 +727,7 @@ X:	.blkw	1
       assemble(
         `
 	.area	_WORK
-	.org	>8300
+	.org	0x8300
 A:	.blkw	1
 B:	.ds	2
 `,
@@ -1001,7 +1001,7 @@ START:  H
     const r = assemble(
       `
 	.area	_WORK
-	.org	>8300
+	.org	0x8300
 A:	.blkw	1
 B:	.ds	2
 `,

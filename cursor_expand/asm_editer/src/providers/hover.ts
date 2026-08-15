@@ -4,11 +4,12 @@ import {
   pickDeclarationDoc,
 } from "../comments/jsdoc";
 import { detectArchitecture } from "../cpu/registry";
+import { TMS9995_INSN_HELP } from "../cpu/tms9995/insnHelp";
 import type { SymbolIndex } from "../symbols/index";
-import { extractLabelRefs } from "../symbols/index";
+import { extractLabelRefs, parseAsmLine } from "../symbols/index";
 
 /**
- * ホバー: .equ の値、グローバルラベルの宣言コメント（JSDoc なら強調）、呼び出し規約。
+ * ホバー: .equ の値、TMS9995 命令説明、グローバルラベルの宣言コメント（JSDoc なら強調）、呼び出し規約。
  * @param index - シンボル索引
  * @return HoverProvider
  */
@@ -59,6 +60,34 @@ export function createCallHoverProvider(
 
       const arch = detectArchitecture(document.fileName, document.getText());
       const line = document.lineAt(position.line);
+      const parsed = parseAsmLine(line.text, arch);
+      if (
+        arch.id === "tms9995" &&
+        parsed.kind === "instruction" &&
+        parsed.mnemonic === name &&
+        parsed.mnemonicStart !== undefined &&
+        parsed.mnemonicEnd !== undefined &&
+        position.character >= parsed.mnemonicStart &&
+        position.character < parsed.mnemonicEnd
+      ) {
+        const help = TMS9995_INSN_HELP[name];
+        if (help) {
+          const md = new vscode.MarkdownString(
+            [`### \`${name}\``, "", help, "", "_構文は sdas（`#n` / `(Rn)` / `(Rn)+`）_"].join(
+              "\n",
+            ),
+          );
+          return new vscode.Hover(
+            md,
+            new vscode.Range(
+              position.line,
+              parsed.mnemonicStart,
+              position.line,
+              parsed.mnemonicEnd,
+            ),
+          );
+        }
+      }
       const { mnemonic, refs } = extractLabelRefs(line.text, arch);
       const onCall =
         !!mnemonic &&

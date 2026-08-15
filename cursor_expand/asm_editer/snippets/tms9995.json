@@ -1,0 +1,64 @@
+{
+  "TMS9995 program skeleton": {
+    "prefix": "tmsprog",
+    "body": [
+      "        .cpu    tms9995",
+      "        .org    ${1:0x1000}",
+      "",
+      "${2:START}:",
+      "        LI      R1, #${3:0}",
+      "        ${0}",
+      "        B       START",
+      ""
+    ],
+    "description": "TMS9995 プログラム骨格（sdas 構文）"
+  },
+  "TMS9995 subroutine": {
+    "prefix": "tmssub",
+    "body": [
+      ";; @brief ${1:description}",
+      ";; @param R1 ${2:first argument}",
+      ";; @param R2 ${3:second argument}",
+      ";; @return R1 ${4:result}",
+      "${5:SUB}:",
+      "        ${0:; body}",
+      "        RT"
+    ],
+    "description": "TMS9995 サブルーチン（BL / RT。戻りは R11）"
+  },
+  "TMS9995 LI": {
+    "prefix": "li",
+    "body": [
+      "LI      ${1:R1}, #${2:0}"
+    ],
+    "description": "TMS9995 LI（即値は # 必須）"
+  },
+  "TMS9995 BL": {
+    "prefix": "bl",
+    "body": [
+      "BL      ${1:SUB}"
+    ],
+    "description": "TMS9995 BL（戻りアドレスは R11）"
+  },
+  "TMS9995 RT": {
+    "prefix": "rt",
+    "body": [
+      "RT"
+    ],
+    "description": "TMS9995 RT（B (R11)）"
+  },
+  "TMS9995 MOV": {
+    "prefix": "mov",
+    "body": [
+      "MOV     ${1:R1}, ${2:R2}"
+    ],
+    "description": "TMS9995 MOV"
+  },
+  "TMS9995 JMP": {
+    "prefix": "jmp",
+    "body": [
+      "JMP     ${1:LABEL}"
+    ],
+    "description": "TMS9995 相対ジャンプ"
+  }
+}

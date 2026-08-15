@@ -1,8 +1,9 @@
 /**
- * TMS9995 命令エンコーダ（第1弾）。
- * 根拠: .cursor/rules/TMS9995_instruction.mdc
+ * TMS9995 命令エンコーダ。
+ * 根拠: .cursor/rules/TMS9995_instruction.mdc / asm_rules.mdc
  *
  * アドレスはバイト単位。命令語は 1〜3 ワード。
+ * 構文は sdas 風（TI の `*R` / `@addr` / `>xxxx` は使わない）。
  */
 
 import { evalExpr } from "./expression";
@@ -10,7 +11,7 @@ import type { ParsedLine, SymbolTable } from "./types";
 
 /** 汎用アドレス（Ts/Td） */
 export interface TmsGeneralAddr {
-  /** 00=reg 01=*R 10=@ / @() 11=*R+ */
+  /** 00=reg 01=(R) 10=symbolic/indexed 11=(R)+ */
   mode: number;
   reg: number;
   /** シンボリック / インデックス時の追加ワード */
@@ -18,33 +19,75 @@ export interface TmsGeneralAddr {
 }
 
 /**
- * TI 風 `>xxxx` を `0xxxxx` に正規化する。
- * @param expr - 式
- * @return 正規化後
- */
-function normalizeTmsExpr(expr: string): string {
-  return expr.replace(/>\s*([0-9A-Fa-f]+)\b/g, "0x$1");
-}
-
-/**
- * 式を評価する（`>` 16進対応）。
- * @param expr - 式
- * @param symbols - シンボル
- * @param allowUndefined - 未定義許可
- * @return 値
+ * 式を評価して 16bit にする。
+ * @param expr 式（sdas 数値。即値の `#` は含まない）
+ * @param symbols シンボル
+ * @param allowUndefined 未定義許可
+ * @returns 16bit 値
  */
 function evalTms(
   expr: string,
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  return evalExpr(normalizeTmsExpr(expr), symbols, allowUndefined) & 0xffff;
+  return evalExpr(expr, symbols, allowUndefined) & 0xffff;
+}
+
+/**
+ * sdas 即値 `#n` を取る。
+ * @param raw オペランド
+ * @param symbols シンボル
+ * @param allowUndefined 未定義許可
+ * @param lineNo 行番号
+ * @returns 16bit 即値
+ */
+function requireImm(
+  raw: string,
+  symbols: SymbolTable,
+  allowUndefined: boolean,
+  lineNo: number,
+): number {
+  const s = raw.trim();
+  if (!s.startsWith("#")) {
+    throw new Error(
+      `Line ${lineNo}: immediate requires '#' (sdas; got '${raw}')`,
+    );
+  }
+  return evalTms(s.slice(1).trim(), symbols, allowUndefined);
+}
+
+/**
+ * sdas 即値 `#n` を範囲付きで取る。
+ * @param raw オペランド
+ * @param lo 下限（含む）
+ * @param hi 上限（含む）
+ * @param symbols シンボル
+ * @param allowUndefined 未定義許可
+ * @param lineNo 行番号
+ * @param what エラー用の名前
+ * @returns 評価値
+ */
+function requireImmRange(
+  raw: string,
+  lo: number,
+  hi: number,
+  symbols: SymbolTable,
+  allowUndefined: boolean,
+  lineNo: number,
+  what: string,
+): number {
+  const v = requireImm(raw, symbols, allowUndefined, lineNo);
+  const s = (v << 16) >> 16;
+  if (!allowUndefined && (s < lo || s > hi)) {
+    throw new Error(`Line ${lineNo}: ${what} ${s} out of range (${lo}..${hi})`);
+  }
+  return allowUndefined ? 0 : s;
 }
 
 /**
  * ワークスペースレジスタ名を番号にする。
- * @param tok - トークン
- * @return 0–15。失敗時 undefined
+ * @param tok トークン
+ * @returns 0–15。失敗時 undefined
  */
 function parseReg(tok: string): number | undefined {
   const m = tok.trim().match(/^R([0-9]|1[0-5])$/i);
@@ -69,13 +112,24 @@ export function parseGeneralAddr(
   const s = raw.trim();
   if (!s) throw new Error(`Line ${lineNo}: empty addressing operand`);
 
-  // *Rn+
-  let m = s.match(/^\*\s*(R(?:[0-9]|1[0-5]))\s*\+$/i);
+  if (s.startsWith("#")) {
+    throw new Error(
+      `Line ${lineNo}: '#' is immediate-only (use LI/AI/…; got '${raw}')`,
+    );
+  }
+  if (s.startsWith("@") || /^\*\s*R(?:[0-9]|1[0-5])/i.test(s)) {
+    throw new Error(
+      `Line ${lineNo}: TI syntax is not used (sdas: (Rn), (Rn)+, label, addr(Rn); got '${raw}')`,
+    );
+  }
+
+  // (Rn)+ / [Rn]+
+  let m = s.match(/^[(\[]\s*(R(?:[0-9]|1[0-5]))\s*[)\]]\s*\+$/i);
   if (m) {
     return { mode: 0b11, reg: parseReg(m[1]!)! };
   }
-  // *Rn
-  m = s.match(/^\*\s*(R(?:[0-9]|1[0-5]))\s*$/i);
+  // (Rn) / [Rn]
+  m = s.match(/^[(\[]\s*(R(?:[0-9]|1[0-5]))\s*[)\]]\s*$/i);
   if (m) {
     return { mode: 0b01, reg: parseReg(m[1]!)! };
   }
@@ -84,32 +138,27 @@ export function parseGeneralAddr(
   if (regOnly !== undefined) {
     return { mode: 0b00, reg: regOnly };
   }
-  // @addr(Rn)
-  m = s.match(/^@\s*(.+)\(\s*(R(?:[0-9]|1[0-5]))\s*\)\s*$/i);
+  // addr(Rn) / addr[Rn]
+  m = s.match(/^(.+)\s*[(\[]\s*(R(?:[0-9]|1[0-5]))\s*[)\]]\s*$/i);
   if (m) {
     const r = parseReg(m[2]!)!;
     if (r === 0) {
       throw new Error(
-        `Line ${lineNo}: indexed addressing cannot use R0 (use @addr)`,
+        `Line ${lineNo}: indexed addressing cannot use R0 (use a label / address)`,
       );
     }
     return {
       mode: 0b10,
       reg: r,
-      extraWord: evalTms(m[1]!, symbols, allowUndefined),
+      extraWord: evalTms(m[1]!.trim(), symbols, allowUndefined),
     };
   }
-  // @addr
-  m = s.match(/^@\s*(.+)\s*$/);
-  if (m) {
-    return {
-      mode: 0b10,
-      reg: 0,
-      extraWord: evalTms(m[1]!, symbols, allowUndefined),
-    };
-  }
-
-  throw new Error(`Line ${lineNo}: invalid TMS9995 address '${raw}'`);
+  // symbolic / 直接
+  return {
+    mode: 0b10,
+    reg: 0,
+    extraWord: evalTms(s, symbols, allowUndefined),
+  };
 }
 
 /**
@@ -177,6 +226,30 @@ const FMT6: Record<string, number> = {
   MPYS: 0x01c0,
 };
 
+const FMT2_CRU: Record<string, number> = {
+  SBO: 0x1d00,
+  SBZ: 0x1e00,
+  TB: 0x1f00,
+};
+
+const FMT3: Record<string, number> = {
+  COC: 0x2000,
+  CZC: 0x2400,
+  XOR: 0x2800,
+};
+
+const FMT4: Record<string, number> = {
+  LDCR: 0x3000,
+  STCR: 0x3400,
+};
+
+const FMT5: Record<string, number> = {
+  SRA: 0x0800,
+  SRL: 0x0900,
+  SLA: 0x0a00,
+  SRC: 0x0b00,
+};
+
 const FMT8_REG_IMM: Record<string, number> = {
   LI: 0x0200,
   AI: 0x0220,
@@ -185,12 +258,23 @@ const FMT8_REG_IMM: Record<string, number> = {
   CI: 0x0280,
 };
 
-/** 第1弾でサポートするニーモニック */
+const FMT9: Record<string, number> = {
+  XOP: 0x2c00,
+  MPY: 0x3800,
+  DIV: 0x3c00,
+};
+
+/** TMS9995 全命令（RT / NOP は別名） */
 export const TMS9995_OPS = new Set<string>([
   ...Object.keys(FMT1),
   ...Object.keys(FMT2_JUMP),
-  ...Object.keys(FMT6).filter((k) => k !== "DIVS" && k !== "MPYS" && k !== "X"),
+  ...Object.keys(FMT2_CRU),
+  ...Object.keys(FMT3),
+  ...Object.keys(FMT4),
+  ...Object.keys(FMT5),
+  ...Object.keys(FMT6),
   ...Object.keys(FMT8_REG_IMM),
+  ...Object.keys(FMT9),
   "LWPI",
   "LIMI",
   "STWP",
@@ -198,9 +282,13 @@ export const TMS9995_OPS = new Set<string>([
   "LST",
   "LWP",
   "RTWP",
-  "RT",
   "IDLE",
   "RSET",
+  "CKON",
+  "CKOF",
+  "LREX",
+  "RT",
+  "NOP",
 ]);
 
 /**
@@ -232,34 +320,40 @@ export function encodeTms9995Instruction(
   const args = line.args.map((a) => a.trim());
   const lineNo = line.lineNo;
 
-  // RT → B *R11
+  // RT → B (R11)
   if (op === "RT") {
     if (args.length !== 0) {
       throw new Error(`Line ${lineNo}: RT takes no operands`);
     }
     return encodeTms9995Instruction(
-      { ...line, op: "B", args: ["*R11"] },
+      { ...line, op: "B", args: ["(R11)"] },
       pcByte,
       symbols,
       allowUndefined,
     );
   }
 
+  // NOP → JMP $+0（次命令への相対 0）
+  if (op === "NOP") {
+    if (args.length !== 0) {
+      throw new Error(`Line ${lineNo}: NOP takes no operands`);
+    }
+    return [0x1000];
+  }
+
   // Format 7 fixed
-  if (op === "RTWP") {
+  const FMT7_FIXED: Record<string, number> = {
+    IDLE: 0x0340,
+    RSET: 0x0360,
+    RTWP: 0x0380,
+    CKON: 0x03a0,
+    CKOF: 0x03c0,
+    LREX: 0x03e0,
+  };
+  if (op in FMT7_FIXED) {
     if (args.length !== 0)
-      throw new Error(`Line ${lineNo}: RTWP takes no operands`);
-    return [0x0380];
-  }
-  if (op === "IDLE") {
-    if (args.length !== 0)
-      throw new Error(`Line ${lineNo}: IDLE takes no operands`);
-    return [0x0340];
-  }
-  if (op === "RSET") {
-    if (args.length !== 0)
-      throw new Error(`Line ${lineNo}: RSET takes no operands`);
-    return [0x0360];
+      throw new Error(`Line ${lineNo}: ${op} takes no operands`);
+    return [FMT7_FIXED[op]!];
   }
 
   // Format 8: LWPI / LIMI (imm only)
@@ -267,7 +361,7 @@ export function encodeTms9995Instruction(
     if (args.length !== 1)
       throw new Error(`Line ${lineNo}: ${op} requires one immediate`);
     const base = op === "LWPI" ? 0x02e0 : 0x0300;
-    return [base, evalTms(args[0]!, symbols, allowUndefined)];
+    return [base, requireImm(args[0]!, symbols, allowUndefined, lineNo)];
   }
 
   // Format 8: STWP / STST / LST / LWP (reg only)
@@ -295,8 +389,24 @@ export function encodeTms9995Instruction(
     const r = parseReg(args[0]!);
     if (r === undefined)
       throw new Error(`Line ${lineNo}: ${op} first operand must be Rn`);
-    const imm = evalTms(args[1]!, symbols, allowUndefined);
+    const imm = requireImm(args[1]!, symbols, allowUndefined, lineNo);
     return [FMT8_REG_IMM[op]! | (r & 0xf), imm];
+  }
+
+  // Format 2: SBO / SBZ / TB（R12 相対の符号付き 8bit。ジャンプではない）
+  if (op in FMT2_CRU) {
+    if (args.length !== 1)
+      throw new Error(`Line ${lineNo}: ${op} requires #disp`);
+    const disp = requireImmRange(
+      args[0]!,
+      -128,
+      127,
+      symbols,
+      allowUndefined,
+      lineNo,
+      `${op} displacement`,
+    );
+    return [FMT2_CRU[op]! | (disp & 0xff)];
   }
 
   // Format 2: jumps
@@ -322,8 +432,85 @@ export function encodeTms9995Instruction(
     return [FMT2_JUMP[op]! | (dispWords & 0xff)];
   }
 
-  // Format 6: single general operand
-  if (op in FMT6 && op !== "DIVS" && op !== "MPYS" && op !== "X") {
+  // Format 5: SRA / SRL / SLA / SRC  Rn, #count（0 は R0 下位 4bit）
+  if (op in FMT5) {
+    if (args.length !== 2)
+      throw new Error(`Line ${lineNo}: ${op} requires Rn, #count`);
+    const r = parseReg(args[0]!);
+    if (r === undefined)
+      throw new Error(`Line ${lineNo}: ${op} first operand must be Rn`);
+    const cnt = requireImmRange(
+      args[1]!,
+      0,
+      15,
+      symbols,
+      allowUndefined,
+      lineNo,
+      `${op} count`,
+    );
+    return [FMT5[op]! | ((cnt & 0xf) << 4) | (r & 0xf)];
+  }
+
+  // Format 3: COC / CZC / XOR  src, Rn
+  if (op in FMT3) {
+    if (args.length !== 2)
+      throw new Error(`Line ${lineNo}: ${op} requires src, Rn`);
+    const r = parseReg(args[1]!);
+    if (r === undefined)
+      throw new Error(`Line ${lineNo}: ${op} second operand must be Rn`);
+    const src = parseGeneralAddr(args[0]!, symbols, allowUndefined, lineNo);
+    const s = packAddr(src);
+    return [FMT3[op]! | ((r & 0xf) << 6) | s.field6, ...s.extras];
+  }
+
+  // Format 4: LDCR / STCR  addr, #bits（0 と 16 は 16bit）
+  if (op in FMT4) {
+    if (args.length !== 2)
+      throw new Error(`Line ${lineNo}: ${op} requires addr, #bits`);
+    const bits = requireImmRange(
+      args[1]!,
+      0,
+      16,
+      symbols,
+      allowUndefined,
+      lineNo,
+      `${op} bit count`,
+    );
+    if (!allowUndefined && bits > 16) {
+      throw new Error(`Line ${lineNo}: ${op} bit count ${bits} out of range`);
+    }
+    const cccc = bits === 16 || bits === 0 ? 0 : bits;
+    const src = parseGeneralAddr(args[0]!, symbols, allowUndefined, lineNo);
+    const s = packAddr(src);
+    return [FMT4[op]! | ((cccc & 0xf) << 6) | s.field6, ...s.extras];
+  }
+
+  // Format 9: XOP src, #n  /  MPY src, Rn  /  DIV src, Rn
+  if (op in FMT9) {
+    if (args.length !== 2)
+      throw new Error(`Line ${lineNo}: ${op} requires two operands`);
+    const src = parseGeneralAddr(args[0]!, symbols, allowUndefined, lineNo);
+    const s = packAddr(src);
+    if (op === "XOP") {
+      const n = requireImmRange(
+        args[1]!,
+        0,
+        15,
+        symbols,
+        allowUndefined,
+        lineNo,
+        "XOP number",
+      );
+      return [FMT9[op]! | ((n & 0xf) << 6) | s.field6, ...s.extras];
+    }
+    const r = parseReg(args[1]!);
+    if (r === undefined)
+      throw new Error(`Line ${lineNo}: ${op} second operand must be Rn`);
+    return [FMT9[op]! | ((r & 0xf) << 6) | s.field6, ...s.extras];
+  }
+
+  // Format 6: single general operand（X / DIVS / MPYS 含む）
+  if (op in FMT6) {
     if (args.length !== 1)
       throw new Error(`Line ${lineNo}: ${op} requires one operand`);
     const a = parseGeneralAddr(args[0]!, symbols, allowUndefined, lineNo);
@@ -350,6 +537,6 @@ export function encodeTms9995Instruction(
   }
 
   throw new Error(
-    `Line ${lineNo}: unsupported TMS9995 opcode '${line.op}' (phase-1 subset)`,
+    `Line ${lineNo}: unknown TMS9995 opcode '${line.op}'`,
   );
 }

@@ -156,7 +156,7 @@ describe("assemble: CPU モード切替", () => {
 
   test("tms9995 で LI をアセンブルできる", () => {
     const opts = parseArgs(["--cpu", "tms9995", "dummy.asm"]);
-    const r = assemble("        .org 0\n        LI R1, >1234\n", opts.cpuType);
+    const r = assemble("        .org 0\n        LI R1, #0x1234\n", opts.cpuType);
     assert.equal(r.addressUnit, "byte");
     assert.deepEqual(
       r.words.map((w) => w.value),

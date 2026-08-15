@@ -76,12 +76,15 @@ Conditional jumps test these flags. **LIMI** loads bits 12–15 only.
 
 Dual-operand instructions encode source and destination modes in 2 bits each.
 
-| Code | Mode | Syntax | Description |
-|------|------|--------|-------------|
-| 00 | Register | `R` | Operand in workspace register |
-| 01 | Indirect | `*R` or `*R+` | Address in register; `*R+` auto-increments (by 1 byte or 2 words depending on instruction) |
-| 10 | Symbolic | `@LABEL` | Address in next program word (indexed with R0=0) |
-| 11 | Indexed | `@LABEL(R)` | Address in next word + register × 2 |
+| Code | Mode | ISA (TI) | retrocpu_asm (sdas) | Description |
+|------|------|----------|---------------------|-------------|
+| 00 | Register | `R` | `Rn` | Operand in workspace register |
+| 01 | Indirect | `*R` | `(Rn)` | Address in register |
+| 11 | Auto-inc | `*R+` | `(Rn)+` | Auto-increments (by 1 byte or 2 words depending on instruction) |
+| 10 | Symbolic | `@LABEL` | `LABEL` / 数値 | Address in next program word (indexed with R0=0) |
+| 10 | Indexed | `@LABEL(R)` | `LABEL(Rn)` | Address in next word + register × 2 |
+
+即値は sdas の `#n`（例: `LI R1, #0x1234`）。SBO/SBZ/TB の変位、シフト回数、LDCR/STCR のビット数、XOP 番号も `#`。`>xxxx` / `@addr` / `*R` はアセンブラでは受け付けない。`RT` は `B (R11)`、`NOP` は `JMP` 相対 0。
 
 > **R0 special role**: In indexed mode, register field `0000` means symbolic/direct addressing (`@addr`), not "indexed with R0".
 

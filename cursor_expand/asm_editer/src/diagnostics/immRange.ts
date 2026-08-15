@@ -86,7 +86,8 @@ export function findImmRangeOverflows(
   arch: CpuArchitecture,
   symbols: Map<string, number> = new Map(),
 ): InvalidRegisterHit[] {
-  if (arch.id !== "mn1610" && arch.id !== "mn1613") return [];
+  const isMn161x = arch.id === "mn1610" || arch.id === "mn1613";
+  if (!isMn161x && arch.id !== "tms9995") return [];
   if (
     parsed.kind !== "instruction" &&
     parsed.kind !== "directive"
@@ -101,7 +102,7 @@ export function findImmRangeOverflows(
   const parts = splitOperands(stripped.slice(mnemonicEnd), mnemonicEnd);
   const hits: InvalidRegisterHit[] = [];
 
-  if (mnemonic === "MVI") {
+  if (isMn161x && mnemonic === "MVI") {
     const tok = parts[1];
     if (!tok) return hits;
     const expr = immExpr(tok.text);
@@ -116,7 +117,7 @@ export function findImmRangeOverflows(
     return hits;
   }
 
-  if (mnemonic === "MVWI") {
+  if (isMn161x && mnemonic === "MVWI") {
     const tok = parts[1];
     if (!tok) return hits;
     const expr = immExpr(tok.text);

@@ -19,13 +19,12 @@ export const TMS9995_CALLING_CONVENTION: CallingConvention = {
     "| BL 戻り | `R11` |",
     "| BLWP 退避 | `R13` WP / `R14` PC / `R15` ST |",
     "",
-    "`BL @label` で呼び出し、`RT`（`B *R11`）または `B *R11` で復帰。",
+    "`BL label` で呼び出し、`RT`（`B (R11)`）または `B (R11)` で復帰。",
   ].join("\n"),
 };
 
-/** retrocpu_asm 第1弾と揃えた命令セット */
+/** retrocpu_asm 全命令（TMS9995_instruction.mdc） */
 const TMS9995_MNEMONICS = [
-  // Format 1
   "SZC",
   "SZCB",
   "S",
@@ -38,7 +37,6 @@ const TMS9995_MNEMONICS = [
   "MOVB",
   "SOC",
   "SOCB",
-  // Format 2
   "JMP",
   "JLT",
   "JLE",
@@ -52,9 +50,24 @@ const TMS9995_MNEMONICS = [
   "JL",
   "JH",
   "JOP",
-  // Format 6
+  "SBO",
+  "SBZ",
+  "TB",
+  "COC",
+  "CZC",
+  "XOR",
+  "XOP",
+  "LDCR",
+  "STCR",
+  "MPY",
+  "DIV",
+  "SRA",
+  "SRL",
+  "SLA",
+  "SRC",
   "BLWP",
   "B",
+  "X",
   "CLR",
   "NEG",
   "INV",
@@ -66,7 +79,8 @@ const TMS9995_MNEMONICS = [
   "SWPB",
   "SETO",
   "ABS",
-  // Format 8 / 7 / 9995+
+  "DIVS",
+  "MPYS",
   "LI",
   "AI",
   "ANDI",
@@ -82,7 +96,105 @@ const TMS9995_MNEMONICS = [
   "RT",
   "IDLE",
   "RSET",
+  "CKON",
+  "CKOF",
+  "LREX",
+  "NOP",
 ] as const;
+
+/** Format 1（src, dst とも汎用アドレス） */
+export const TMS9995_FMT1 = new Set([
+  "SZC",
+  "SZCB",
+  "S",
+  "SB",
+  "C",
+  "CB",
+  "A",
+  "AB",
+  "MOV",
+  "MOVB",
+  "SOC",
+  "SOCB",
+]);
+
+/** Format 2 条件ジャンプ（ラベル／アドレス。相対は次命令基準） */
+export const TMS9995_FMT2_JUMP = new Set([
+  "JMP",
+  "JLT",
+  "JLE",
+  "JEQ",
+  "JHE",
+  "JGT",
+  "JNE",
+  "JNC",
+  "JOC",
+  "JNO",
+  "JL",
+  "JH",
+  "JOP",
+]);
+
+/** Format 2 CRU 1bit（`#disp`、R12 相対） */
+export const TMS9995_FMT2_CRU = new Set(["SBO", "SBZ", "TB"]);
+
+/** Format 3（src, Rn） */
+export const TMS9995_FMT3 = new Set(["COC", "CZC", "XOR"]);
+
+/** Format 4（addr, #bits） */
+export const TMS9995_FMT4 = new Set(["LDCR", "STCR"]);
+
+/** Format 5（Rn, #count） */
+export const TMS9995_FMT5 = new Set(["SRA", "SRL", "SLA", "SRC"]);
+
+/** Format 6（汎用アドレス 1 つ） */
+export const TMS9995_FMT6 = new Set([
+  "BLWP",
+  "B",
+  "X",
+  "CLR",
+  "NEG",
+  "INV",
+  "INC",
+  "INCT",
+  "DEC",
+  "DECT",
+  "BL",
+  "SWPB",
+  "SETO",
+  "ABS",
+  "DIVS",
+  "MPYS",
+]);
+
+/** Format 7（オペランド無し） */
+export const TMS9995_FMT7 = new Set([
+  "IDLE",
+  "RSET",
+  "RTWP",
+  "CKON",
+  "CKOF",
+  "LREX",
+]);
+
+/** Format 8: Rn, #imm */
+export const TMS9995_FMT8_REG_IMM = new Set([
+  "LI",
+  "AI",
+  "ANDI",
+  "ORI",
+  "CI",
+]);
+
+/** Format 8: #imm のみ */
+export const TMS9995_FMT8_IMM = new Set(["LWPI", "LIMI"]);
+
+/** Format 8: Rn のみ */
+export const TMS9995_FMT8_REG = new Set(["STWP", "STST", "LST", "LWP"]);
+
+/** Format 9: XOP src, #n / MPY|DIV src, Rn */
+export const TMS9995_FMT9_XOP = "XOP";
+export const TMS9995_FMT9_MULDIV = new Set(["MPY", "DIV"]);
 
 const TMS9995_DIRECTIVES = [
   ".CPU",
@@ -136,7 +248,7 @@ const TMS9995_REGISTERS = [
   "R15",
 ] as const;
 
-/** TMS9995 アーキテクチャ定義（retrocpu_asm 第1弾相当） */
+/** TMS9995 アーキテクチャ定義（retrocpu_asm 全命令） */
 export const tms9995Architecture: CpuArchitecture = {
   id: "tms9995",
   displayName: "TMS9995",

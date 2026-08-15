@@ -57,6 +57,22 @@ globs: "*.asm", "*.s", "*.inc", "*.h", "*.mn1613", "*.mn1610"
 
 即値は `#n`（例: `MVI R0, #0x55` / `AWI R1, #100`）。
 
+### TMS9995（sdas 風。TI の `*R` / `@addr` / `>xxxx` は使わない）
+
+ラベル・`.org` は**バイトアドレス**。即値は `#`。ジャンプ（JMP 等）の相対は次命令基準（TMS ハードどおり）。
+
+| ハード（TI 資料） | sdas 書式 | 例 |
+| ----------------- | --------- | -- |
+| ワークスペース `R` | `Rn` | `MOV R1, R2` |
+| 間接 `*R` | `(Rn)` | `B (R11)` |
+| オートインクリメント `*R+` | `(Rn)+` | `MOV (R3)+, R0` |
+| シンボリック `@LABEL` | `label` / 数値 | `B START` / `MOV LAB, R0` |
+| インデックス `@TAB(R)` | `addr(Rn)`（R0 不可） | `MOV TAB(R1), R0` |
+| 即値 `>xxxx` | `#n` | `LI R1, #0x1234` / `LWPI #0x8300` |
+
+`[]` は `( )` と同義。`RT` は `B (R11)`。`NOP` は `JMP` 相対 0。
+SBO/SBZ/TB は `#disp`（R12 相対、−128..127）。LDCR/STCR は `addr, #bits`（0 と 16 は 16bit）。シフトは `Rn, #count`（0 は R0 下位 4bit）。XOP は `src, #n`（0–15）。MPY/DIV は `src, Rn`。
+
 ### 16進、10進、2進数の記述は、sdasに準ずるものとする
 
 16進 0xAB 0ABH 0abh $ab
@@ -68,7 +84,7 @@ globs: "*.asm", "*.s", "*.inc", "*.h", "*.mn1613", "*.mn1610"
 
 - 現在の実装対象: [MN1610]
 - 現在の実装対象: [MN1613]
-- 現在の実装対象: [TMS9995]（retrocpu_asm 第1弾: 主要 Format 1/2/6/7/8 + LST/LWP。バイトアドレス・TI 風構文）
+- 現在の実装対象: [TMS9995]（retrocpu_asm: 全命令。バイトアドレス・**sdas 構文**）
 
 ## 呼び出し規約 (Calling Convention)
 

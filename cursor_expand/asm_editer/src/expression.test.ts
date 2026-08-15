@@ -385,7 +385,7 @@ describe("detectArchitecture / preferred CPU", () => {
   });
 
   test("TMS9995 モードでは LI / MOV を命令、AWI を未知にする", () => {
-    const li = parseAsmLine("\tLI\tR1, >1234", tms9995Architecture);
+    const li = parseAsmLine("\tLI\tR1, #0x1234", tms9995Architecture);
     assert.equal(li.kind, "instruction");
     assert.equal(li.mnemonic, "LI");
     const mov = parseAsmLine("\tMOV\tR1, R2", tms9995Architecture);

@@ -27,13 +27,13 @@ alwaysApply: true
 
 ## Retro CPU アセンブラ
 
-retrocpu_asm は、MN1610 / MN1613 / TMS9995（第1弾）用のアセンブラです。
+retrocpu_asm は、MN1610 / MN1613 / TMS9995 用のアセンブラです。
 各 `.asm` の先頭（コメントを除く）に `.cpu` を置く。指定できるのは **`mn1610` / `mn1613` / `tms9995` のみ**。
 CLI の `--cpu` / `-m` があればそちらを優先。ソースにも引数にも無ければエラー。
 
 - MN1610 / MN1613: アドレッシングは sdas 準拠。ラベルはワードアドレス。REL 出力のバイトアドレスは ×2。外部ラベル差はワード数。
-- TMS9995: TI 風構文（`*R`, `@LABEL`, `>xxxx`）。ラベルは**バイトアドレス**。命令は根拠 `.cursor/rules/TMS9995_instruction.mdc`（第1弾は主要 Format のみ）。
-  アドレッシングモードなどの書式は、MN161x は sdas に準じた書式にします。
+- TMS9995: **sdas 構文**（`#n` 即値、`(Rn)` 間接、`(Rn)+`、ラベル直書き、`addr(Rn)`）。ラベルは**バイトアドレス**。命令は根拠 `.cursor/rules/TMS9995_instruction.mdc`（9900 互換＋ MPYS/DIVS/LST/LWP。SBO/SBZ/TB の変位とシフト回数も `#`）。
+  アドレッシングモードなどの書式は、MN161x / TMS9995 とも sdas に準じた書式にします。
   出力ファイルは、sdasのREL形式に準じた形式にします。
   lstファイルは、sdasのlst形式に準じた形式にします。
   MN1613は、1ワード16bitのCPUです。

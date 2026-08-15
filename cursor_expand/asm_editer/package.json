@@ -64,6 +64,10 @@
       {
         "language": "mn1613asm",
         "path": "./snippets/mn1613.json"
+      },
+      {
+        "language": "mn1613asm",
+        "path": "./snippets/tms9995.json"
       }
     ],
     "colors": [
