@@ -22,8 +22,8 @@ const BASE_REGS = {
 
 /** 1 スロットのワード数（ena / flags / count / addr_hi / addr_lo / data） */
 const SLOT_WORDS = 6;
-/** スロット数 */
-const SLOT_COUNT = 6;
+/** スロット数（比較器 8 本すべてユーザ） */
+const SLOT_COUNT = 8;
 
 /** WRITE + 履歴（Bit1 + Bit5） */
 const FLAGS_WRITE_HIST = 0x22;
@@ -94,7 +94,7 @@ async function callHandler(
 
 /**
  * 40h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
- * @param slot 設定番号 0–5（範囲外もテスト用にそのまま載せる）
+ * @param slot 設定番号 0–7（範囲外もテスト用にそのまま載せる）
  * @param flags Bit0 MEM/IO, Bit1 RD/WR, Bit2–4 条件, Bit5 履歴
  * @param count ブレイクまでのカウント
  * @param addr 監視アドレス（32bit バイト）
@@ -127,7 +127,7 @@ function breakSetFrame(
 /**
  * スロット 6 ワードを読む。
  * @param s セッション
- * @param slot 0–5
+ * @param slot 0–7
  * @returns [ena, flags, count, addrHi, addrLo, data]
  */
 function readSlot(s: Mn1613AsmSession, slot: number): number[] {
@@ -135,7 +135,7 @@ function readSlot(s: Mn1613AsmSession, slot: number): number[] {
   return Array.from({ length: SLOT_WORDS }, (_, i) => s.readWord(base + i));
 }
 
-test("g_main 後、6 スロットはすべて 0", async () => {
+test("g_main 後、8 スロットはすべて 0", async () => {
   await withCase(async (s) => {
     for (let slot = 0; slot < SLOT_COUNT; slot += 1) {
       expect(readSlot(s, slot)).toEqual([0, 0, 0, 0, 0, 0]);
@@ -164,28 +164,28 @@ test("40h はスロット 0 に flags/count/addr/data を書き OK を返す", a
   });
 });
 
-test("40h はスロット 5 にも設定できる", async () => {
+test("40h はスロット 7 にも設定できる", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
-      breakSetFrame(5, 0x01, 0, 0x00000020, 0x00ab),
+      breakSetFrame(7, 0x01, 0, 0x00000020, 0x00ab),
       1,
     );
     expect(Array.from(reply)).toEqual([0x00]);
-    expect(readSlot(s, 5)).toEqual([1, 0x01, 0, 0x0000, 0x0020, 0x00ab]);
+    expect(readSlot(s, 7)).toEqual([1, 0x01, 0, 0x0000, 0x0020, 0x00ab]);
   });
 });
 
-test("40h スロット 6 は NG で表を変えない", async () => {
+test("40h スロット 8 は NG で表を変えない", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
-      breakSetFrame(6, FLAGS_WRITE_HIST, HIT_COUNT, BREAK_ADDR, BREAK_DATA),
+      breakSetFrame(8, FLAGS_WRITE_HIST, HIT_COUNT, BREAK_ADDR, BREAK_DATA),
       1,
     );
     expect(Array.from(reply)).toEqual([0x01]);
     expect(readSlot(s, 0)).toEqual([0, 0, 0, 0, 0, 0]);
-    expect(readSlot(s, 5)).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(readSlot(s, 7)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 });
 
@@ -208,14 +208,14 @@ test("41h は指定スロットをクリアして OK を返す", async () => {
   });
 });
 
-test("41h スロット 6 は NG", async () => {
+test("41h スロット 8 は NG", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       breakSetFrame(0, FLAGS_WRITE_HIST, HIT_COUNT, BREAK_ADDR, BREAK_DATA),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x41, 0x06]), 1);
+    const reply = await callHandler(mock, Uint8Array.from([0x41, 0x08]), 1);
     expect(Array.from(reply)).toEqual([0x01]);
     expect(readSlot(s, 0)[0]).toBe(1);
   });

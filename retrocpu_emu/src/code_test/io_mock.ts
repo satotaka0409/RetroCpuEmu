@@ -3,15 +3,19 @@
  * 根拠: .cursor/rules/emulater_code_test.mdc §7
  */
 
+import { addrComparators } from "../cpuboard/mn1613/addr_comparator";
+import { stepBreak } from "../cpuboard/mn1613/step_break";
 import {
   setIoReadCallback,
   setIoWriteCallback,
+  triggerInterrupt,
 } from "../cpuboard/mn1613/mn1613";
 import {
   createHandshakeIoPortBridge,
   IoBoardHandshakeMock,
   type HandshakeIoPortBridge,
 } from "../ioboard/handshake";
+import { INT_CAUSE_CODE } from "../shared/handshake/handshake_type";
 import type { CodeTestIoMockEntry, CodeTestIoWriteLog } from "./types";
 
 /**
@@ -134,9 +138,25 @@ export class CodeTestIoMock {
   /**
    * エミュレータの RD/WT をこのモックへ差し替える。
    * handshake があればバスも attach する。
+   * 0030–0034 は CPLD 比較器へ通し、一致時は INT2・要因 3。
+   * 0036–0037 はステップ。ヒット時は INT2・要因 4。
    */
   attach(): void {
     if (this.attached) return;
+    addrComparators.reset();
+    addrComparators.setOnHit(() => {
+      if (this.handshake) {
+        this.handshake.bus.INT_CAUSE = INT_CAUSE_CODE.ADDR_BREAK;
+      }
+      triggerInterrupt(2);
+    });
+    stepBreak.reset();
+    stepBreak.setOnHit(() => {
+      if (this.handshake) {
+        this.handshake.bus.INT_CAUSE = INT_CAUSE_CODE.STEP;
+      }
+      triggerInterrupt(2);
+    });
     if (this.handshake) {
       this.handshake.attach();
     }
@@ -160,12 +180,16 @@ export class CodeTestIoMock {
       await this.handshake.stop();
       this.handshake.detach();
     }
+    addrComparators.reset();
+    addrComparators.setOnHit(null);
+    stepBreak.reset();
+    stepBreak.setOnHit(null);
     resetDefaultIoCallbacks();
     this.attached = false;
   }
 
   /**
-   * RD。port エントリがあればその値、なければ handshake / 0xFFFF。
+   * RD。port エントリがあればその値、なければ比較器 0030–0034、ステップ 0036–0037、handshake、0xFFFF。
    * @param port IO ポート番号
    * @returns 16bit
    */
@@ -179,6 +203,14 @@ export class CodeTestIoMock {
         this.portReadIndex.set(p, idx + 1);
       }
       return v & 0xffff;
+    }
+    const breakVal = addrComparators.readPort(p);
+    if (breakVal !== null) {
+      return breakVal & 0xffff;
+    }
+    const stepVal = stepBreak.readPort(p);
+    if (stepVal !== null) {
+      return stepVal & 0xffff;
     }
     if (this.handshakeBridge) {
       return this.handshakeBridge.read(p) & 0xffff;
@@ -197,6 +229,12 @@ export class CodeTestIoMock {
     this.writes.push({ port: p, value: v });
     const overlay = this.portReads.has(p);
     if (!overlay) {
+      if (addrComparators.writePort(p, v)) {
+        return;
+      }
+      if (stepBreak.writePort(p, v)) {
+        return;
+      }
       this.handshakeBridge?.write(p, v);
     }
   }

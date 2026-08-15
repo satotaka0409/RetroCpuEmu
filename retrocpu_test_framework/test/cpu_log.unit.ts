@@ -9,9 +9,9 @@ import { assembleToHexCdb } from "../src/assemble_link.js";
 import {
   clearCpuLogsBeforeRun,
   mn1613LogsDirFromTestFile,
-} from "../src/cpu_log_clear.js";
+} from "../src/mn1613/cpu_log_clear.js";
 import { endCpuLogTest } from "../src/cpu_log_mark.js";
-import { createMn1613AsmSession } from "../src/mn1613_session.js";
+import { createMn1613AsmSession } from "../src/mn1613/session.js";
 import type { CpuLogMode } from "../src/types.js";
 import { expect, test } from "../src/unit.js";
 

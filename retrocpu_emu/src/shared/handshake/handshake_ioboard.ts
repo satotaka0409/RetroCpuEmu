@@ -139,7 +139,7 @@ export class IoControlHandshake {
 
   /**
    * IO→CPU アドレス／IO ブレイク解除（コマンド 41h）。
-   * @param slot ブレイク設定番号（0–5）
+   * @param slot ブレイク設定番号（0–7）
    * @returns OK=0 / NG=1
    */
   async addrBreakClr(slot: number): Promise<number> {

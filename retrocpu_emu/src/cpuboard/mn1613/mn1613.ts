@@ -12,6 +12,7 @@ import {
   type OutputPin,
 } from "../pin_signal";
 import { addrComparators } from "./addr_comparator";
+import { stepBreak } from "./step_break";
 
 /**
  * Panasonic MN1610 / MN1613 CPU Emulator Core
@@ -643,7 +644,7 @@ export function halt(): void {
 // ─────────────────────────────────────────────
 /**
  * I/O リード（IOP=H / WRT=L を出しつつコールバックを呼ぶ）。
- * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因4）。
+ * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因3）。
  * @param port ポート番号
  * @returns 読み取った 16bit 値
  */
@@ -658,7 +659,7 @@ function _doIoRead(port: number): number {
 
 /**
  * I/O ライト（IOP=H / WRT=H を出しつつコールバックを呼ぶ）。
- * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因4）。
+ * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因3）。
  * @param port ポート番号
  * @param val 書き込む 16bit 値
  */
@@ -699,7 +700,7 @@ function _phys(logAddr: number, seg: number): number {
 // ─────────────────────────────────────────────
 /**
  * 物理アドレスから 1 ワード読む。
- * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因4）。
+ * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因3）。
  * @param phys 物理ワードアドレス
  * @returns 16bit 値。メモリ範囲外は 0xFFFF
  */
@@ -714,7 +715,7 @@ function _rdPhys(phys: number): number {
 
 /**
  * 物理アドレスへ 1 ワード書く。範囲外は無視する。
- * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因4）。
+ * アクセス後に CPLD 比較器へ通知する（一致時 INT2・要因3）。
  * @param phys 物理ワードアドレス
  * @param val 16bit 値
  */
@@ -1389,6 +1390,7 @@ function _executeOne(): void {
   _onBeforeExecute?.(getState());
 
   const ir = _fetch();
+  stepBreak.onInstructionFetch(ir);
   const op = (ir >>> 11) & 0x1f;
   const rrr = (ir >>> 8) & 0x7;
   const lo = ir & 0xff;

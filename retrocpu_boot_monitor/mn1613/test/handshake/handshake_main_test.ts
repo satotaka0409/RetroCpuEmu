@@ -1,5 +1,5 @@
 /**
- * g_handshake_interrupt_handler（IO→CPU コマンド 40h–60h）
+ * g_handshake_interrupt_handler（IO→CPU コマンド 40h–61h）
  * 根拠: HandShake.mdc / boot_monitor.mdc / test_framework.mdc
  */
 import {

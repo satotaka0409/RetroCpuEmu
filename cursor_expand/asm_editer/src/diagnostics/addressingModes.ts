@@ -62,10 +62,6 @@ const RI_MNEMONICS = new Set([
   "ORR",
   "EORR",
   "LADR",
-  "AD",
-  "SD",
-  "M",
-  "D",
   "DAA",
   "DAS",
   "FA",
@@ -75,6 +71,9 @@ const RI_MNEMONICS = new Set([
   "RDR",
   "WTR",
 ]);
+
+/** AD/SD/M/D は DR0, (R1)–(R4)（メモリ間接。FA 等と同じ） */
+const DR0_RI = new Set(["AD", "SD", "M", "D"]);
 
 /** BR / BALR は (Ri) のみ */
 const BR_RI = new Set(["BR", "BALR"]);
@@ -535,6 +534,20 @@ export function findInvalidAddressingOperands(
       }
       checkRi(mnemonic, tok, hits);
     }
+    return hits;
+  }
+
+  if (DR0_RI.has(mnemonic)) {
+    const rest = stripSkipCarry(parts);
+    if (rest.length >= 1) {
+      const a0 = rest[0]!.text.trim().toUpperCase();
+      if (a0 !== "DR0") {
+        hits.push(
+          hitAt(rest[0]!, a0, `${mnemonic} の第1オペランドは DR0`),
+        );
+      }
+    }
+    if (rest.length >= 2) checkRi(mnemonic, rest[1]!, hits);
     return hits;
   }
 

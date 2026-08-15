@@ -115,9 +115,9 @@ export interface CpuToIoHandlers {
   onUndefLed(on: boolean): number;
 
   /**
-   * ブレイク通知 (cmd=0x18): 比較器ヒットで CPU がモニタへ戻るとき。
-   * kind: 0=命令 / 1=メモリ / 2=IO / 3=ステップ。slot: 0–7。
-   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。
+   * ブレイク通知 (cmd=0x18): 比較器ヒットまたはステップで CPU がモニタへ戻るとき。
+   * kind: 0=命令 / 1=メモリ / 2=IO / 3=ステップ。slot: 比較器 0–7。ステップは 0xFF。
+   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。ステップは IC 退避値。
    */
   onBreakNotify(info: {
     kind: number;
@@ -406,12 +406,13 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * ブレイク通知 (0x18)
-   * 区分 0–3、スロット 0–7。応答: 1バイト (OK / NG)
+   * 区分 0–2 はスロット 0–7。区分 3（ステップ）はスロット 0xFF。応答: 1バイト (OK / NG)
    */
   private _handleBreakNotify(frame: Uint8Array): Uint8Array {
     const kind = frame[0x01]! & 0xff;
     const slot = frame[0x02]! & 0xff;
-    if (kind > 3 || slot > 7) {
+    const slotOk = kind === 3 ? slot === 0xff : slot <= 7;
+    if (kind > 3 || !slotOk) {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
     const addr =

@@ -1,11 +1,14 @@
 import * as vscode from "vscode";
-import { formatSubroutineDocMarkdown } from "../comments/jsdoc";
+import {
+  formatSubroutineDocMarkdown,
+  pickDeclarationDoc,
+} from "../comments/jsdoc";
 import { detectArchitecture } from "../cpu/registry";
 import type { SymbolIndex } from "../symbols/index";
 import { extractLabelRefs } from "../symbols/index";
 
 /**
- * ホバー: .equ 定数の値表示、および呼び出し（BAL / BL 等）の JSDoc。
+ * ホバー: .equ の値、グローバルラベルの宣言コメント（JSDoc なら強調）、呼び出し規約。
  * @param index - シンボル索引
  * @return HoverProvider
  */
@@ -44,6 +47,10 @@ export function createCallHoverProvider(
         if (equ.expr && equ.value !== undefined) {
           parts.push("", `_式:_ \`${equ.expr}\``);
         }
+        const equDoc = pickDeclarationDoc(defs);
+        if (equDoc) {
+          parts.push("", formatSubroutineDocMarkdown(equDoc, equ.name));
+        }
         return new vscode.Hover(
           new vscode.MarkdownString(parts.join("\n")),
           wordRange,
@@ -53,24 +60,46 @@ export function createCallHoverProvider(
       const arch = detectArchitecture(document.fileName, document.getText());
       const line = document.lineAt(position.line);
       const { mnemonic, refs } = extractLabelRefs(line.text, arch);
-      if (!mnemonic || !arch.callMnemonics.has(mnemonic)) {
+      const onCall =
+        !!mnemonic &&
+        arch.callMnemonics.has(mnemonic) &&
+        refs.some((r) => r === name);
+
+      const isGlobal = defs.some((d) => d.kind === "global");
+      if (isGlobal) {
+        const doc = pickDeclarationDoc(defs);
+        const parts: string[] = [];
+        if (doc) {
+          parts.push(formatSubroutineDocMarkdown(doc, name));
+        } else {
+          parts.push(`### \`${name}\``, "", "_グローバルラベル（宣言コメントなし）_");
+        }
+        if (onCall) {
+          parts.push("", "---", "", arch.callingConvention.summaryMarkdown);
+        }
+        const md = new vscode.MarkdownString(parts.join("\n"));
+        md.supportHtml = false;
+        return new vscode.Hover(md, wordRange);
+      }
+
+      if (!onCall) {
         return undefined;
       }
       if (refs.length === 0) return undefined;
 
-      const target =
-        refs.find((r) => r === name) ?? refs[refs.length - 1]!;
+      const target = refs.find((r) => r === name) ?? refs[refs.length - 1]!;
       const callDefs = index.lookup(target);
       const parts: string[] = [];
+      const callDoc = pickDeclarationDoc(callDefs);
 
-      if (callDefs.length > 0 && callDefs[0]!.doc) {
-        parts.push(formatSubroutineDocMarkdown(callDefs[0]!.doc, target));
+      if (callDoc) {
+        parts.push(formatSubroutineDocMarkdown(callDoc, target));
       } else {
         parts.push(`### \`${target}\``);
         if (callDefs.length === 0) {
           parts.push("", "_（定義が見つかりません）_");
         } else {
-          parts.push("", "_（サブルーチン用 JSDoc コメントなし）_");
+          parts.push("", "_（サブルーチン用コメントなし）_");
         }
       }
 

@@ -396,6 +396,25 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x18)", () => {
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
+  it("ステップ（区分 3・スロット FFh）も onBreakNotify へ渡し OK を返す", () => {
+    const frame = new Uint8Array([
+      CMD_CPU_TO_IO.BREAK_NOTIFY,
+      3,
+      0xff,
+      0x00,
+      0x00,
+      0x18,
+      0x00,
+    ]);
+    const response = dispatcher.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith({
+      kind: 3,
+      slot: 0xff,
+      addr: 0x00001800,
+    });
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
+
   it("区分やスロットが範囲外なら NG", () => {
     const response = dispatcher.dispatch(
       new Uint8Array([CMD_CPU_TO_IO.BREAK_NOTIFY, 4, 0, 0, 0, 0, 0]),

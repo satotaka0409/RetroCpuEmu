@@ -1,7 +1,7 @@
-import type { SubroutineDoc } from "../cpu/types";
+import type { AsmSymbol, SubroutineDoc } from "../cpu/types";
 
 /**
- * ラベル直前の JSDoc 風コメントをパースする。
+ * ラベル直前のコメントをパースする（JSDoc 風タグがあれば構造化する）。
  *
  * 対応例（asm-rules.mdc）:
  * ```
@@ -38,9 +38,8 @@ export function parseSubroutineDocAbove(
     collected.unshift(body);
   }
 
-  if (collected.length === 0) return undefined;
+  if (collected.every((c) => c === "")) return undefined;
   const hasTag = collected.some((c) => /^@\w+/i.test(c));
-  if (!hasTag) return undefined;
 
   let brief: string | undefined;
   let note: string | undefined;
@@ -93,14 +92,19 @@ export function parseSubroutineDocAbove(
       continue;
     }
 
-    // 先頭のタグなし行を brief にする
     if (!/^@\w+/i.test(line) && brief === undefined) {
       brief = line;
+    } else if (!hasTag && !/^@\w+/i.test(line)) {
+      brief = brief ? `${brief}\n${line}` : line;
     }
   }
 
   if (note) {
     brief = brief ? `${brief}\n\n${note}` : note;
+  }
+
+  if (!hasTag && brief === undefined) {
+    brief = collected.filter((c) => c !== "").join("\n");
   }
 
   return {
@@ -109,11 +113,25 @@ export function parseSubroutineDocAbove(
     returns,
     clobbers,
     raw: collected.join("\n"),
+    jsdoc: hasTag,
   };
 }
 
 /**
- * SubroutineDoc を Markdown にする。
+ * ラベル定義のコメントを優先し、なければ `.global` 宣言のコメントを使う。
+ * @param defs 同一名のシンボル
+ * @returns ドキュメント。なければ undefined
+ */
+export function pickDeclarationDoc(
+  defs: readonly Pick<AsmSymbol, "kind" | "doc">[],
+): SubroutineDoc | undefined {
+  const fromKind = (kind: AsmSymbol["kind"]): SubroutineDoc | undefined =>
+    defs.find((d) => d.kind === kind && d.doc)?.doc;
+  return fromKind("label") ?? fromKind("global") ?? fromKind("equ");
+}
+
+/**
+ * 宣言コメントをホバー用 Markdown にする。JSDoc 風ならタグを表で強調する。
  * @param doc - ドキュメント
  * @param symbolName - シンボル名
  * @return Markdown 文字列
@@ -123,19 +141,33 @@ export function formatSubroutineDocMarkdown(
   symbolName: string,
 ): string {
   const parts: string[] = [`### \`${symbolName}\``];
-  if (doc.brief) parts.push("", doc.brief);
-  if (doc.params.length > 0) {
-    parts.push("", "**Parameters**");
+  if (doc.jsdoc) {
+    if (doc.brief) parts.push("", doc.brief);
+    const rows: string[] = [];
     for (const p of doc.params) {
-      parts.push(`- \`${p.name}\` — ${p.description || "_"}`);
+      rows.push(
+        `| \`@param\` | **\`${p.name}\`** | ${p.description || "—"} |`,
+      );
     }
+    if (doc.returns) {
+      rows.push(`| \`@return\` | | ${doc.returns} |`);
+    }
+    if (doc.clobbers.length > 0) {
+      rows.push(
+        `| \`@Destruction\` | | ${doc.clobbers.map((c) => `\`${c}\``).join(", ")} |`,
+      );
+    }
+    if (rows.length > 0) {
+      parts.push("", "| タグ | 名前 | 説明 |", "| :--- | :--- | :--- |", ...rows);
+    }
+    return parts.join("\n");
   }
-  if (doc.returns) parts.push("", `**Returns** — ${doc.returns}`);
-  if (doc.clobbers.length > 0) {
-    parts.push(
-      "",
-      `**Destruction** — ${doc.clobbers.map((c) => `\`${c}\``).join(", ")}`,
-    );
+
+  const body = (doc.brief ?? doc.raw).trim();
+  if (body) {
+    parts.push("", body);
+  } else {
+    parts.push("", "_（宣言コメントなし）_");
   }
   return parts.join("\n");
 }

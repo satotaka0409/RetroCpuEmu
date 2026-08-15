@@ -57,7 +57,7 @@ export type BoardLinkRequest =
       type: "hshk";
       id: number;
       cmd: typeof CMD_IO_TO_CPU.BREAK_MEM_IO_CLR;
-      /** ブレイク設定番号（0–5） */
+      /** ブレイク設定番号（0–7） */
       slot: number;
     }
   | {

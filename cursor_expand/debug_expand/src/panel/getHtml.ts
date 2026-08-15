@@ -66,7 +66,7 @@ export function getDebugHtml(
         <ul class="bp-list" id="bpInstr"></ul>
       </div>
       <div class="bp-block">
-        <div class="bp-label">アド 0–5</div>
+        <div class="bp-label">アド 0–7</div>
         <ul class="bp-list" id="bpAddr"></ul>
       </div>
     </aside>

@@ -44,6 +44,10 @@ describe("findInvalidGprOperands", () => {
     assert.deepEqual(names("\tandi\tR0, #1"), []);
   });
 
+  test("M DR0, (R3) は DR0 を不正としない", () => {
+    assert.deepEqual(names("\tM\tDR0, (R3)"), []);
+  });
+
   test("メッセージに代替命令のヒントが含まれる", () => {
     const line = "\tmv\tR0, OSR0";
     const parsed = parseAsmLine(line, arch);

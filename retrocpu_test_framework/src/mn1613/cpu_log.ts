@@ -8,15 +8,15 @@ import path from "node:path";
 import {
   getClockCount,
   type CPURegister,
-} from "../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
-import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
-import { Mn1613Disassembler } from "../../retrocpu_emu/src/dis_assembler/mn1613/index.js";
+} from "../../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
+import { parseCdb } from "../../../retrocpu_emu/src/code_test/cdb.js";
+import { Mn1613Disassembler } from "../../../retrocpu_emu/src/dis_assembler/mn1613/index.js";
 import {
   setActiveCpuLogMarker,
   takePendingCpuLogTestName,
   type CpuLogTestPhase,
-} from "./cpu_log_mark.js";
-import type { CpuLogMode } from "./types.js";
+} from "../cpu_log_mark.js";
+import type { CpuLogMode } from "../types.js";
 
 const STACK_WORDS = 16;
 

@@ -4,6 +4,8 @@ MN1613 の **Intel HEX + CDB** をエミュレータで検証する独自テス�
 
 仕様: `.cursor/rules/asm_test_framework.mdc`
 
+MN1613 固有（セッション、M系列メモリ埋め、CPU ログ、MAIN スタブ）は `src/mn1613/`。
+
 **テスト対象として読んでよいのは `.ihx` と `.cdb` のみ。** セッション作成は `.asm` を読まない。
 アセンブル／リンクは Makefile 等で事前に行い、成果物パスを設定に書く。
 

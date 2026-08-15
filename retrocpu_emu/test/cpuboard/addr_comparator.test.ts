@@ -1,8 +1,8 @@
 /**
  * CPLD アドレス比較器（IO:0030–0034）
- * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc / HandShake.mdc（要因 4）
+ * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc / HandShake.mdc（要因 3）
  *
- * 設定・読取と、一致時の INT2・INT_CAUSE=4・0034 前回書込値を確認する。
+ * 設定・読取と、一致時の INT2・INT_CAUSE=3・0034 前回書込値を確認する。
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -108,7 +108,7 @@ describe("アドレス比較器 IO:0030–0034", () => {
     expect(addrComparators.getSlot(3)?.addr).toBe(addr & 0x3ffff);
   });
 
-  it("MEM READ 一致で INT2・要因4・ヒット番号が立つ", () => {
+  it("MEM READ 一致で INT2・要因3・ヒット番号が立つ", () => {
     const watch = 0x0200;
     new DataView(getMemory()).setUint16(watch * 2, 0xbeef, false);
 
@@ -169,7 +169,7 @@ describe("アドレス比較器 IO:0030–0034", () => {
     expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0xabcd);
   });
 
-  it("IO アクセス一致でも INT2・要因4 が立つ", () => {
+  it("IO アクセス一致でも INT2・要因3 が立つ", () => {
     wtPort(IO_PORT_BREAK_ADDR_LO, 0x0040);
     wtPort(IO_PORT_BREAK_ADDR_HI, 0);
     wtPort(

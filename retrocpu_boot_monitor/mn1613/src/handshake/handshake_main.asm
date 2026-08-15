@@ -4,7 +4,7 @@
 ;
 ; g_int2_handler から BALD で呼ばれるので、戻りは RET。
 ; 受理 → コマンド 1 バイト受信 → 1 ワード表 + ゼロページ BAL で分岐 → finalize。
-; g_* は BALD / RET。コードはセグメント 0。
+; IO→CPU コマンド 0x40–0x61。g_* は BALD / RET。コードはセグメント 0。
 
 	.cpu	mn1613
 
@@ -21,6 +21,8 @@
 	.global g_hshk_write_memory
 	.global g_hshk_addr_break_set
 	.global g_hshk_addr_break_clr
+	.global g_hshk_break_hist_get
+	.global g_hshk_break_resume
 
 ; -------------------------------------------------------
 ; レベル2割り込み: ハンドシェイク要因
@@ -164,13 +166,23 @@ l_hshk_irq_51:
 	bald	g_hshk_write_memory
 	ret
 
+; 60h ブレイク履歴取得
+l_hshk_irq_60:
+	bald	g_hshk_break_hist_get
+	ret
+
+; 61h ブレイク復帰（0=通常 / 1=ステップ）
+l_hshk_irq_61:
+	bald	g_hshk_break_resume
+	ret
+
 	.area	_SYS_PAGE0		(REL,NOLOAD)
 ; BAL 間接ディスパッチ用（handshake IRQ）
 l_hshk_irq_bal_tmp:
 	.ds	1
 
 	.area	_DATA		(REL,CON)
-; IO→CPU コマンド 0x40–0x60（1 エントリ = ハンドラアドレス。ゼロページ BAL）
+; IO→CPU コマンド 0x40–0x61（1 エントリ = ハンドラアドレス。ゼロページ BAL）
 l_hshk_irq_cmd_tab:
 	.dw	l_hshk_irq_40			; 40
 	.dw	l_hshk_irq_41			; 41
@@ -204,4 +216,5 @@ l_hshk_irq_cmd_tab:
 	.dw	l_hshk_irq_unknown		; 5D
 	.dw	l_hshk_irq_unknown		; 5E
 	.dw	l_hshk_irq_unknown		; 5F
-	.dw	l_hshk_irq_unknown		; 60
+	.dw	l_hshk_irq_60			; 60
+	.dw	l_hshk_irq_61			; 61

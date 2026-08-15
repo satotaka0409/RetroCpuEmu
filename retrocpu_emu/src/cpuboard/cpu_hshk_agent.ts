@@ -119,7 +119,7 @@ export class CpuHandshakeAgent {
 
   /**
    * IO→CPU アドレス／IO ブレイク解除（41h）。
-   * @param slot ブレイク設定番号（0–5）
+   * @param slot ブレイク設定番号（0–7）
    * @returns CPU が返した status（OK/NG）
    */
   addrBreakClr(slot: number): Promise<number> {

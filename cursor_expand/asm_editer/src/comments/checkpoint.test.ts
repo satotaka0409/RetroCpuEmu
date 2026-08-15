@@ -71,6 +71,7 @@ describe("parseSubroutineDocAbove: @cp は JSDoc に混ぜない", () => {
     const doc = parseSubroutineDocAbove(lines, 2);
     assert.ok(doc);
     assert.equal(doc!.brief, "初期化");
+    assert.equal(doc!.jsdoc, true);
     assert.equal(doc!.raw.includes("@cp"), false);
   });
 });

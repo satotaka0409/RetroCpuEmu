@@ -10,6 +10,7 @@ import {
 } from "./checkpoint.js";
 import { defsToCdb, imageToIntelHex } from "./hex_cdb.js";
 import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
+import { mn1613DefaultCodeOrgWord, mn1613MainStub } from "./mn1613/main_stub.js";
 import type {
   AsmCpuType,
   AsmSource,
@@ -90,26 +91,7 @@ export function sourcesHaveMain(sources: AsmSource[]): boolean {
   return sources.some((s) => resolveModuleName(s) === "MAIN");
 }
 
-/**
- * `_CODE` を指定ワードから始める MAIN スタブ。割り込み退避領域（0–7）と重ならないようにする。
- * @param orgWord `_CODE` 原点（ワード）
- * @param cpu 先頭 `.cpu` に書く CPU（既定 mn1613）
- * @returns スタブソース
- */
-export function mn1613MainStub(
-  orgWord: number,
-  cpu: AsmCpuType = "mn1613",
-): string {
-  return [
-    `\t.cpu\t${cpu}`,
-    "\t.area\t_CODE\t\t(REL,CON)",
-    `\t.org\t0x${orgWord.toString(16).toUpperCase()}`,
-    "\t.global\t__TEST_FRAME_MAIN",
-    "__TEST_FRAME_MAIN:",
-    "\th",
-    "",
-  ].join("\n");
-}
+export { mn1613MainStub } from "./mn1613/main_stub.js";
 
 /**
  * `.asm` をアセンブルし sdld でリンクしてイメージ・HEX・CDB を返す。
@@ -123,9 +105,7 @@ export function assembleAndLink(options: AssembleLinkOptions): LinkedImage {
   const codeOrgWord =
     options.codeOrgWord !== undefined
       ? options.codeOrgWord
-      : !hasMain && (cpu === "mn1613" || cpu === "mn1610")
-        ? 0x0200
-        : 0;
+      : mn1613DefaultCodeOrgWord(cpu, hasMain);
   const { assemble, writeRel, linkRelsWithSdld } = loadAsmRuntime();
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "tf-sdld-"));

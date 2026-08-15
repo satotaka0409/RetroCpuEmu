@@ -1,0 +1,164 @@
+; breakpoint_steprun.asm
+; 1 命令ステップ（CPLD ワンショット。比較器は使わない）
+; 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 61h・18h 区分 3 /
+;   MN1613_CPUボードメモリ_IOマップ.mdc（0036/0037）
+;
+; 61h 方式 1: GL_STEP_ARM を立て、OK を返す。ENA はここでは上げない
+;   （ハンドラ途中のフェッチで発火するため）。INT2 の LPSW 2 直前に
+;   g_step_arm_cpld が 0037h=2006h・0036h=1 を書く。
+; 要因 4: 18h 区分 3・スロット FFh を送りモニタ HALT（R0=1）。
+; 履歴リングには書かない。
+
+	.cpu	mn1613
+
+	.include "../handshake/handshake_io.inc"
+
+	.area	_CODE		(REL,CON)
+
+	.global g_hshk_break_resume
+	.global g_step_arm_cpld
+	.global g_step_interrupt_handler
+	.global GL_STEP_ARM
+	.global g_hshk_recv_byte
+	.global g_hshk_send_byte
+	.global g_hshk_send_word
+	.global g_hshk_initiate_send
+	.global g_hshk_finalize_send
+	.global g_hshk_wait_req1_1
+	.global g_hshk_accept_request
+	.global g_hshk_finalize_recv
+
+BP_KIND_STEP		.equ	3
+BP_STEP_SLOT		.equ	0x00ff
+
+; -------------------------------------------------------
+; ブレイク復帰（コマンド 61h）
+; @note IO→CPU 転送中。コマンド 1B 受信済み。残り 1B: 実行方式。
+; @note 0=通常再開（ENA を上げない）/ 1=ステップ（GL_STEP_ARM=1）。
+; @return R0 - 線上 status（OK / NG）
+; @Destruction R0, R1, R2（R3–R4 は退避）
+; -------------------------------------------------------
+g_hshk_break_resume:
+	push	R3
+	push	R4
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, Z
+	b	l_sr_61_ng
+	andi	R1, #0x00ff
+	; 方式 >= 2 は NG。設定は変えない
+	cwi	R1, #HSHK_RESUME_LIMIT, M
+	b	l_sr_61_ng
+	b	l_sr_61_ok
+l_sr_61_ng:
+	mvwi	R0, #HSHK_NG
+	bald	g_hshk_send_byte
+	pop	R4
+	pop	R3
+	ret
+l_sr_61_ok:
+	mvwi	X1, #GL_STEP_ARM
+	st	R1, 0(X1)
+	mvwi	R0, #HSHK_OK
+	bald	g_hshk_send_byte
+	pop	R4
+	pop	R3
+	ret
+
+; -------------------------------------------------------
+; LPSW 2 の直前に CPLD を武装する（INT2 エピローグから BALD）。
+; @note 常に 0037h へ LPSW 2 の語を書く。GL_STEP_ARM≠0 のときだけ
+;   0036h=1 にしてフラグを落とす。通常再開では ENA を触らない。
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+g_step_arm_cpld:
+	mvwi	R0, #STEP_BRK_COM_LPSW2
+	wt	R0, IO_STEP_BRK_COM
+	mvwi	X1, #GL_STEP_ARM
+	l	R0, 0(X1)
+	or	R0, R0, Z
+	b	l_sr_arm_go
+	ret
+l_sr_arm_go:
+	eor	R0, R0
+	st	R0, 0(X1)
+	mvi	R0, #1
+	wt	R0, IO_STEP_BRK_ENA
+	ret
+
+; -------------------------------------------------------
+; ステップヒット（INT_CAUSE=4）
+; @return R0 - 1（モニタ HALT）。18h 失敗でも HALT
+; @Destruction R0, R1, R2（R3–R4 は退避）
+; -------------------------------------------------------
+g_step_interrupt_handler:
+	push	R3
+	push	R4
+	bald	g_hshk_initiate_send
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_cmd
+	b	l_sr_nt_fail
+l_sr_nt_cmd:
+	mvwi	R0, #HSHK_CMD_BREAK_NOTIFY
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_kind
+	b	l_sr_nt_fail
+l_sr_nt_kind:
+	mvi	R0, #BP_KIND_STEP
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_slot
+	b	l_sr_nt_fail
+l_sr_nt_slot:
+	mvwi	R0, #BP_STEP_SLOT
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_addr
+	b	l_sr_nt_fail
+l_sr_nt_addr:
+	eor	R0, R0
+	bald	g_hshk_send_word
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_ic
+	b	l_sr_nt_fail
+l_sr_nt_ic:
+	l	R0, *HSHK_L2_IC_SAVE
+	bald	g_hshk_send_word
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_fin
+	b	l_sr_nt_fail
+l_sr_nt_fin:
+	bald	g_hshk_finalize_send
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_wait
+	b	l_sr_nt_fail
+l_sr_nt_wait:
+	eor	R0, R0
+	wt	R0, INTERRUPT_BUSY
+	bald	g_hshk_wait_req1_1
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_accept
+	b	l_sr_nt_fail
+l_sr_nt_accept:
+	bald	g_hshk_accept_request
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_recv
+	b	l_sr_nt_fail
+l_sr_nt_recv:
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_done
+	bald	g_hshk_finalize_recv
+	b	l_sr_nt_fail
+l_sr_nt_done:
+	bald	g_hshk_finalize_recv
+l_sr_nt_fail:
+	mvi	R0, #1
+	pop	R4
+	pop	R3
+	ret
+
+	.area	_WORK		(REL,NOLOAD)
+; 61h 方式 1 のとき 1。g_step_arm_cpld が ENA を上げて 0 に戻す
+GL_STEP_ARM:		.ds	1

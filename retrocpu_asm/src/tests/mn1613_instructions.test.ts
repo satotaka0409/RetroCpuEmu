@@ -257,6 +257,8 @@ describe("MN1613 命令: M / D（乗除算）", () => {
     assert.equal(asm1("        D DR0, (R1)"), 0x770c));
   test("D DR0, (R2)      ii=1", () =>
     assert.equal(asm1("        D DR0, (R2)"), 0x770d));
+  test("M DR0, R1 は括弧必須", () =>
+    assert.throws(() => asm1("        M DR0, R1"), /Invalid indirect operand/));
 });
 
 describe("MN1613 命令: DAA / DAS（BCD加減算）", () => {

@@ -5,6 +5,7 @@
  * 0000 RESET_VECTOR — リセット時 CPU が読む起動 IC
  * 0020〜0024 — ハンドシェイク（任意で bridge 接続）
  * 0030〜0034 — CPLD アドレス比較器（設定・ヒット・前回書込値）
+ * 0036〜0037 — CPLD ステップ実行（ENA / トリガ命令語）
  */
 
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
@@ -25,6 +26,11 @@ import {
   IO_PORT_BREAK_HIT,
   IO_PORT_BREAK_PREV,
 } from "./mn1613/addr_comparator";
+import {
+  IO_PORT_STEP_COM,
+  IO_PORT_STEP_ENA,
+  stepBreak,
+} from "./mn1613/step_break";
 import { INT_CAUSE_CODE } from "../shared/handshake/handshake_type";
 
 /** IO:0000 — リセットベクタ（ワードアドレス） */
@@ -93,8 +99,8 @@ export function isHandshakeActive(): boolean {
 }
 
 /**
- * アドレス比較一致時: INT_CAUSE=4（ADDR_BREAK）を載せ、レベル2割り込みを上げる。
- * 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc（要因番号 4）
+ * アドレス比較一致時: INT_CAUSE=3（ADDR_BREAK）を載せ、レベル2割り込みを上げる。
+ * 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc（要因番号 3）
  */
 function raiseAddrBreakIrq(_slot: number): void {
   setIntCause(INT_CAUSE_CODE.ADDR_BREAK);
@@ -102,9 +108,19 @@ function raiseAddrBreakIrq(_slot: number): void {
 }
 
 /**
+ * ステップワンショット: INT_CAUSE=4（STEP）を載せ、レベル2割り込みを上げる。
+ * 根拠: breakpoint.mdc（要因番号 4）
+ */
+function raiseStepBreakIrq(): void {
+  setIntCause(INT_CAUSE_CODE.STEP);
+  triggerInterrupt(2);
+}
+
+/**
  * CPU の RD/WT コールバックを IO ボードポートに接続する。
  * 既存のハンドシェイク bridge があれば 0x20〜0x24 を委譲する。
- * 0030〜0034 は CPLD 比較器。一致時は INT2・要因 4。
+ * 0030〜0034 は CPLD 比較器。一致時は INT2・要因 3。
+ * 0036〜0037 はステップ。ヒット時は INT2・要因 4。
  */
 export function attachIoBoardPorts(): void {
   const hshk = _handshakeBus
@@ -112,6 +128,7 @@ export function attachIoBoardPorts(): void {
     : null;
 
   addrComparators.setOnHit(raiseAddrBreakIrq);
+  stepBreak.setOnHit(raiseStepBreakIrq);
 
   setIoReadCallback((port) => {
     const p = port & 0xffff;
@@ -121,6 +138,10 @@ export function attachIoBoardPorts(): void {
     const breakVal = addrComparators.readPort(p);
     if (breakVal !== null) {
       return breakVal;
+    }
+    const stepVal = stepBreak.readPort(p);
+    if (stepVal !== null) {
+      return stepVal;
     }
     if (
       hshk &&
@@ -154,6 +175,10 @@ export function attachIoBoardPorts(): void {
       addrComparators.writePort(p, val);
       return;
     }
+    if (p === IO_PORT_STEP_ENA || p === IO_PORT_STEP_COM) {
+      stepBreak.writePort(p, val);
+      return;
+    }
     if (hshk) {
       hshk.write(p, val);
       return;
@@ -165,10 +190,12 @@ export function attachIoBoardPorts(): void {
 }
 
 /**
- * 比較器バンクを初期化する（リセット／テスト用）。
+ * 比較器バンクとステップ・ワンショットを初期化する（リセット／テスト用）。
  * ヒット通知は attachIoBoardPorts 後も維持する。
  */
 export function resetAddrComparators(): void {
   addrComparators.reset();
   addrComparators.setOnHit(raiseAddrBreakIrq);
+  stepBreak.reset();
+  stepBreak.setOnHit(raiseStepBreakIrq);
 }

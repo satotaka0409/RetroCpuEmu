@@ -167,12 +167,14 @@ export class SymbolIndex {
 
       const globalNames = parseGlobalDirectiveNames(stripped);
       if (globalNames) {
+        const doc = parseSubroutineDocAbove(lines, i);
         for (const name of globalNames) {
           const sym: AsmSymbol = {
             name,
             kind: "global",
             uri: uriKey,
             line: i,
+            doc,
           };
           found.push(sym);
           addSym(sym);

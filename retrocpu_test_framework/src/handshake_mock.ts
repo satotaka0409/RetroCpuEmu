@@ -7,7 +7,7 @@ import { CodeTestIoMock } from "../../retrocpu_emu/src/code_test/io_mock.js";
 import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/code_test/types.js";
 import type { IoBoardHandshakeMock } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
 import type { IoBoardMockOptions } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
-import type { IoTimerHandle, IoTimerScheduler } from "../../retrocpu_emu/src/ioboard/io_timer.js";
+import type { IoTimerHandle, IoTimerScheduler } from "../../retrocpu_emu/src/ioboard/timer/io_timer.js";
 
 /**
  * タイマー満了を起こさないスケジューラ（15h 設定の検証専用）。

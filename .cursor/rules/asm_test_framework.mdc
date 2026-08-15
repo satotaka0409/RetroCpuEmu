@@ -5,7 +5,7 @@ description: MN1613 アセンブラテスト統合仕様（asm 結合テスト +
 
 # asm テストフレームワーク
 
-根拠: 本ファイル。実装は `retrocpu_test_framework/` と `retrocpu_emu/src/code_test/`。
+根拠: 本ファイル。実装は `retrocpu_test_framework/`（共通）と `retrocpu_test_framework/src/mn1613/`（MN1613 固有）と `retrocpu_emu/src/code_test/`。
 呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。
 
 ## 目的

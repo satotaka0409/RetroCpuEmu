@@ -79,16 +79,20 @@ HSHK_CMD_MEM_WRITE		.equ	0x51
 HSHK_CMD_IO_READ		.equ	0x52
 HSHK_CMD_IO_WRITE		.equ	0x53
 HSHK_CMD_BREAK_HIST_GET		.equ	0x60
+HSHK_CMD_BREAK_RESUME		.equ	0x61
 HSHK_CMD_IO_BASE		.equ	0x40
-HSHK_CMD_IO_LAST		.equ	0x60
-HSHK_CMD_IO_LIMIT		.equ	0x61
+HSHK_CMD_IO_LAST		.equ	0x61
+HSHK_CMD_IO_LIMIT		.equ	0x62
+HSHK_RESUME_RUN			.equ	0
+HSHK_RESUME_STEP		.equ	1
+HSHK_RESUME_LIMIT		.equ	2
 
 ; IO→CPU コマンド後の残り受信バイト（cmd 除く）
 HSHK_IRQ_PAY_40		.equ	9
 HSHK_IRQ_PAY_41		.equ	1
 
-; アドレスブレイク（40h/41h）スロット表（_WORK、1 スロット 6 ワード × 6）
-HSHK_AB_SLOTS		.equ	6
+; アドレスブレイク（40h/41h）スロット表（_WORK、1 スロット 6 ワード × 8）
+HSHK_AB_SLOTS		.equ	8
 HSHK_AB_SLOT_WORDS	.equ	6
 HSHK_AB_TBL_WORDS	.equ	HSHK_AB_SLOTS * HSHK_AB_SLOT_WORDS
 HSHK_AB_W_ENA		.equ	0
@@ -118,12 +122,22 @@ HSHK_BH_W_TIME		.equ	0
 HSHK_BH_W_DATA		.equ	4
 HSHK_BH_W_PREV		.equ	5
 HSHK_BH_W_REGS		.equ	6
+; GL_BP_HIST_META（1 スロット 3 ワード）
+HSHK_BH_MW_COUNT	.equ	0	; 有効件数（0–16）
+HSHK_BH_MW_NEXT		.equ	1	; 次書込 index（最新は (NEXT-1) & 15）
+HSHK_BH_MW_OVF		.equ	2	; Bit0=リングオーバフロー
 
 HSHK_IRQ_PAY_42		.equ	5
 HSHK_IRQ_PAY_43		.equ	1
 HSHK_IRQ_PAY_49		.equ	4
 HSHK_IRQ_PAY_50		.equ	8
 HSHK_IRQ_PAY_51		.equ	8
+HSHK_IRQ_PAY_60		.equ	2
+HSHK_BH_CLR		.equ	0x01
+HSHK_BH_ST_OVF		.equ	0x01
+HSHK_BH_ST_NOHIST	.equ	0x02
+HSHK_BH_HDR_CPU		.equ	8
+HSHK_BH_ENTRY_BYTES	.equ	34
 HSHK_IRQ_STATUS_BYTES	.equ	0x15
 HSHK_MEM_BLOCK		.equ	256
 

@@ -35,7 +35,9 @@ export const INT_CAUSE_CODE = {
   /** ハンドシェイクによる割り込み */
   HANDSHAKE: 2,
   /** アドレスブレイク */
-  ADDR_BREAK: 4,
+  ADDR_BREAK: 3,
+  /** ステップ実行（CPLD ワンショット。比較器ではない） */
+  STEP: 4,
 } as const;
 
 /**
@@ -122,8 +124,8 @@ export const MODE = {
 // ブレイク設定フラグ
 // ─────────────────────────────────────────────
 
-/** アドレス／IO ブレイクスロット数（番号 0–5） */
-export const ADDR_BREAK_SLOT_COUNT = 6;
+/** アドレス／IO ブレイクスロット数（番号 0–7。比較器 8 本すべてユーザ） */
+export const ADDR_BREAK_SLOT_COUNT = 8;
 
 /** 40h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
 export const ADDR_BREAK_SET_PAYLOAD_LEN = 9;

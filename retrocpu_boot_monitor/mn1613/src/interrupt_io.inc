@@ -8,7 +8,8 @@ INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
 INT_CAUSE_TIMER0	.equ	0
 INT_CAUSE_TIMER1	.equ	1
 INT_CAUSE_HSHK		.equ	2
-INT_CAUSE_ADDR_BREAK	.equ	4
+INT_CAUSE_ADDR_BREAK	.equ	3
+INT_CAUSE_STEP		.equ	4
 
 ; CPLD 比較器（MN1613_CPUボードメモリ_IOマップ.mdc）
 IO_BREAK_CTRL		.equ	0x30
@@ -16,3 +17,9 @@ IO_BREAK_ADDR_HI	.equ	0x31
 IO_BREAK_ADDR_LO	.equ	0x32
 IO_BREAK_HIT		.equ	0x33
 IO_BREAK_PREV		.equ	0x34
+
+; ステップ実行ワンショット（比較器を使わない）
+IO_STEP_BRK_ENA		.equ	0x36
+IO_STEP_BRK_COM		.equ	0x37
+; 既定トリガ: LPSW 2
+STEP_BRK_COM_LPSW2	.equ	0x2006

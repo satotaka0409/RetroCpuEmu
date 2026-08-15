@@ -9,8 +9,8 @@ import {
   fillMemoryMSequence,
   memMseqSeedFromTime,
   mseqStep,
-} from "../src/m_sequence.js";
-import { createMn1613AsmSession } from "../src/mn1613_session.js";
+} from "../src/mn1613/m_sequence.js";
+import { createMn1613AsmSession } from "../src/mn1613/session.js";
 import { expect, test } from "../src/unit.js";
 
 /**

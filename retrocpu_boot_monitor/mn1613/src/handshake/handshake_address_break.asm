@@ -5,7 +5,7 @@
 ; コマンド 1B は IRQ ディスパッチ済み。
 ; 40h 残り 9B: slot, flags, count, addr32 BE, data16 BE → 送信 1B status
 ; 41h 残り 1B: slot → 送信 1B status
-; スロット 0–5。番号不正は設定を変えず NG。
+; スロット 0–7。番号不正は設定を変えず NG。
 ; 比較器設定は _WORK の GL_HSHK_ADDR_BREAK に保持する（CPLD IO は未マップ）。
 ; g_* は BALD / RET。表ポインタは R4 に保持。
 
@@ -170,7 +170,7 @@ l_ab_rw_fail:
 	ret
 
 	.area	_WORK		(REL,NOLOAD)
-; スロット 0–5。各 6 ワード: ena / flags / count / addr_hi / addr_lo / data
+; スロット 0–7。各 6 ワード: ena / flags / count / addr_hi / addr_lo / data
 ; ena: ブレイク有効フラグ
 ; flags: ブレイク条件
 ; count: ブレイク回数

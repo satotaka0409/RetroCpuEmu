@@ -47,10 +47,11 @@ describe("debug_addr_break フレーム", () => {
     expect(parseAddrBreakClrSlot(frame)).toBe(5);
   });
 
-  it("スロットは 0–5 のみ有効", () => {
+  it("スロットは 0–7 のみ有効", () => {
     expect(isAddrBreakSlot(0)).toBe(true);
     expect(isAddrBreakSlot(5)).toBe(true);
-    expect(isAddrBreakSlot(6)).toBe(false);
+    expect(isAddrBreakSlot(7)).toBe(true);
+    expect(isAddrBreakSlot(8)).toBe(false);
   });
 });
 
@@ -126,7 +127,7 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     expect(clrSlot).toBe(4);
   });
 
-  it("スロット 6 は CPU へ渡さず NG", async () => {
+  it("スロット 8 は CPU へ渡さず NG", async () => {
     let called = false;
     host = new DebugHost({
       port: 0,
@@ -141,7 +142,7 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     });
     const port = await host.listen();
     const frame = encodeAddrBreakSetFrame({
-      slot: 6,
+      slot: 8,
       flags: 0,
       count: 0,
       addr: 0,

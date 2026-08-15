@@ -6,11 +6,11 @@
 ;   0108-16FF  _CODE    コード（ROM 相当。実行中は書き換えない）
 ;              _DATA    値あり定数・テーブル（ROM。`.word` / `.dw`）
 ;              _WORK    モニタ作業領域（RAM。`.ds` のみ。初期値は実行時に書く）
-;                       アドレスブレイク表 GL_HSHK_ADDR_BREAK（6×6 ワード）
-;                       履歴メタ GL_BP_HIST_META（6×3: 件数 / 次書込 / ovf）
+;                       アドレスブレイク表 GL_HSHK_ADDR_BREAK（8×6 ワード）
+;                       履歴メタ GL_BP_HIST_META（8×3: 件数 / 次書込 / ovf）
 ;   1800-F7FF  ユーザ領域
 ;   F800-FFFF  スタック（SP は FFFF から下方へ伸びる）
-;   3F000-3FFFF  ブレイク履歴エントリ（SBR C、論理 F000h。60h 形式 17 ワード×16×6）
+;   3F000-3FFFF  ブレイク履歴エントリ（SBR C、論理 F000h。60h 形式 17 ワード×16×8）
 
 INT_VECTOR_BASE	.equ	0x0100
 STACK_TOP	.equ	0xffff

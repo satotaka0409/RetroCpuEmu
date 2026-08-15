@@ -28,6 +28,8 @@ export interface SubroutineDoc {
   returns?: string;
   clobbers: string[];
   raw: string;
+  /** `@param` 等のタグがある（ホバーで強調する） */
+  jsdoc: boolean;
 }
 
 /** CPU 固有の呼び出し規約 */

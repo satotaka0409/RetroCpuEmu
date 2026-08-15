@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { clearCpuLogsBeforeRun } from "./cpu_log_clear.js";
+import { clearCpuLogsBeforeRun } from "./mn1613/cpu_log_clear.js";
 import { clearCpuLogTestMark } from "./cpu_log_mark.js";
 import { FRAMEWORK_ROOT, REPO_ROOT } from "./repo.js";
 import { takeUnitTests } from "./unit.js";

@@ -206,7 +206,7 @@ export class BoardLinkClient {
 
   /**
    * ハンドシェイク 41h でメモリ／IO ブレイクを解除する。
-   * @param slot ブレイク設定番号（0–5）
+   * @param slot ブレイク設定番号（0–7）
    * @returns OK=0 / NG=1。リンク失敗時も NG
    */
   async addrBreakClr(slot: number): Promise<number> {

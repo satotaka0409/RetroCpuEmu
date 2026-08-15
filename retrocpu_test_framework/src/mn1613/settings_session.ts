@@ -4,13 +4,13 @@
  * 根拠: asm_test_framework.mdc
  */
 
-import { resolveSuitePath } from "./json_suite.js";
-import type { JsonTestSettings } from "./json_value.js";
+import { resolveSuitePath } from "../json_suite.js";
+import type { JsonTestSettings } from "../json_value.js";
 import {
   createMn1613AsmSession,
   type Mn1613AsmSession,
-} from "./mn1613_session.js";
-import type { CpuLogMode } from "./types.js";
+} from "./session.js";
+import type { CpuLogMode } from "../types.js";
 
 /**
  * 設定の HEX / CDB パスを絶対パスにする。

@@ -595,6 +595,29 @@ function parseIndirect(arg: string): IndirectReg {
 }
 
 /**
+ * AD/SD/M/D の第1オペランドが DR0 であることを確認する。
+ * @param arg オペランド
+ */
+function requireDr0(arg: string): void {
+  if (arg.trim().toUpperCase() !== "DR0") {
+    throw new Error(`First operand must be DR0 (got '${arg}')`);
+  }
+}
+
+/**
+ * AD/SD/M/D の第2オペランド。(R1)–(R4) のみ（自動増減なし）。
+ * @param arg オペランド
+ * @returns ii フィールド
+ */
+function parseDr0MemRi(arg: string): number {
+  const indir = parseIndirect(arg);
+  if (indir.mm !== 0b01) {
+    throw new Error(`Second operand must be (R1)–(R4) (got '${arg}')`);
+  }
+  return indir.ii;
+}
+
+/**
  * ベースレジスタ指定を解析する。
  * @param token - ベースレジスタトークン
  * @return 解析結果の数値
@@ -1182,26 +1205,36 @@ export function encodeInstruction(
     case "AD": {
       // AD DR0, (Ri)[, C][, Skip]  →  01001 111 kkkk c1ii
       expectArgs(line, 2, 4);
-      const indir = parseIndirect(line.args[1]);
+      requireDr0(line.args[0]);
+      const ii = parseDr0MemRi(line.args[1]);
       const { c, skip } = parseCarrySkip(line.args, 2);
-      return [op5(0b01001, 7, skip, (c << 3) | 0x04 | indir.ii)];
+      return [op5(0b01001, 7, skip, (c << 3) | 0x04 | ii)];
     }
     case "SD": {
       // SD DR0, (Ri)[, C][, Skip]  →  01000 111 kkkk c1ii
       expectArgs(line, 2, 4);
-      const indir = parseIndirect(line.args[1]);
+      requireDr0(line.args[0]);
+      const ii = parseDr0MemRi(line.args[1]);
       const { c, skip } = parseCarrySkip(line.args, 2);
-      return [op5(0b01000, 7, skip, (c << 3) | 0x04 | indir.ii)];
+      return [op5(0b01000, 7, skip, (c << 3) | 0x04 | ii)];
     }
     case "M": {
       // M DR0, (Ri)[, Skip]  →  01111 111 kkkk 11ii
       expectArgs(line, 2, 3);
-      return [encodeRindirect(line, 0b01111, 0x0c, 2, 1)];
+      requireDr0(line.args[0]);
+      const ii = parseDr0MemRi(line.args[1]);
+      const skip =
+        line.args.length > 2 ? parseSkip(line.args[2]) : 0;
+      return [op5(0b01111, 7, skip, 0x0c | ii)];
     }
     case "D": {
       // D DR0, (Ri)[, Skip]  →  01110 111 kkkk 11ii
       expectArgs(line, 2, 3);
-      return [encodeRindirect(line, 0b01110, 0x0c, 2, 1)];
+      requireDr0(line.args[0]);
+      const ii = parseDr0MemRi(line.args[1]);
+      const skip =
+        line.args.length > 2 ? parseSkip(line.args[2]) : 0;
+      return [op5(0b01110, 7, skip, 0x0c | ii)];
     }
     case "DAA": {
       // DAA R0, (Ri)[, C][, Skip]  →  01011 111 kkkk c1ii

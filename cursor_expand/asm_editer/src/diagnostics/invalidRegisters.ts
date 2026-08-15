@@ -96,6 +96,7 @@ export function findInvalidGprOperands(
     const name = m[0]!.toUpperCase();
     if (!arch.registers.has(name)) continue;
     if (gprs.has(name)) continue;
+    if (name === "DR0" && /^(AD|SD|M|D)$/.test(parsed.mnemonic)) continue;
     hits.push({
       name,
       start: m.index,

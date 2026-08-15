@@ -1,5 +1,5 @@
 /**
- * g_breakpoint_interrupt_handler（INT2 / INT_CAUSE=4 → 18h）
+ * g_breakpoint_interrupt_handler（INT2 / INT_CAUSE=3 → 18h）
  * 根拠: HandShake.mdc「ブレイク通知」/ breakpoint.mdc /
  * MN1613_CPUボードメモリ_IOマップ.mdc（0033/0034）
  */
@@ -75,7 +75,7 @@ function physWord(logAddr: number, sbr: number): number {
 
 /**
  * 履歴エントリ先頭の物理ワードアドレス。
- * @param slot ユーザ 0–5
+ * @param slot ユーザ 0–7
  * @param index リング index 0–15
  * @returns 物理ワードアドレス
  */
@@ -120,7 +120,7 @@ async function withCase(
 /**
  * ユーザースロット表へ 6 ワードを書く。
  * @param s セッション
- * @param slot 0–5
+ * @param slot 0–7
  * @param words ena / flags / count / addr_hi / addr_lo / data
  */
 function writeSlot(
@@ -198,8 +198,9 @@ test("回数 2 の 1 回目はデクリメントして継続", async () => {
   });
 });
 
-test("スロット 6 はステップ区分で 18h", async () => {
+test("スロット 6 もユーザ比較器として 18h", async () => {
   await withCase(sessionSlot6, async (s, mock) => {
+    writeSlot(s, 6, [1, 0, 0, 0, WATCH_BYTE, 0]);
     await Promise.all([
       s.call("g_breakpoint_interrupt_handler", {
         registers: { ...BASE_REGS },
@@ -208,9 +209,9 @@ test("スロット 6 はステップ区分で 18h", async () => {
     ]);
     s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
     expect(mock.state.lastBreakNotify).toEqual({
-      kind: 3,
+      kind: 1,
       slot: 6,
-      addr: 0,
+      addr: WATCH_BYTE,
     });
   });
 });
@@ -283,7 +284,7 @@ test("値比較不一致の Bit7 は履歴に書かない", async () => {
   });
 });
 
-test("INT2 要因4 で停止すると main_loop の H に入る", async () => {
+test("INT2 要因3 で停止すると main_loop の H に入る", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
     writeSlot(s, 0, [1, 0, 0, 0, WATCH_BYTE, 0]);
     s.writeWord(IDLE, OP_H);
@@ -294,7 +295,7 @@ test("INT2 要因4 で停止すると main_loop の H に入る", async () => {
       SSBR: 0,
       IISR: 0,
     });
-    mock.bus.INT_CAUSE = 4;
+    mock.bus.INT_CAUSE = 3;
     triggerInterrupt(2);
     const [status] = await Promise.all([
       run(IDLE, s.maxCycles),

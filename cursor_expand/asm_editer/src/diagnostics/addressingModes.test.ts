@@ -111,4 +111,12 @@ describe("findInvalidAddressingOperands", () => {
     assert.deepEqual(names("\tAWR\tR0, 4(X0)"), ["X0"]);
     assert.deepEqual(names("\tRDR\tR0, (SP)"), ["SP"]);
   });
+
+  test("AD/SD/M/D は DR0, (R1)–(R4)", () => {
+    assert.deepEqual(names("\tM\tDR0, (R3)"), []);
+    assert.deepEqual(names("\tAD\tDR0, (R1), C"), []);
+    assert.deepEqual(names("\tM\tDR0, R3"), ["R3"]);
+    assert.match(msg("\tM\tDR0, R3"), /\(R3\)/);
+    assert.deepEqual(names("\tD\tR0, (R2)"), ["R0"]);
+  });
 });

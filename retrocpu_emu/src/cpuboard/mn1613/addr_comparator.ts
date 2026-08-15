@@ -3,10 +3,10 @@
  * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc（IO 0030–0034）/
  *       HandShake.mdc / retrocpu_debug.mdc（比較器ブレイク）
  *
- * 一致時は呼び出し側が INT2・要因 4 を上げる（本モジュールはヒット判定とレジスタのみ）。
+ * 一致時は呼び出し側が INT2・要因 3 を上げる（本モジュールはヒット判定とレジスタのみ）。
  */
 
-/** 比較器本数（ユーザ 0–5 + ステップ 6–7） */
+/** 比較器本数（ユーザ 0–7。ステップは比較器を使わない） */
 export const CPLD_COMPARATOR_COUNT = 8;
 
 /** IO:0030 — スロット選択と ENA / MEM·IO / RD·WR */
@@ -134,7 +134,7 @@ export class AddrComparatorBank {
   private prevWrite: number[];
   /** 0033 読取でラッチした 0034 値（READ ヒットは 0） */
   private prevLatch = 0;
-  /** ヒット時コールバック（INT2 要因4 など） */
+  /** ヒット時コールバック（INT2 要因3 など） */
   private onHit: ((slot: number) => void) | null = null;
 
   /** 8 スロットを無効で初期化する */

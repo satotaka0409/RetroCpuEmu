@@ -17,6 +17,8 @@
 	.global g_int3_handler
 	.global g_handshake_interrupt_handler
 	.global g_breakpoint_interrupt_handler
+	.global g_step_interrupt_handler
+	.global g_step_arm_cpld
 	.global g_bios_undef_led
 	.global g_write_cpu_registers
 	.global g_main_loop
@@ -125,7 +127,7 @@ g_int1_handler:
 	lpsw	1
 
 ; -------------------------------------------------------
-; INT2 割り込みハンドラー（要因 0/1=タイマー、2=ハンドシェイク、4=ブレイク）
+; INT2 割り込みハンドラー（要因 0/1=タイマー、2=ハンドシェイク、3=比較器、4=ステップ）
 ; -------------------------------------------------------
 g_int2_handler:
 	pshm
@@ -175,11 +177,20 @@ l_next_handshake:
 	bald	g_handshake_interrupt_handler
 	pop	X1
 	push	X1
-	; ブレイクポイント割り込みハンドラー（要因 4）
+	; ブレイクポイント割り込みハンドラー（要因 3）
 	l	R0, 1(X1)
-	cbi	R0, #4, Z
-	b	l_int2_epilogue
+	cbi	R0, #INT_CAUSE_ADDR_BREAK, Z
+	b	l_int2_try_step
 	bald	g_breakpoint_interrupt_handler
+	or	R0, R0, Z
+	b	l_int2_halt
+	b	l_int2_epilogue
+l_int2_try_step:
+	; ステップ実行（要因 4。比較器は使わない）
+	l	R0, 1(X1)
+	cbi	R0, #INT_CAUSE_STEP, Z
+	b	l_int2_epilogue
+	bald	g_step_interrupt_handler
 	or	R0, R0, Z
 	b	l_int2_halt
 l_int2_epilogue:
@@ -193,6 +204,8 @@ l_int2_epilogue:
 	pop	R0
 	setb	R1, TSR1
 	setb	R0, TSR0
+	; 61h ステップなら LPSW 2 の直前に CPLD を武装する
+	bald	g_step_arm_cpld
 	popm
 	lpsw	2
 l_int2_halt:

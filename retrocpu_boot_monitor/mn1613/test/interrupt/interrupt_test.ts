@@ -218,13 +218,13 @@ test("INT2 要因1はタイマー1スロットだけ呼ぶ", async () => {
   });
 });
 
-test("INT2 要因4（アドレスブレイク等）はタイマー登録を呼ばない", async () => {
+test("INT2 要因3（アドレスブレイク等）はタイマー登録を呼ばない", async () => {
   await withCase(async (s, mock) => {
     writeIncRetlStub(s, HANDLER0, COUNTER0);
     writeIncRetlStub(s, HANDLER1, COUNTER1);
     await setIntAdr(4, 0, HANDLER0);
     await setIntAdr(5, 0, HANDLER1);
-    await raiseAndRunToIdle(s, mock, 2, 4);
+    await raiseAndRunToIdle(s, mock, 2, 3);
     expect(s.readWord(COUNTER0)).toBe(0);
     expect(s.readWord(COUNTER1)).toBe(0);
   });
