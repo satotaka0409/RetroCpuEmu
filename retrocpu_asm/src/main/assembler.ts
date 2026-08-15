@@ -4,7 +4,12 @@ import {
   matchPage0StarReloc,
   matchWordDiffReloc,
 } from "./expression";
-import { encodeInstruction, MN1613_ONLY_OPS, TWO_WORD_OPS } from "./encoder";
+import {
+  encodeInstruction,
+  MN1613_ONLY_OPS,
+  TWO_WORD_OPS,
+  u16,
+} from "./encoder";
 import {
   encodeTms9995Instruction,
   tms9995InstructionSize,
@@ -548,7 +553,13 @@ function pass2(
             );
           }
         }
-        const value: number = evalExpr(arg, symbols, false);
+        let value: number;
+        try {
+          value = u16(evalExpr(arg, symbols, false), line.op);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          throw new Error(`Line ${line.lineNo}: ${msg}`);
+        }
         emitWord(words, areaPc(areas), value, line, areas.current);
         setAreaPc(areas, areaPc(areas) + addrStep);
       }

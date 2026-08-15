@@ -261,7 +261,7 @@ export class Mn1613CodeTest {
     });
     reset();
     clearBreakpoints();
-    setState({ SP: this.stackInit });
+    setState({ SP: this.stackInit, STR: 0 });
     writeWord(this.returnStubWordAddr, H_OPCODE);
   }
 

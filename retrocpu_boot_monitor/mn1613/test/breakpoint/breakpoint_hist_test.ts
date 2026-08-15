@@ -95,18 +95,22 @@ function writeSlot(
   }
 }
 
+const SNAP_BASE = 0x1900;
+
 /**
- * 履歴追記が読む入口スナップを置く。
+ * 履歴追記が読む入口スナップをユーザ RAM に置く。
  * @param s セッション
+ * @param prev 0034 相当（WRITE 時の前回値。READ では無視される）
+ * @returns スナップ先頭（R0 に渡すワードアドレス）
  */
-function writeSnap(s: Mn1613AsmSession): void {
-  const r3 = s.wordAddr("GL_BP_SNAP_R3");
-  s.writeWord(r3, SNAP_R3);
-  s.writeWord(r3 + 1, SNAP_R4);
-  const tsr = s.wordAddr("GL_BP_SNAP_TSR0");
-  s.writeWord(tsr, 0);
-  s.writeWord(tsr + 1, 0);
-  s.writeWord(s.wordAddr("GL_BP_SNAP_SP"), 0);
+function writeSnap(s: Mn1613AsmSession, prev = 0): number {
+  s.writeWord(SNAP_BASE + 0, prev);
+  s.writeWord(SNAP_BASE + 1, SNAP_R3);
+  s.writeWord(SNAP_BASE + 2, SNAP_R4);
+  s.writeWord(SNAP_BASE + 3, 0);
+  s.writeWord(SNAP_BASE + 4, 0);
+  s.writeWord(SNAP_BASE + 5, 0);
+  return SNAP_BASE;
 }
 
 /**
@@ -115,17 +119,19 @@ function writeSnap(s: Mn1613AsmSession): void {
  * @param mock IO モック
  * @param kind 1Ah 区分
  * @param slot 0–7
+ * @param snap 入口スナップ先頭
  */
 async function appendOnce(
   s: Mn1613AsmSession,
   mock: IoBoardHandshakeMock,
   kind: number,
   slot: number,
+  snap: number,
 ): Promise<void> {
   const table = s.wordAddr("GL_HSHK_ADDR_BREAK") + slot * SLOT_WORDS;
   await Promise.all([
     s.call("g_bp_hist_append", {
-      registers: { R2: kind, R3: slot, R4: table },
+      registers: { R0: snap, R2: kind, R3: slot, R4: table },
     }),
     mock.handleOneRequest(),
   ]);
@@ -134,11 +140,10 @@ async function appendOnce(
 test("WRITE は 11h 時刻と AFTER/PREV をスロット 0 の 3F000h に書く", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s, PREV_WR);
     s.writeWord(WATCH_WORD, AFTER_WR);
-    s.writeWord(s.wordAddr("GL_BP_HIT_PREV"), PREV_WR);
     writeSlot(s, 0, [1, FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
-    await appendOnce(s, mock, KIND_MEM, 0);
+    await appendOnce(s, mock, KIND_MEM, 0, snap);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META") + 1)).toBe(1);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META") + 2)).toBe(0);
@@ -156,11 +161,10 @@ test("WRITE は 11h 時刻と AFTER/PREV をスロット 0 の 3F000h に書く"
 test("スロット 7 は slot×528 先へ書く", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s, PREV_WR);
     s.writeWord(WATCH_WORD, AFTER_WR);
-    s.writeWord(s.wordAddr("GL_BP_HIT_PREV"), PREV_WR);
     writeSlot(s, 7, [1, FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
-    await appendOnce(s, mock, KIND_MEM, 7);
+    await appendOnce(s, mock, KIND_MEM, 7, snap);
     const meta = s.wordAddr("GL_BP_HIST_META") + 7 * 3;
     expect(s.readWord(meta)).toBe(1);
     expect(s.readWord(histEntryPhys(7, 0))).toBe(SAMPLE_TIME_WORDS[0]);
@@ -175,11 +179,10 @@ test("スロット 7 は slot×528 先へ書く", async () => {
 test("READ / 命令の PREV は 0000h", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s, PREV_WR);
     s.writeWord(WATCH_WORD, AFTER_WR);
-    s.writeWord(s.wordAddr("GL_BP_HIT_PREV"), PREV_WR);
     writeSlot(s, 0, [1, FLAGS_RD | FLAGS_INST, 0, 0, WATCH_BYTE, 0]);
-    await appendOnce(s, mock, 0, 0);
+    await appendOnce(s, mock, 0, 0, snap);
     const ent = histEntryPhys(0, 0);
     expect(s.readWord(ent + 4)).toBe(AFTER_WR);
     expect(s.readWord(ent + 5)).toBe(0);
@@ -189,10 +192,10 @@ test("READ / 命令の PREV は 0000h", async () => {
 test("IO 区分の AFTER は 0", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s);
     s.writeWord(WATCH_WORD, AFTER_WR);
     writeSlot(s, 0, [1, FLAGS_IO | FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
-    await appendOnce(s, mock, KIND_IO, 0);
+    await appendOnce(s, mock, KIND_IO, 0, snap);
     const ent = histEntryPhys(0, 0);
     expect(s.readWord(ent + 4)).toBe(0);
   });
@@ -201,16 +204,15 @@ test("IO 区分の AFTER は 0", async () => {
 test("17 件目は件数 16 のままオーバフローを立て、index 0 を上書きする", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s, PREV_WR);
     s.writeWord(WATCH_WORD, AFTER_WR);
-    s.writeWord(s.wordAddr("GL_BP_HIT_PREV"), PREV_WR);
     writeSlot(s, 0, [1, FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
     const meta = s.wordAddr("GL_BP_HIST_META");
     s.writeWord(meta, HIST_DEPTH);
     s.writeWord(meta + 1, 0);
     s.writeWord(meta + 2, 0);
     s.writeWord(histEntryPhys(0, 0), 0x1111);
-    await appendOnce(s, mock, KIND_MEM, 0);
+    await appendOnce(s, mock, KIND_MEM, 0, snap);
     expect(s.readWord(meta)).toBe(HIST_DEPTH);
     expect(s.readWord(meta + 1)).toBe(1);
     expect(s.readWord(meta + 2)).toBe(1);
@@ -221,11 +223,11 @@ test("17 件目は件数 16 のままオーバフローを立て、index 0 を�
 test("R2/R3/R4 は追記の前後で保たれる", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
-    writeSnap(s);
+    const snap = writeSnap(s);
     s.writeWord(WATCH_WORD, AFTER_WR);
     writeSlot(s, 1, [1, FLAGS_RD, 0, 0, WATCH_BYTE, 0]);
     const table = s.wordAddr("GL_HSHK_ADDR_BREAK") + SLOT_WORDS;
-    await appendOnce(s, mock, KIND_MEM, 1);
+    await appendOnce(s, mock, KIND_MEM, 1, snap);
     s.expectRegisters({ R2: KIND_MEM, R3: 1, R4: table });
   });
 });

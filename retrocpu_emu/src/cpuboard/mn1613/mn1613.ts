@@ -211,7 +211,7 @@ const _outputPins: OutputPin[] = [_pinIOP, _pinBSRQ, _pinWRT];
 
 /**
  * 電源投入直後相当: レジスタ初期化のみ行い、実行はしない（リセット待ち）。
- * IO:0 は読まない。RST パルス（reset）でベクタ読み出し＋実行開始する。
+ * IO:0 は読まない。RST パルス（reset）でベクタ表を読んで実行開始する。
  */
 export function powerOnIdle(): void {
   cpuRegister = {
@@ -245,7 +245,10 @@ export function powerOnIdle(): void {
   _ioLastWrite.clear();
 }
 
-/** CPU をリセットする（MN1613 仕様: IO:0 の RESET_VECTOR → IC、実行開始、NPP=1） */
+/**
+ * CPU をリセットする（MN1613.mdc）。
+ * IO:0 を読み、その値+2 のメモリ → STR、+3 のメモリ → IC。NPP=1 で実行開始。
+ */
 export function reset(): void {
   cpuRegister = {
     R: [0, 0, 0, 0, 0],
@@ -275,8 +278,10 @@ export function reset(): void {
     setOutputLevel(p, false);
     p[1] = false;
   }
-  // MN1613: リセット後に IO アドレス 0 を読み、IC にセットして実行開始
-  cpuRegister.IC = _doIoRead(0) & 0xffff;
+  // MN1613: IO:0 → ベクタ表先頭。mem[先頭+2]=STR、mem[先頭+3]=IC
+  const vec = _ioRead(0) & 0xffff;
+  cpuRegister.STR = _peekWord(vec + 2);
+  cpuRegister.IC = _peekWord(vec + 3);
   _clockCount = 0n;
   _execStatus = "running";
 }
@@ -693,6 +698,16 @@ function _doIoWrite(port: number, val: number): void {
  */
 function _phys(logAddr: number, seg: number): number {
   return (((seg & 0xf) << 14) + (logAddr & 0xffff)) & 0x3ffff;
+}
+
+/**
+ * リセット用に CSBR=0 の論理ワードを読む（クロック・比較器は動かさない）。
+ * @param logAddr 論理ワードアドレス（16bit）
+ * @returns 16bit 値。範囲外は 0xFFFF
+ */
+function _peekWord(logAddr: number): number {
+  const b = _phys(logAddr & 0xffff, 0) * 2;
+  return b + 1 >= _memView.byteLength ? 0xffff : _memView.getUint16(b, false);
 }
 
 // ─────────────────────────────────────────────

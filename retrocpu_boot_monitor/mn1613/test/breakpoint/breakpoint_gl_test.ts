@@ -1,10 +1,11 @@
 /**
- * 命令ブレイク結合（10h 設定 → フェッチヒット → INT2 → 1Ah / 17h / 18h）
- * 根拠: HandShake.mdc（10h / 1Ah / 17h / 18h）/ breakpoint.mdc /
- * MN1613_CPUボードメモリ_IOマップ.mdc（比較器 0030–0034）
+ * 命令ブレイク結合（10h 設置 → 1Ah 停止通知 → 17h 状態/履歴 → 18h ステップ復帰）
+ * 根拠: HandShake.mdc（10h / 1Ah / 17h / 18h / 1Bh）/ breakpoint.mdc /
+ * MN1613_CPUボードメモリ_IOマップ.mdc（比較器 0030–0034、STEP 0036/0037）
  *
  * 10h は BIOS 表（GL_HSHK_ADDR_BREAK）へ書く。CPLD 比較器は BIOS が
  * 0030–0032 へまだ出さないため、テストが同じスロットへ MEM+READ を載せる。
+ * 停止時の CPU 状態は廃止の 48h ではなく 17h 履歴エントリ（相対 0x0C 以降）。
  */
 import {
   BREAK_RDWR_RD,
@@ -55,6 +56,9 @@ const IDLE_SP = 0xff00;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 /** 17h: ヘッダ 8B ＋ エントリ 66B×件数 ＋ 終端 1B */
 const HIST_ENTRY_BYTES = 66;
+/** EOR R0,R0 */
+const OP_EOR_R0 = 0x6000;
+const L2_IC_SAVE = 5;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
   withMn1613CpuLog(mn1613MonHandshakeSettings, import.meta.url),
@@ -153,6 +157,16 @@ function armCpldFetchBreak(slot: number, wordAddr: number): void {
     IO_PORT_BREAK_CTRL,
     encodeBreakCtrl(slot, true, false, BREAK_RDWR_RD),
   );
+}
+
+/**
+ * ビッグエンディアン 16bit をバッファから読む。
+ * @param buf バイト列
+ * @param off 先頭オフセット
+ * @returns 16bit
+ */
+function be16(buf: Uint8Array, off: number): number {
+  return ((buf[off]! << 8) | buf[off + 1]!) & 0xffff;
 }
 
 /**
@@ -279,7 +293,7 @@ test("命令ブレイク（回数4・履歴）は 4 件残して 1Ah する", as
   });
 });
 
-test("10h 設置→1Ah 停止→17h 履歴→18h 通常復帰", async () => {
+test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     const setReply = await callHandler(
@@ -297,8 +311,23 @@ test("10h 設置→1Ah 停止→17h 履歴→18h 通常復帰", async () => {
       0,
     ]);
 
+    s.writeWord(WATCH_WORD, OP_EOR_R0);
+    s.writeWord(WATCH_WORD + 1, 0x2000);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: IDLE_SP,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+      R: {
+        0: 0x1111,
+        1: 0x1001,
+        2: BASE_REGS.R2,
+        3: BASE_REGS.R3,
+        4: BASE_REGS.R4,
+      },
+    });
     armCpldFetchBreak(0, WATCH_WORD);
-    loadSelfLoop(s);
     mock.start();
     try {
       const status = await run(WATCH_WORD, s.maxCycles);
@@ -313,6 +342,8 @@ test("10h 設置→1Ah 停止→17h 履歴→18h 通常復帰", async () => {
       addr: WATCH_BYTE,
     });
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
+    const userIc = s.readWord(L2_IC_SAVE);
+    expect(userIc).toBe(WATCH_WORD + 1);
 
     addrComparators.writePort(
       IO_PORT_BREAK_CTRL,
@@ -334,14 +365,27 @@ test("10h 設置→1Ah 停止→17h 履歴→18h 通常復帰", async () => {
     expect(hist[6]).toBe((WATCH_BYTE >>> 8) & 0xff);
     expect(hist[7]).toBe(WATCH_BYTE & 0xff);
     expect(hist[hist.length - 1]).toBe(0x00);
-    expect(Array.from(hist.slice(8, 16))).toEqual([...SAMPLE_TIME]);
-    expect((hist[16]! << 8) | hist[17]!).toBe(OP_B_SELF);
-    expect((hist[18]! << 8) | hist[19]!).toBe(0);
+    const ent = 8;
+    expect(Array.from(hist.slice(ent, ent + 8))).toEqual([...SAMPLE_TIME]);
+    expect(be16(hist, ent + 8)).toBe(OP_EOR_R0);
+    expect(be16(hist, ent + 10)).toBe(0);
+    expect(be16(hist, ent + 12)).toBe(0);
+    expect(be16(hist, ent + 14)).toBe(0);
+    expect(be16(hist, ent + 16)).toBe(0);
+    expect(be16(hist, ent + 18)).toBe(BASE_REGS.R3);
+    expect(be16(hist, ent + 20)).toBe((IDLE_SP - 8) & 0xffff);
+    expect(be16(hist, ent + 22)).toBe(IDLE_SP);
+    expect(be16(hist, ent + 26)).toBe(userIc);
 
-    const resume = await callHandler(mock, Uint8Array.from([0x18, 0]), 1);
+    const resume = await callHandler(mock, Uint8Array.from([0x18, 1]), 1);
     expect(Array.from(resume)).toEqual([0x00]);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
     expect(stepBreak.getEnable()).toBe(0);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
+
+    await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
+    expect(stepBreak.getTriggerWord()).toBe(0x2006);
+    expect(stepBreak.getEnable()).toBe(1);
+    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
   });
 });

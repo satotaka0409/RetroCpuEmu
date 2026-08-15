@@ -28,13 +28,11 @@ GL_ALLOC2_DEFAULT_SIZE	.equ	0xF000
 ;     sdld `-b _SYS_PAGE0=0x0010`（ワード 0008h）から CON 連結する。
 ;     bios_common（種＋ヒープ 6 ワード）→ handshake_led（ラッチ 14 ワード）
 	.area	_SYS_PAGE0	(REL,NOLOAD)
+	.org	0x0008
 ; --- USER: ユーザページ0エリア（sdld `-b _USR_PAGE0=0x0080`＝ワード 0040h）
 	.area	_USR_PAGE0	(REL,NOLOAD)
 
-	.area	_VECTOR		(REL,CON)
-	.org	0x0100
-
 	.area	_CODE		(REL,CON)
-	.org	0x0108
+	.org	0x0100
 	.area	_DATA		(REL,CON)
 	.area	_WORK		(REL,NOLOAD)

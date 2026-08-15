@@ -2,7 +2,7 @@
  * 1階 IO ボードのポートマップ（簡易）
  * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
  *
- * 0000 RESET_VECTOR — リセット時 CPU が読む起動 IC
+ * 0000 RESET_VECTOR — リセット時 CPU が読むベクタ表の先頭（+2=STR / +3=IC）
  * 0020〜0024 — ハンドシェイク（任意で bridge 接続）
  * 0030〜0034 — CPLD アドレス比較器（設定・ヒット・前回書込値）
  * 0036〜0037 — CPLD ステップ実行（ENA / トリガ命令語）
@@ -36,8 +36,12 @@ import { INT_CAUSE_CODE } from "../shared/handshake/handshake_type";
 /** IO:0000 — リセットベクタ（ワードアドレス） */
 export const IO_PORT_RESET_VECTOR = 0x0000;
 
-/** モニター入口（メモリマップ上の既定。`_CODE` / RESET_VECTOR） */
+/** モニターのリセットベクタ表先頭（IO:0 が返す値。`g_reset_vector`） */
 export const MONITOR_ENTRY_WORD = 0x0108;
+/** IO:0 の値からの STR 語オフセット（MN1613.mdc） */
+export const RESET_VECTOR_STR_OFF = 2;
+/** IO:0 の値からの IC 語オフセット（MN1613.mdc） */
+export const RESET_VECTOR_IC_OFF = 3;
 
 /** H 命令オペコード */
 export const OPCODE_H = 0x2000;
@@ -48,8 +52,8 @@ let _intCause = 0;
 let _interruptBusy = 0;
 
 /**
- * リセット時に CPU が読む起動アドレスを返す。
- * @returns ワードアドレス（既定はモニター入口 0x0108）
+ * リセット時に CPU が IO:0 から読むベクタ表の先頭を返す。
+ * @returns ワードアドレス（既定は `g_reset_vector` 0x0108）
  */
 export function getResetVector(): number {
   return _resetVector & 0xffff;

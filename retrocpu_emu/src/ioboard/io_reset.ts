@@ -2,7 +2,7 @@
  * IO ボードのリセット動作（ioboard.mdc）
  *
  * F7 RST / 電源投入相当: HALT → ブートモニタ IHX を DMA 書き込み → CPU リセット。
- * RESET_VECTOR（IO:0）は既定 0x0108（MN1613 モニター入口 / `_CODE`）。
+ * RESET_VECTOR（IO:0）は既定 0x0108（`g_reset_vector` 表先頭。STR/IC は表+2/+3）。
  */
 
 import fs from "node:fs";
@@ -23,7 +23,7 @@ export type IoResetLink = {
   setHalt(halt: boolean): Promise<void>;
   /** DMA で CPU RAM へ書く（バイトアドレス） */
   writeBytes(byteAddr: number, data: Uint8Array): Promise<void>;
-  /** RST パルス（IO:0 の RESET_VECTOR → IC、実行開始） */
+  /** RST パルス（IO:0 の表先頭をラッチ。CPU が mem[+2/+3] を STR/IC に載せて実行開始） */
   pulseReset(resetVectorWord?: number): Promise<void>;
 };
 

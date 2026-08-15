@@ -178,6 +178,54 @@ describe("assembler: エラー系 - 即値オーバーフロー", () => {
     );
   });
 
+  test("MVI: 桁の多い 16進は 8bit を超えてエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        MVI R0, #0x00000111\n"),
+      /out of 8-bit range/i,
+    );
+  });
+
+  test("MVWI: 16bit 即値 65536 はオーバーフロー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        MVWI R0, #65536\n"),
+      /out of 16-bit range/i,
+    );
+  });
+
+  test("MVWI: 桁の多い 16進は 16bit を超えてエラー", () => {
+    assert.throws(
+      () =>
+        assemble("        .org 0\n        MVWI R0, #0x0000011100000000\n"),
+      /out of 16-bit range/i,
+    );
+  });
+
+  test("MVWI: #-1 と #0xFFFF は 16bit に収まる", () => {
+    const a = assemble("        .org 0\n        MVWI R0, #-1\n");
+    const b = assemble("        .org 0\n        MVWI R0, #0xFFFF\n");
+    assert.equal(a.words[1]!.value, 0xffff);
+    assert.equal(b.words[1]!.value, 0xffff);
+  });
+
+  test(".dw: 65536 はオーバーフロー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        .dw 65536\n"),
+      /out of 16-bit range/i,
+    );
+  });
+
+  test(".dw: 桁の多い 16進は 16bit を超えてエラー", () => {
+    assert.throws(
+      () => assemble("        .org 0\n        .dw 0x0000011100000000\n"),
+      /out of 16-bit range/i,
+    );
+  });
+
+  test(".dw: -1 は 16bit に収まる", () => {
+    const r = assemble("        .org 0\n        .dw -1\n");
+    assert.equal(r.words[0]!.value, 0xffff);
+  });
+
   test("RD: I/O アドレス 256 はオーバーフロー", () => {
     assert.throws(
       () => assemble("        .org 0\n        RD R0, #256\n"),

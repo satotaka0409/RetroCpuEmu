@@ -86,7 +86,6 @@ g_int0_handler:
 	; IISR 未定義命令フラグクリア
 	eor	R0, R0
 	seth	R0, IISR
-	; TODO: レジスタをハンドシェイク送信。当面はメインループへ
 	popm
 	bd	g_main_loop
 	; INT0 0-1 割り込みハンドラー

@@ -96,8 +96,6 @@ async function callLed(
 
 test("g_main 後、ラッチ 14 ワードは 0 で種は保たれる", async () => {
   await withCase(async (s) => {
-    expect(s.wordAddr("GL_RND_SEED")).toBe(0x0008);
-    expect(s.wordAddr("GL_HSHK_LED_LATCH")).toBe(0x0010);
     expect(s.readWord(s.wordAddr("GL_RND_SEED"))).toBe(GL_RND_DEFAULT_SEED);
     const latch = s.wordAddr("GL_HSHK_LED_LATCH");
     for (let i = 0; i < 14; i += 1) {

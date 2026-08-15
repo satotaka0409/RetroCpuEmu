@@ -37,6 +37,14 @@ const FLAGS_EQ = 0x08;
 const FLAGS_WR = 0x04;
 const FLAGS_RD = 0x02;
 const FLAGS_HIST = 0x80;
+/** HandShake.mdc flags Bit3–5: 0=なし 1:= 2:<> 3:>= 4:<= 5:AND<>0 6:AND=0 7=未定義 */
+const BP_COND_EQ = 1;
+const BP_COND_NE = 2;
+const BP_COND_GE = 3;
+const BP_COND_LE = 4;
+const BP_COND_AND_NZ = 5;
+const BP_COND_AND_Z = 6;
+const BP_COND_UNDEF = 7;
 const PREV_WR = 0xbeef;
 const AFTER_WR = 0xcafe;
 const HIST_SBR = 0x0c;
@@ -216,15 +224,15 @@ test("スロット 6 もユーザ比較器として 1Ah", async () => {
   });
 });
 
-test("0034 は履歴なしでも GL_BP_HIT_PREV に残る", async () => {
+test("履歴なし WRITE は継続しメタを触らない", async () => {
   await withCase(sessionPrev, async (s) => {
     writeSlot(s, 0, [1, FLAGS_WR, 2, 0, WATCH_BYTE, 0]);
     await s.call("g_breakpoint_interrupt_handler", {
       registers: { ...BASE_REGS },
     });
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(s.readWord(s.wordAddr("GL_BP_HIT_PREV"))).toBe(PREV_WR);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(0);
+    expect(s.requireHandshakeMock().state.lastBreakNotify).toBe(null);
   });
 });
 
@@ -240,7 +248,6 @@ test("Bit7 WRITE は 11h のあと 0034 と AFTER を 3F000h に書く", async (
       mock.handleOneRequest(),
     ]);
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(s.readWord(s.wordAddr("GL_BP_HIT_PREV"))).toBe(PREV_WR);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
     const ent = histEntryPhys(0, 0);
     s.expectMemoryWords(ent, [...SAMPLE_TIME_WORDS, AFTER_WR, PREV_WR]);
@@ -262,7 +269,6 @@ test("Bit7 READ の PREV は 0000h（0034 は生値のまま）", async () => {
       mock.handleOneRequest(),
     ]);
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(s.readWord(s.wordAddr("GL_BP_HIT_PREV"))).toBe(PREV_WR);
     const ent = histEntryPhys(0, 0);
     expect(s.readWord(ent + 4)).toBe(AFTER_WR);
     expect(s.readWord(ent + 5)).toBe(0);
@@ -283,6 +289,55 @@ test("値比較不一致の Bit7 は履歴に書かない", async () => {
     expect(s.requireHandshakeMock().state.lastBreakNotify).toBe(null);
   });
 });
+
+/**
+ * 値比較条件を flags の Bit3–5 に載せる。
+ * @param cond 0–7（breakpoint.asm の BP_COND_*）
+ * @returns flags に OR するマスク
+ */
+function condFlags(cond: number): number {
+  return (cond & 7) << 3;
+}
+
+/** MEM READ で条件不一致（または条件不正）になる組。GE/LE は符号付き 16bit。 */
+const READ_MISMATCH: readonly {
+  title: string;
+  cond: number;
+  access: number;
+  data: number;
+}[] = [
+  { title: "=", cond: BP_COND_EQ, access: 0xaaaa, data: 0x1234 },
+  { title: "<>", cond: BP_COND_NE, access: 0x1234, data: 0x1234 },
+  { title: ">= 正", cond: BP_COND_GE, access: 0x0001, data: 0x0010 },
+  { title: ">= 負", cond: BP_COND_GE, access: 0xfffe, data: 0xffff },
+  { title: "<= 正", cond: BP_COND_LE, access: 0x0010, data: 0x0001 },
+  { title: "<= 負", cond: BP_COND_LE, access: 0xffff, data: 0xfffe },
+  { title: "AND<>0", cond: BP_COND_AND_NZ, access: 0x00ff, data: 0xff00 },
+  { title: "AND=0", cond: BP_COND_AND_Z, access: 0x00f0, data: 0x00ff },
+  { title: "未定義7", cond: BP_COND_UNDEF, access: 0x1234, data: 0x1234 },
+];
+
+for (const c of READ_MISMATCH) {
+  test(`MEM READ 条件 ${c.title} 不一致はスルーして履歴に書かない`, async () => {
+    await withCase(sessionPrev, async (s) => {
+      s.writeWord(WATCH_WORD, c.access);
+      writeSlot(s, 0, [
+        1,
+        FLAGS_RD | condFlags(c.cond) | FLAGS_HIST,
+        0,
+        0,
+        WATCH_BYTE,
+        c.data,
+      ]);
+      await s.call("g_breakpoint_interrupt_handler", {
+        registers: { ...BASE_REGS },
+      });
+      s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
+      expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(0);
+      expect(s.requireHandshakeMock().state.lastBreakNotify).toBe(null);
+    });
+  });
+}
 
 test("INT2 要因3 で停止すると main_loop の H に入る", async () => {
   await withCase(sessionSlot0, async (s, mock) => {

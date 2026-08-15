@@ -124,7 +124,7 @@ test("未定義命令で INT0 が掛かり IISR bit15 が立つ", async () => {
     const st = getState();
     expect(st.IISR & 0x8000).toBe(0x8000);
     expect(mock.state.undefLed).toBe(true);
-    // l_main_loop の H 実行後 IC はその次（H=0x2000）
+    // g_main_loop の H 実行後 IC はその次（H=0x2000）
     const ic = st.IC & 0xffff;
     expect(s.readWord((ic - 1) & 0xffff)).toBe(0x2000);
   });

@@ -126,7 +126,7 @@ export function tryEvalExpr(
 
     const value = parseBitwiseOr();
     if (idx !== tokens.length) return undefined;
-    return value | 0;
+    return value;
   } catch {
     return undefined;
   }

@@ -251,7 +251,7 @@ export class BoardLinkClient {
 
   /**
    * CPU にリセットパルスを送る（HLT 解除込み。F7 / 電源投入の最終段）。
-   * @param resetVectorWord IO:0000 へ積むリセットベクタ（ワードアドレス、任意）
+   * @param resetVectorWord IO:0000 へ積むベクタ表先頭（ワードアドレス、任意。STR/IC は表+2/+3）
    */
   async pulseReset(resetVectorWord?: number): Promise<void> {
     const port = this.requirePort();

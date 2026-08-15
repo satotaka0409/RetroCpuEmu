@@ -14,7 +14,7 @@
 ; 処理の流れ:
 ;   1. 0033 を読む。Bit3 以上が立っていたら未ヒット（0xFFFF など）→ スルー。
 ;      下位 3bit がスロット番号 0–7。
-;   2. 0034 を読む（前回書込値）。GL_BP_HIT_PREV に生値を残す。
+;   2. 0034 を読む（前回書込値）。スタックフレームへ残す（リエントラント）。
 ;   3. スロット 0–7 はすべてユーザ。GL_HSHK_ADDR_BREAK（1 スロット 6 ワード）を見る。
 ;      ステップ実行は比較器を使わない（別機構）。
 ;        +0 ena    0=無効 → スルー
@@ -66,10 +66,16 @@
 	.global g_hshk_finalize_recv
 	.global g_hshk_mem_map
 	.global g_bp_hist_append
-	.global GL_BP_HIT_PREV
-	.global GL_BP_SNAP_R3
-	.global GL_BP_SNAP_TSR0
-	.global GL_BP_SNAP_SP
+
+; 入口スナップ（si #BP_FR のあと X0=SP）。+1 が HSHK_BP_SNAP_* の 0
+BP_FR			.equ	HSHK_BP_SNAP_WORDS
+BP_FR_PREV		.equ	HSHK_BP_SNAP_PREV + 1
+BP_FR_R3		.equ	HSHK_BP_SNAP_R3 + 1
+BP_FR_R4		.equ	HSHK_BP_SNAP_R4 + 1
+BP_FR_TSR0		.equ	HSHK_BP_SNAP_TSR0 + 1
+BP_FR_TSR1		.equ	HSHK_BP_SNAP_TSR1 + 1
+BP_FR_SP		.equ	HSHK_BP_SNAP_SP + 1
+; INT2: PSHM5 + TSR2 + 穴1 + X1 + 戻り + R3/R4 = 12。si 後は +BP_FR を足す
 
 ; 1Ah 区分（HandShake.mdc）
 BP_KIND_INST		.equ	0
@@ -94,24 +100,26 @@ BP_COND_AND_Z		.equ	6	; (access AND data) = 0
 g_breakpoint_interrupt_handler:
 	push	R3
 	push	R4
-	; 履歴用にヒット直前の R3/R4/TSR を残す。
-	; X0≡R3 / X1≡R4 なので、mvwi の前にスタックから取る。
+	; si 前に元 R3/R4 を取る（X0≡R3 を潰す前）
 	mv	X0, SP
-	l	R1, 2(X0)		; 元 R3
-	l	R2, 1(X0)		; 元 R4
-	mvwi	X1, #GL_BP_SNAP_R3
-	st	R1, 0(X1)
-	st	R2, 1(X1)
+	l	R1, 2(X0)
+	l	R2, 1(X0)
+	si	SP, #BP_FR
+	mv	X1, SP
+	st	R1, BP_FR_R3(X1)
+	st	R2, BP_FR_R4(X1)
 	cpyb	R0, TSR0
 	andi	R0, #0x000f
-	st	R0, 2(X1)
+	st	R0, BP_FR_TSR0(X1)
 	cpyb	R0, TSR1
 	andi	R0, #0x000f
-	st	R0, 3(X1)
-	; ヒット直前のユーザ SP（INT2: PSHM 5 + TSR 2 + 穴 1 + X1 + 戻り + R3/R4）
+	st	R0, BP_FR_TSR1(X1)
 	mv	R0, SP
 	ai	R0, #12
-	st	R0, 4(X1)
+	ai	R0, #BP_FR
+	st	R0, BP_FR_SP(X1)
+	eor	R0, R0
+	st	R0, BP_FR_PREV(X1)
 
 	; --- ヒット番号（0033）。0xFFFF をスロット 7 と誤認しない ---
 	rd	R0, IO_BREAK_HIT
@@ -121,10 +129,10 @@ g_breakpoint_interrupt_handler:
 	bd	l_bp_cont
 l_bp_hit_ok:
 	andi	R0, #0x0007
-	mv	R3, R0			; R3 = スロット 0–7
+	mv	R3, R0			; R3 = スロット 0–7（以降 X0 を使わない）
 	rd	R1, IO_BREAK_PREV	; 0034 前回書込値
-	mvwi	X1, #GL_BP_HIT_PREV	; X1≡R4。スロットは R3 のまま
-	st	R1, 0(X1)
+	mv	X1, SP
+	st	R1, BP_FR_PREV(X1)
 
 ; --- ユーザ 0–7: 表を見て比較・回数 ---
 	; X1 = GL_HSHK_ADDR_BREAK + slot * 6
@@ -241,6 +249,8 @@ l_bp_count:
 	l	R0, 1(X1)
 	andi	R0, #HSHK_AB_F_HIST, NZ
 	b	l_bp_count_body
+	mv	R0, SP
+	ai	R0, #1
 	bald	g_bp_hist_append
 l_bp_count_body:
 	l	R0, 2(X1)
@@ -337,23 +347,13 @@ l_bp_notify_fail:
 l_bp_notify_done:
 	ai	SP, #3			; kind / slot / 表
 	mvi	R0, #1			; HALT
-	pop	R4
-	pop	R3
-	ret
+	b	l_bp_leave
 
 l_bp_cont:
 	eor	R0, R0			; 継続
+l_bp_leave:
+	ai	SP, #BP_FR
 	pop	R4
 	pop	R3
 	ret
-
-	.area	_WORK		(REL,NOLOAD)
-; 0034 生値（READ ヒットでも CPLD が出した値）
-GL_BP_HIT_PREV:		.ds	1
-; 入口スナップ（R3 / R4 / TSR0 / TSR1）。履歴追記が読む
-GL_BP_SNAP_R3:		.ds	1
-GL_BP_SNAP_R4:		.ds	1
-GL_BP_SNAP_TSR0:	.ds	1
-GL_BP_SNAP_TSR1:	.ds	1
-GL_BP_SNAP_SP:		.ds	1
 

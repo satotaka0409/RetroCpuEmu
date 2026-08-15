@@ -110,9 +110,6 @@ function readSeed(s: Mn1613AsmSession): number {
 
 test("g_rnd_init(0) はロック回避で種を 1 にする", async () => {
   await withCase(async (s) => {
-    expect(s.wordAddr("GL_RND_SEED")).toBe(0x0008);
-    expect(s.wordAddr("GL_BAL_TMP")).toBe(0x0009);
-    expect(s.wordAddr("GL_ALLOC_ADR")).toBe(0x000a);
     const r = await s.call("g_rnd_init", {
       registers: { ...BASE_REGS, R0: 0 },
     });

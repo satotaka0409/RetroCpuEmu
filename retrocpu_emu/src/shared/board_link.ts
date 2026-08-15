@@ -68,7 +68,7 @@ export type BoardLinkRequest =
   | {
       type: "cpu:pulseReset";
       id: number;
-      /** IO:0000 へ積むリセットベクタ（ワードアドレス、任意） */
+      /** IO:0000 へ積むベクタ表先頭（ワードアドレス、任意。STR/IC は表+2/+3） */
       resetVectorWord?: number;
     }
   | {

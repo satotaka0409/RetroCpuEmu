@@ -3,6 +3,7 @@ import { findCheckpointComment } from "../comments/checkpoint";
 import { detectArchitecture } from "../cpu/registry";
 import { MN1613_COPY_SET_MNEMONICS } from "../cpu/mn1613/arch";
 import { findInvalidAddressingOperands } from "./addressingModes";
+import { findImmRangeOverflows } from "./immRange";
 import {
   findInvalidCopySetOperands,
   findInvalidGprOperands,
@@ -101,6 +102,7 @@ export class AsmDiagnostics {
         ...findInvalidGprOperands(line.text, parsed, arch),
         ...findInvalidAddressingOperands(line.text, parsed, arch),
         ...findInvalidCopySetOperands(line.text, parsed, arch),
+        ...findImmRangeOverflows(line.text, parsed, arch),
       ]) {
         const d = new vscode.Diagnostic(
           new vscode.Range(lineNo, hit.start, lineNo, hit.end),

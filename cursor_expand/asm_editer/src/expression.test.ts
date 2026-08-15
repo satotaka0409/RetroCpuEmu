@@ -34,6 +34,7 @@ describe("tryEvalExpr（.equ ホバー用）", () => {
     assert.equal(tryEvalExpr("7", empty), 7);
     assert.equal(tryEvalExpr("0x10", empty), 0x10);
     assert.equal(tryEvalExpr("0FFH", empty), 0xff);
+    assert.equal(tryEvalExpr("0x0000011100000000", empty), 0x11100000000);
   });
 
   test("演算", () => {

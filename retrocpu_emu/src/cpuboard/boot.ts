@@ -22,6 +22,8 @@ import {
   attachIoBoardPorts,
   MONITOR_ENTRY_WORD,
   OPCODE_H,
+  RESET_VECTOR_IC_OFF,
+  RESET_VECTOR_STR_OFF,
   resetAddrComparators,
   setResetVector,
 } from "./io_ports";
@@ -78,17 +80,21 @@ export function enterResetWait(): BootResult {
 }
 
 /**
- * 暫定ブートスタブ: 入口に H を置き、RESET_VECTOR=0x0108 を IO:0 に流す。
+ * 暫定ブートスタブ: リセットベクタ表（IO:0=0x0108）の +3 が指す番地に H を置く。
  * （モニタ本体は未実装。LED も使わない）
  */
 export function loadHaltStubAtMonitorEntry(): BootResult {
-  writeWord(MONITOR_ENTRY_WORD, OPCODE_H);
-  setResetVector(MONITOR_ENTRY_WORD);
+  const vec = MONITOR_ENTRY_WORD;
+  const start = (vec + RESET_VECTOR_IC_OFF + 1) & 0xffff;
+  writeWord(vec + RESET_VECTOR_STR_OFF, 0);
+  writeWord(vec + RESET_VECTOR_IC_OFF, start);
+  writeWord(start, OPCODE_H);
+  setResetVector(vec);
   return {
     phase: "vector_ready",
     log: [
-      `[boot] stub: mem[0x${MONITOR_ENTRY_WORD.toString(16).toUpperCase()}]=H (0x${OPCODE_H.toString(16).toUpperCase()})`,
-      `[boot] RESET_VECTOR (IO:0) <= 0x${MONITOR_ENTRY_WORD.toString(16).toUpperCase().padStart(4, "0")}`,
+      `[boot] stub: mem[0x${start.toString(16).toUpperCase()}]=H (0x${OPCODE_H.toString(16).toUpperCase()})`,
+      `[boot] RESET_VECTOR (IO:0) <= 0x${vec.toString(16).toUpperCase().padStart(4, "0")} STR/IC at +2/+3`,
     ],
     ic: getState().IC,
     status: getExecStatus(),
@@ -108,7 +114,7 @@ export function pulseCpuReset(): BootResult {
   return {
     phase: "reset_pulsed",
     log: [
-      "[boot] RESET pulsed — CPU read IO:0 → IC, running",
+      "[boot] RESET pulsed — CPU read IO:0 then mem[+2]=STR / mem[+3]=IC, running",
       `[boot] IC=0x${(st.IC & 0xffff).toString(16).toUpperCase().padStart(4, "0")} status=${getExecStatus()}`,
     ],
     ic: st.IC,

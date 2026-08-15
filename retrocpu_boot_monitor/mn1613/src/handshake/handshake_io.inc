@@ -130,6 +130,14 @@ HSHK_BH_ENTRY_BYTES	.equ	66
 HSHK_BH_MW_COUNT	.equ	0	; 有効件数（0–16）
 HSHK_BH_MW_NEXT		.equ	1	; 次書込 index（最新は (NEXT-1) & 15）
 HSHK_BH_MW_OVF		.equ	2	; Bit0=リングオーバフロー
+; 比較器ヒットの入口スナップ（スタック。R0 が先頭。リエントラント）
+HSHK_BP_SNAP_WORDS	.equ	6
+HSHK_BP_SNAP_PREV	.equ	0	; 0034 生値
+HSHK_BP_SNAP_R3		.equ	1
+HSHK_BP_SNAP_R4		.equ	2
+HSHK_BP_SNAP_TSR0	.equ	3
+HSHK_BP_SNAP_TSR1	.equ	4
+HSHK_BP_SNAP_SP		.equ	5	; ヒット直前のユーザ SP
 
 HSHK_IRQ_PAY_EXEC	.equ	4
 HSHK_IRQ_PAY_MEM	.equ	8

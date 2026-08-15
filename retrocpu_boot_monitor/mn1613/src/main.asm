@@ -24,8 +24,8 @@
 ; --- _WORK: BIOS 乱数（bios_common.asm） ---
 GL_RND_DEFAULT_SEED	.equ	0x1234
 
-; 割り込みベクタ（ロード時に書き込む定数）
-	.area	_VECTOR		(REL,CON)
+	.area	_CODE		(REL,CON)
+; 割り込みベクタ
 ; INT0
 	.dw	0b0000001100000000	; STR
 	.dw	g_int0_handler		; INT0 割り込みハンドラ
@@ -36,17 +36,17 @@ GL_RND_DEFAULT_SEED	.equ	0x1234
 	.dw	0b0000011000000000	; STR
 	.dw	g_int2_handler		; IC（タイマー0/1・ハンドシェイク）
 ; INT3
-	.dw	0x0000011100000000	; STR
+	.dw	0b0000011100000000	; STR
 	.dw	g_int3_handler
+; リセットベクタ
+; MN1613 はIO RD 0番地から読み込んだアドレス +2->STR +3->IC に設定してスタートする
+g_reset_vector:
+	.dw     0
+	.dw     0
+	.dw	0b0000000000000000	; STR 割り込み禁止
+	.dw	g_main
 
-	.area	_CODE		(REL,CON)
 g_main:
-; COLD START
-	b	l_reset
-g_main_loop:
-; HOT START
-	b	l_main_loop
-l_reset:
 ;	スタック初期化
 	mvwi	SP, #STACK_TOP
 ; ゼロページ領域を0クリアする（ゼロ初期化）
@@ -82,7 +82,7 @@ l_work_loop:
 	mvwi	R0, #0b0000011100000000
 	mv	STR, R0
 ;       HALT
-l_main_loop:
+g_main_loop:
 	h
-	b	l_main_loop
+	b	g_main_loop
 

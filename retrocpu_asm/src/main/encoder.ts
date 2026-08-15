@@ -202,7 +202,8 @@ export const TWO_WORD_OPS = new Set<string>([
 // ─── 検証ユーティリティ ────────────────────────────────────────────────────────
 
 function u8(v: number, what: string): number {
-  if (v < 0 || v > 0xff) throw new Error(`${what} out of 8-bit range: ${v}`);
+  if (!Number.isInteger(v) || v < 0 || v > 0xff)
+    throw new Error(`${what} out of 8-bit range: ${v}`);
   return v & 0xff;
 }
 function u4(v: number, what: string): number {
@@ -217,6 +218,21 @@ function s8(v: number, what: string): number {
   if (v < -128 || v > 127)
     throw new Error(`${what} out of signed 8-bit range: ${v}`);
   return v & 0xff;
+}
+
+/**
+ * 16bit に収まる値なら下位 16bit を返す。
+ * 符号付き -32768〜32767 と符号なし 0〜65535 を認める。
+ * @param v 評価値
+ * @param what エラーメッセージ用の種別（IM16 / .dw など）
+ * @returns 16bit 値
+ * @throws 整数でない、または範囲外
+ */
+export function u16(v: number, what: string): number {
+  if (!Number.isInteger(v) || v < -0x8000 || v > 0xffff) {
+    throw new Error(`${what} out of 16-bit range: ${v}`);
+  }
+  return v & 0xffff;
 }
 
 // ─── パースヘルパー（MN1610共通） ─────────────────────────────────────────────
@@ -338,7 +354,10 @@ function parseImm16Value(
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  return evalExpr(requireImmHash(arg, "IM16"), symbols, allowUndefined) & 0xffff;
+  return u16(
+    evalExpr(requireImmHash(arg, "IM16"), symbols, allowUndefined),
+    "IM16",
+  );
 }
 
 /**

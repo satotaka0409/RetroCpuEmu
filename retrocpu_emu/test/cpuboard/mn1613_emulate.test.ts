@@ -117,13 +117,16 @@ beforeEach(() => {
   setIoReadCallback((_p) => 0x00);
   setIoWriteCallback((_p, _v) => {});
   reset();
+  // 命令テストはアドレス 0 から書く。reset() は IO:0 表の mem[+3] を IC にするので、
+  // 前テストのメモリが残っていると IC が 0 以外になる。
+  setState({ IC: 0, STR: 0 });
 });
 
 // ─────────────────────────────────────────────
 // 1. リセット / 初期状態
 // ─────────────────────────────────────────────
 describe("reset", () => {
-  it("全レジスタが 0 で IC は IO:0（テストでは 0）になる", () => {
+  it("全レジスタが 0 で IC は IO:0 の表+3（テストでは 0）になる", () => {
     const s = getState();
     expect(s.R[0]).toBe(0);
     expect(s.R[4]).toBe(0);
@@ -141,10 +144,17 @@ describe("reset", () => {
     expect(getExecStatus()).toBe("running");
   });
 
-  it("IO:0 の値が IC に入る", () => {
-    setIoReadCallback((p) => (p === 0 ? 0x1234 : 0));
+  it("IO:0 の表から STR と IC を載せる", () => {
+    const buf = new ArrayBuffer(0x20000);
+    const view = new DataView(buf);
+    const vec = 0x1000;
+    view.setUint16((vec + 2) * 2, 0x0700, false);
+    view.setUint16((vec + 3) * 2, 0x1800, false);
+    setMemory(buf);
+    setIoReadCallback((p) => (p === 0 ? vec : 0));
     reset();
-    expect(getState().IC).toBe(0x1234);
+    expect(getState().STR).toBe(0x0700);
+    expect(getState().IC).toBe(0x1800);
     expect(getExecStatus()).toBe("running");
   });
 
@@ -937,7 +947,7 @@ describe("setPins / getPins", () => {
     setPins({ RST: true }); // 立ち上がりでリセット
     setPins({ RST: false }); // 立ち下がり（何もしない）
     expect(getState().R[0]).toBe(0x0000); // リセットされた
-    expect(getState().IC).toBe(0); // beforeEach の IO:0 → 0
+    expect(getState().IC).toBe(0); // IO:0=0 → mem[3]（空なら 0）
     expect(getExecStatus()).toBe("running");
   });
 
