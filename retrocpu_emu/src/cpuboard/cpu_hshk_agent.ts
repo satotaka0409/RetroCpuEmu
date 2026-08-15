@@ -16,6 +16,7 @@ import {
   DEFAULT_TIMEOUT_MS,
 } from "../shared/handshake/handshake_type";
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
+import { tickCpu } from "./mn1613/mn1613";
 
 /**
  * REQ_0 待ちのポーリング間隔 (ms)。
@@ -36,6 +37,12 @@ export type CpuHandshakeAgentOptions = {
   onTransaction?: (cmd: number, frame: Uint8Array, response: Uint8Array) => void;
   /** 転送失敗の通知（ログ用。ループは継続する） */
   onError?: (err: Error) => void;
+  /**
+   * REQ_1 を IRQ2 に繋ぐか。既定 true（Worker）。
+   * 同一スレッドで `run(g_handshake_interrupt_handler)` するテストは false
+   * （IRQ2 と BALD 呼び出しが重ならないようにする。BIOS 結合テストと同じ）。
+   */
+  wireIrq2?: boolean;
 };
 
 export class CpuHandshakeAgent {
@@ -56,11 +63,24 @@ export class CpuHandshakeAgent {
   constructor(options: CpuHandshakeAgentOptions) {
     this.options = options;
     this.bus = createHandshakeBus();
+    /**
+     * IO 側待ちと同一スレッドで CPU を進める（2 バイト DENA/DACK を setTimeout 連打しない）。
+     * `run(handler)` するテストは wireIrq2: false でポンプしない。
+     */
+    const pumpCpu =
+      options.wireIrq2 === false
+        ? undefined
+        : (): void => {
+            tickCpu();
+          };
     this.io = new IoControlHandshake(
       this.bus,
       options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      pumpCpu,
     );
-    wireHshkReq1ToIrq2(this.bus);
+    if (options.wireIrq2 !== false) {
+      wireHshkReq1ToIrq2(this.bus);
+    }
   }
 
   /**

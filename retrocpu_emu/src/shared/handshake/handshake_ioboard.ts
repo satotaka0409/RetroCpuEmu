@@ -2,17 +2,16 @@
  * 制御・I/O ボード側ハンドシェイク（TypeScript / HandShake.mdc）
  *
  * board/handshake から再エクスポートする。CPU 側はアセンブラ実装。
+ * データ転送は 2 バイト単位。奇数論理長は 0 パッド。
  */
 
 import type { CpuIoSignals } from "../../cpuboard/mn1613/mn1613ioport";
 import {
-  calcBlockChecksum,
   ADDR_BREAK_SET_PAYLOAD_LEN,
   ADDR_BREAK_SET_FRAME_LEN,
   CMD_IO_TO_CPU,
   DEFAULT_TIMEOUT_MS,
-  HSHK_MEM_BLOCK,
-  HSHK_MEM_RETRY_MAX,
+  HSHK_IO_MAX_BYTES,
   INT_CAUSE_CODE,
   RESPONSE_CODE,
   u32be,
@@ -24,10 +23,12 @@ export class IoControlHandshake {
   /**
    * @param bus CPU と共有する制御信号／データ線
    * @param timeoutMs 各信号待ちのタイムアウト（ミリ秒）
+   * @param onPoll 信号待ち中に 1 命令進める（同一スレッド。BIOS `run()` テストでは渡さない）
    */
   constructor(
     private readonly bus: CpuIoSignals,
     private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS,
+    private readonly onPoll?: () => void,
   ) {}
 
   /**
@@ -77,45 +78,25 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ読み出し（コマンド 13h）。同一 ENA でヘッダ→ブロック+checksum→OK/NG。
-   * アドレス・バイト数は線上ビッグエンディアン。端数はパディングしない。
+   * IO→CPU メモリ読み出し（コマンド 13h）。ヘッダ 10B（末尾パッド）→データ→OK。
    * @param byteAddr 読み出し開始バイトアドレス
-   * @param byteCount 読み出しバイト数（0 ならヘッダのみ）
+   * @param byteCount 読み出しバイト数（0 ならデータなしで status のみ）
    * @returns 読み出したバイト列
    */
   async memRead(byteAddr: number, byteCount: number): Promise<Uint8Array> {
     const count = byteCount >>> 0;
-    const out = new Uint8Array(count);
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
         CMD_IO_TO_CPU.MEM_READ,
         ...u32be(byteAddr >>> 0),
         ...u32be(count),
+        0,
       ]),
     );
-    let offset = 0;
-    while (offset < count) {
-      const blk = Math.min(HSHK_MEM_BLOCK, count - offset);
-      let accepted = false;
-      for (let attempt = 0; attempt < HSHK_MEM_RETRY_MAX; attempt++) {
-        const rec = await this.receiveBytesFromCpu(blk + 1);
-        const data = rec.subarray(0, blk);
-        const sum = rec[blk]!;
-        if (calcBlockChecksum(data) === sum) {
-          out.set(data, offset);
-          await this.transferBytesToCpu(Uint8Array.from([RESPONSE_CODE.OK]));
-          accepted = true;
-          break;
-        }
-        await this.transferBytesToCpu(Uint8Array.from([RESPONSE_CODE.NG]));
-      }
-      if (!accepted) {
-        await this.finalizeSend();
-        throw new Error("handshake 13h checksum failed");
-      }
-      offset += blk;
-    }
+    const out =
+      count > 0 ? await this.receiveBytesFromCpu(count) : new Uint8Array(0);
+    await this.transferBytesToCpu(Uint8Array.from([RESPONSE_CODE.OK]));
     await this.finalizeSend();
     return out;
   }
@@ -152,42 +133,78 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ書き込み（コマンド 14h）。同一 ENA でヘッダ→データ+checksum→OK/NG。
+   * IO→CPU メモリ書き込み（コマンド 14h）。ヘッダ 10B（末尾パッド）＋データ→OK/NG。
    * @param byteAddr 書き込み開始バイトアドレス
-   * @param data 書き込むバイト列（0 長ならヘッダのみ）
+   * @param data 書き込むバイト列（0 長ならヘッダのあと status のみ）
    */
   async memWrite(byteAddr: number, data: Uint8Array): Promise<void> {
+    const n = data.length >>> 0;
+    const frame = new Uint8Array(10 + n);
+    frame[0] = CMD_IO_TO_CPU.MEM_WRITE;
+    frame.set(u32be(byteAddr >>> 0), 1);
+    frame.set(u32be(n), 5);
+    frame[9] = 0;
+    frame.set(data, 10);
+    await this.initiateSend();
+    await this.transferBytesToCpu(frame);
+    const st = await this.receiveBytesFromCpu(1);
+    await this.finalizeSend();
+    if (st[0] !== RESPONSE_CODE.OK) {
+      throw new Error("handshake 14h NG");
+    }
+  }
+
+  /**
+   * IO→CPU IO読み出し（コマンド 15h）。ヘッダのあと CPU がデータ＋status を返す。
+   * @param ioAddr 16bit IO アドレス
+   * @param byteCount バイト数（0–254）
+   * @returns 読み出したバイト列
+   */
+  async ioRead(ioAddr: number, byteCount: number): Promise<Uint8Array> {
+    const count = byteCount & 0xff;
+    if (count > HSHK_IO_MAX_BYTES) {
+      throw new Error("handshake 15h count");
+    }
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
-        CMD_IO_TO_CPU.MEM_WRITE,
-        ...u32be(byteAddr >>> 0),
-        ...u32be(data.length),
+        CMD_IO_TO_CPU.IO_READ,
+        (ioAddr >>> 8) & 0xff,
+        ioAddr & 0xff,
+        count,
       ]),
     );
-    let offset = 0;
-    while (offset < data.length) {
-      const blk = Math.min(HSHK_MEM_BLOCK, data.length - offset);
-      const slice = data.subarray(offset, offset + blk);
-      const frame = new Uint8Array(blk + 1);
-      frame.set(slice, 0);
-      frame[blk] = calcBlockChecksum(slice);
-      let accepted = false;
-      for (let attempt = 0; attempt < HSHK_MEM_RETRY_MAX; attempt++) {
-        await this.transferBytesToCpu(frame);
-        const st = await this.receiveBytesFromCpu(1);
-        if (st[0] === RESPONSE_CODE.OK) {
-          accepted = true;
-          break;
-        }
-      }
-      if (!accepted) {
-        await this.finalizeSend();
-        throw new Error("handshake 14h NG");
-      }
-      offset += blk;
-    }
+    const rec = await this.receiveBytesFromCpu(count + 1);
     await this.finalizeSend();
+    if (rec[count] !== RESPONSE_CODE.OK) {
+      throw new Error("handshake 15h NG");
+    }
+    return rec.subarray(0, count);
+  }
+
+  /**
+   * IO→CPU IO書き込み（コマンド 16h）。ヘッダ＋データのあと status。
+   * @param ioAddr 16bit IO アドレス
+   * @param data 書き込むバイト列（長さ 0–254）
+   */
+  async ioWrite(ioAddr: number, data: Uint8Array): Promise<void> {
+    const n = data.length;
+    if (n > HSHK_IO_MAX_BYTES) {
+      throw new Error("handshake 16h count");
+    }
+    const frame = new Uint8Array(4 + n);
+    frame[0] = CMD_IO_TO_CPU.IO_WRITE;
+    frame[1] = (ioAddr >>> 8) & 0xff;
+    frame[2] = ioAddr & 0xff;
+    frame[3] = n & 0xff;
+    frame.set(data, 4);
+    await this.initiateSend();
+    await this.transferBytesToCpu(frame);
+    const st = await this.receiveBytesFromCpu(1);
+    await this.finalizeSend();
+    if (st[0] !== RESPONSE_CODE.OK) {
+      throw new Error("handshake 16h NG");
+    }
   }
 
   /**
@@ -198,9 +215,19 @@ export class IoControlHandshake {
     remainingAfterFirst: (firstByte: number) => number,
   ): Promise<Uint8Array> {
     await this.waitForCpuRequest();
-    const first = await this.receiveOneByteFromCpu();
+    const [first, second] = await this.receiveUnitFromCpu();
     const rem = Math.max(0, remainingAfterFirst(first) | 0);
-    const rest = rem > 0 ? await this.receiveBytesFromCpu(rem) : new Uint8Array(0);
+    let rest: Uint8Array;
+    if (rem <= 0) {
+      rest = new Uint8Array(0);
+    } else if (rem === 1) {
+      rest = Uint8Array.from([second]);
+    } else {
+      const tail = await this.receiveBytesFromCpu(rem - 1);
+      rest = new Uint8Array(1 + tail.length);
+      rest[0] = second;
+      rest.set(tail, 1);
+    }
     await this.finalizeReceive();
     const frame = new Uint8Array(1 + rest.length);
     frame[0] = first;
@@ -210,36 +237,52 @@ export class IoControlHandshake {
 
   /** CPU の REQ_0 を待って依頼を受理する（DACK=0 → ENA=1 → REQ_0=0 待ち） */
   private async waitForCpuRequest(): Promise<void> {
-    await waitCondition(() => this.bus.HSHK_REQ_0 === 1, this.timeoutMs);
+    await this.wait(() => this.bus.HSHK_REQ_0 === 1);
     this.bus.HSHK_DACK = 0;
     this.bus.HSHK_ENA = 1;
-    await waitCondition(() => this.bus.HSHK_REQ_0 === 0, this.timeoutMs);
+    await this.wait(() => this.bus.HSHK_REQ_0 === 0);
   }
 
   /**
-   * CPU から 1 バイト受け取る（DENA=1 待ち → 読取 → DACK ハンドシェイク）。
-   * @returns 受信バイト
+   * CPU から 2 バイトユニットを受け取る。
+   * @returns [1バイト目, 2バイト目]
    */
-  private async receiveOneByteFromCpu(): Promise<number> {
-    await waitCondition(() => this.bus.HSHK_DENA === 1, this.timeoutMs);
-    const byte = this.bus.HSHK_IN_DATA & 0xff;
+  private async receiveUnitFromCpu(): Promise<[number, number]> {
+    await this.wait(() => this.bus.HSHK_DENA === 1);
+    const b0 = this.bus.HSHK_IN_DATA & 0xff;
     this.bus.HSHK_DACK = 1;
-    await waitCondition(() => this.bus.HSHK_DENA === 0, this.timeoutMs);
+    await this.wait(() => this.bus.HSHK_DENA === 0);
+    const b1 = this.bus.HSHK_IN_DATA & 0xff;
     this.bus.HSHK_DACK = 0;
-    return byte;
+    return [b0, b1];
   }
 
   /**
-   * CPU から指定バイト数を連続で受け取る。
+   * CPU から指定論理バイト数を受け取る（奇数はユニット末尾のパッドを捨てる）。
    * @param length 受信バイト数
    * @returns 受信バイト列
    */
   private async receiveBytesFromCpu(length: number): Promise<Uint8Array> {
     const data = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-      data[i] = await this.receiveOneByteFromCpu();
+    let i = 0;
+    while (i < length) {
+      const [b0, b1] = await this.receiveUnitFromCpu();
+      data[i] = b0;
+      i += 1;
+      if (i < length) {
+        data[i] = b1;
+        i += 1;
+      }
     }
     return data;
+  }
+
+  /**
+   * 信号条件を待つ（同一スレッドなら onPoll で CPU を進める）。
+   * @param condition 成立したら true
+   */
+  private wait(condition: () => boolean): Promise<void> {
+    return waitCondition(condition, this.timeoutMs, this.onPoll);
   }
 
   /** ENA=0 にして受信完了を CPU へ通知する */
@@ -253,30 +296,41 @@ export class IoControlHandshake {
    */
   private async initiateSend(): Promise<void> {
     await waitEna0Check(() => this.bus.HSHK_ENA === 0);
-    await waitCondition(() => this.bus.INTERRUPT_BUSY === 0, this.timeoutMs);
+    await this.wait(() => this.bus.INTERRUPT_BUSY === 0);
     this.bus.HSHK_DENA = 0;
     this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
     this.bus.HSHK_REQ_1 = 1;
-    await waitCondition(() => this.bus.HSHK_ENA === 1, this.timeoutMs);
+    await this.wait(() => this.bus.HSHK_ENA === 1);
     this.bus.HSHK_REQ_1 = 0;
   }
 
   /**
-   * CPU へバイト列を 1 バイトずつ渡す（DENA / DACK の往復）。
+   * CPU へ 2 バイトユニットを渡す。
+   * @param b0 1バイト目
+   * @param b1 2バイト目
+   */
+  private async transferUnitToCpu(b0: number, b1: number): Promise<void> {
+    this.bus.HSHK_OUT_DATA = b0 & 0xff;
+    this.bus.HSHK_DENA = 1;
+    await this.wait(() => this.bus.HSHK_DACK === 1);
+    this.bus.HSHK_OUT_DATA = b1 & 0xff;
+    this.bus.HSHK_DENA = 0;
+    await this.wait(() => this.bus.HSHK_DACK === 0);
+  }
+
+  /**
+   * CPU へ論理バイト列を渡す（奇数長は 0 パッド）。
    * @param data 送信バイト列
    */
   private async transferBytesToCpu(data: Uint8Array): Promise<void> {
-    for (const byte of data) {
-      this.bus.HSHK_OUT_DATA = byte & 0xff;
-      this.bus.HSHK_DENA = 1;
-      await waitCondition(() => this.bus.HSHK_DACK === 1, this.timeoutMs);
-      this.bus.HSHK_DENA = 0;
-      await waitCondition(() => this.bus.HSHK_DACK === 0, this.timeoutMs);
+    for (let i = 0; i < data.length; i += 2) {
+      const b1 = i + 1 < data.length ? data[i + 1]! : 0;
+      await this.transferUnitToCpu(data[i]!, b1);
     }
   }
 
   /** CPU が ENA=0 にするのを待って送信完了とする */
   private async finalizeSend(): Promise<void> {
-    await waitCondition(() => this.bus.HSHK_ENA === 0, this.timeoutMs);
+    await this.wait(() => this.bus.HSHK_ENA === 0);
   }
 }

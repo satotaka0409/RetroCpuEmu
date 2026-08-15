@@ -333,12 +333,12 @@ describe("assembler: 基本命令エンコード", () => {
   });
 
   test("ラベルの相対分岐が正しくエンコードされる", () => {
-    // B LOOP: LOOP=addr2, PC=4, next_IC=5, rel=2-5=-3=0xFD
-    // B: 11 001 111 11111101 = 0xCFFD
+    // B LOOP: LOOP=addr2, 命令=addr4, rel=2-4=-2=0xFE
+    // B: 11 001 111 11111110 = 0xCFFE
     const r = assemble(SUM1TO10_SRC);
     const bInstr = r.words.find((w) => w.address === 4);
     assert.ok(bInstr, "B instruction not found");
-    assert.equal(bInstr.value, 0xcffd);
+    assert.equal(bInstr.value, 0xcffe);
   });
 });
 
@@ -551,7 +551,7 @@ LOCAL:
 describe("assembler: REL ファイル出力", () => {
   test("sum1to10 の命令バイト列 (T レコード) が正しい", () => {
     const rel = writeRel(assemble(SUM1TO10_SRC), "SUM1TO10");
-    assert.match(rel, /^T 00 00 08 00 09 0A 58 09 41 41 CF FD 88 01 20 00$/m);
+    assert.match(rel, /^T 00 00 08 00 09 0A 58 09 41 41 CF FE 88 02 20 00$/m);
     assert.match(rel, /^T 00 0E 00 00$/m);
     assert.match(rel, /^R 00 00 00 00$/m);
   });
@@ -681,8 +681,8 @@ describe("assembler: LST ファイル出力", () => {
       ["0001 090A", "MVI R1, #10"],
       ["0002 5809", "A R0, R1"],
       ["0003 4141", "SI R1, #1, Z"],
-      ["0004 CFFD", "B LOOP"],
-      ["0005 8801", "ST R0, RESULT"],
+      ["0004 CFFE", "B LOOP"],
+      ["0005 8802", "ST R0, RESULT"],
       ["0006 2000", "H"],
       ["0007 0000", ".word 0"],
     ];

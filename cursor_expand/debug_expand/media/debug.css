@@ -30,6 +30,11 @@ body {
   font-size: var(--font-size);
 }
 
+body {
+  display: flex;
+  flex-direction: column;
+}
+
 button {
   font: inherit;
   color: var(--fg);
@@ -78,13 +83,15 @@ button.active {
 
 .layout {
   display: grid;
-  height: calc(100% - 32px);
-  grid-template-columns: minmax(220px, 0.9fr) minmax(240px, 1.2fr) minmax(240px, 1.2fr);
-  grid-template-rows: minmax(0, 1.4fr) minmax(120px, 0.55fr) minmax(140px, 0.7fr);
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr) minmax(200px, 1fr);
+  grid-template-rows:
+    minmax(160px, 1fr)
+    minmax(200px, 1.1fr);
   grid-template-areas:
     "regs disasm source"
-    "bp   break  break"
-    "mem  mem    mem";
+    "mem  break  break";
   gap: var(--gap);
   padding: var(--gap);
 }
@@ -98,9 +105,6 @@ button.active {
 .pane-source {
   grid-area: source;
 }
-.pane-bp {
-  grid-area: bp;
-}
 .pane-break {
   grid-area: break;
 }
@@ -111,7 +115,6 @@ button.active {
 .pane-regs,
 .pane-disasm,
 .pane-source,
-.pane-bp,
 .pane-break,
 .pane-mem {
   display: flex;
@@ -139,7 +142,11 @@ button.active {
 
 .code-scroll {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
   overflow: auto;
+  overscroll-behavior: contain;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.35;
@@ -159,7 +166,10 @@ button.active {
 }
 
 .line.mem {
-  grid-template-columns: 52px repeat(8, minmax(36px, 1fr));
+  grid-template-columns: 5.6ch repeat(16, 4ch);
+  column-gap: 8px;
+  width: max-content;
+  font-variant-numeric: tabular-nums;
 }
 
 .line.current {
@@ -185,6 +195,11 @@ button.active {
   color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
 }
 
+.addr.phys {
+  width: 5ch;
+  text-align: left;
+}
+
 .bytes {
   color: var(--muted);
 }
@@ -194,8 +209,9 @@ button.active {
 }
 
 .word {
-  text-align: center;
-  padding: 0 2px;
+  width: 4ch;
+  text-align: left;
+  padding: 0;
   border-radius: 2px;
 }
 
@@ -224,6 +240,12 @@ button.active {
   align-self: stretch;
   background: var(--border);
   margin: 0 4px;
+}
+
+.reg-tabs .tab-label {
+  color: var(--muted);
+  font-size: 10px;
+  margin-right: 2px;
 }
 
 .reg-meta {
@@ -256,27 +278,22 @@ button.active {
   color: var(--muted);
 }
 
-.bp-block {
-  padding: 4px 6px;
-}
-
-.bp-label {
-  font-size: 10px;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-
 .bp-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px 6px;
+  overflow: auto;
   font-family: var(--mono);
   font-size: 11px;
+  flex: 0 1 auto;
+  max-height: 42%;
+  border-bottom: 1px solid var(--border);
 }
 
 .bp-list li {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1.4em 3.2em 5.5ch 1fr;
+  gap: 4px;
   padding: 1px 2px;
 }
 
@@ -286,7 +303,6 @@ button.active {
 }
 
 .bp-list .slot {
-  width: 1.5em;
   color: var(--muted);
 }
 
@@ -300,15 +316,90 @@ button.active {
   color: var(--muted);
 }
 
+.ctx-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 140px;
+  padding: 4px 0;
+  background: var(--vscode-menu-background, #252526);
+  border: 1px solid var(--vscode-menu-border, #454545);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ctx-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 12px;
+}
+
+.ctx-menu button:hover {
+  background: var(--vscode-menu-selectionBackground, #094771);
+  color: var(--vscode-menu-selectionForeground, #fff);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal[hidden],
+.ctx-menu[hidden] {
+  display: none !important;
+}
+
+.modal-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  min-width: 280px;
+}
+
+.modal-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.modal-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.modal-box input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  padding: 4px 6px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--accent);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 @media (max-width: 900px) {
   .layout {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto auto auto auto;
+    grid-template-columns: 1fr 2fr;
+    grid-template-rows: auto auto auto;
     grid-template-areas:
       "regs regs"
       "disasm source"
-      "bp break"
-      "mem mem";
+      "mem break";
     height: auto;
     overflow: auto;
   }

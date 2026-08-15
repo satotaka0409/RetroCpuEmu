@@ -416,7 +416,7 @@ interface EAMode {
  *
  * 推奨（sdas 風）と互換書式の両方を受理する。
  *   MMM=000 *D
- *   MMM=001 label
+ *   MMM=001 label（相対。d = ターゲット − 当該命令のワードアドレス）
  *   MMM=010 (*D)  / [*D]
  *   MMM=011 (label) / [label]
  *   MMM=100 D(X0) / D, X0
@@ -506,13 +506,13 @@ function parseEA(
   // (label) — 相対間接（sdas 風）
   m = t.match(/^\((.+)\)$/);
   if (m) {
-    const rel = evalExpr(m[1], symbols, allowUndefined) - (pcWord + 1);
+    const rel = evalExpr(m[1], symbols, allowUndefined) - pcWord;
     return { mmm: 0b011, d8: s8(rel, "EA relative") };
   }
   // [label] — 相対間接（互換）
   m = t.match(/^\[(.+)\]$/);
   if (m) {
-    const rel = evalExpr(m[1], symbols, allowUndefined) - (pcWord + 1);
+    const rel = evalExpr(m[1], symbols, allowUndefined) - pcWord;
     return { mmm: 0b011, d8: s8(rel, "EA relative") };
   }
   if (t.startsWith("*")) {
@@ -521,7 +521,7 @@ function parseEA(
       d8: u8(evalExpr(t.slice(1), symbols, allowUndefined), "EA"),
     };
   }
-  const rel = evalExpr(t, symbols, allowUndefined) - (pcWord + 1);
+  const rel = evalExpr(t, symbols, allowUndefined) - pcWord;
   return { mmm: 0b001, d8: s8(rel, "EA relative") };
 }
 
@@ -808,7 +808,7 @@ function encodeRindirect(
 /**
  * 解析済み命令行を16bit命令語（1語または2語）にエンコードする。
  * @param line - 解析済み命令行
- * @param pcWord - 現在のプログラムカウンタ（ワード単位）
+ * @param pcWord - 当該命令のワードアドレス（相対 EA の基準）
  * @param symbols - シンボルテーブル
  * @param allowUndefined - 未定義シンボルを許可するかどうか
  * @return 1語命令は [word]、2語命令は [word1, word2] を返す。

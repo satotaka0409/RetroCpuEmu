@@ -140,13 +140,15 @@ HSHK_BP_SNAP_TSR1	.equ	4
 HSHK_BP_SNAP_SP		.equ	5	; ヒット直前のユーザ SP
 
 HSHK_IRQ_PAY_EXEC	.equ	4
-HSHK_IRQ_PAY_MEM	.equ	8
+HSHK_IRQ_PAY_MEM	.equ	9
+HSHK_IRQ_PAY_IO		.equ	3
 HSHK_IRQ_PAY_HIST	.equ	2
 HSHK_BH_CLR		.equ	0x01
 HSHK_BH_ST_OVF		.equ	0x01
 HSHK_BH_ST_NOHIST	.equ	0x02
 HSHK_BH_HDR_CPU		.equ	8
-HSHK_MEM_BLOCK		.equ	256
+HSHK_IO_MAX		.equ	254
+HSHK_IO_LIMIT		.equ	255
 
 ; レジスタ並び（17h 履歴／未定義命令スナップ。ワードオフセット）
 HSHK_REG_W_R0		.equ	0
@@ -166,11 +168,15 @@ HSHK_REG_WORDS		.equ	11
 HSHK_L2_STR_SAVE	.equ	4
 HSHK_L2_IC_SAVE		.equ	5
 
-; ENA=0 チェック: 最大10回。待ちは厳密な us ではなく粗いスピン（乱数でばらす）
+; ENA=0 チェック: 最大10回。待ちは 10us～30us 相当の粗いスピン（乱数でばらす）
 HSHK_ENA0_RETRY		.equ	10
-HSHK_DELAY_MIN		.equ	8
-HSHK_DELAY_MASK		.equ	0x3f
+HSHK_DELAY_MIN		.equ	2
+HSHK_DELAY_MASK		.equ	0x0f
 HSHK_WAIT_MAX		.equ	0xffff
+
+; 2バイト転送位相（GL_HSHK_PAIR）
+HSHK_PAIR_RECV		.equ	0x0001
+HSHK_PAIR_SEND		.equ	0x0002
 
 ; LED 内部ラッチのアドレス
 HSHK_LED_7SEG_01	.equ	0

@@ -116,6 +116,48 @@ export function resolveBootMonitorHexPath(explicit?: string): string {
 }
 
 /**
+ * IHX に対応する CDB パス（同じ stem）。無ければ探索ディレクトリの `mn1613_mon.cdb`。
+ * @param hexPath 対応 IHX。省略時は探索のみ
+ * @returns 存在する `.cdb` の絶対パス
+ * @throws CDB が無い場合
+ */
+export function resolveBootMonitorCdbPath(hexPath?: string): string {
+  if (hexPath) {
+    const beside = hexPath.replace(/\.ihx$/i, ".cdb");
+    if (fs.existsSync(beside)) return beside;
+  }
+  for (const dir of hexSearchDirs()) {
+    for (const name of ["mn1613_mon.cdb", "boot_monitor.cdb"] as const) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  throw new Error(
+    "ブートモニタ CDB が見つからない（mn1613_mon.cdb）。retrocpu_boot_monitor を make ihx する",
+  );
+}
+
+/**
+ * IHX と CDB が揃っているモニタ成果物を選ぶ（テスト用。dist の ihx のみは除外）。
+ * @returns hex / cdb の絶対パス
+ * @throws 揃った組が無い場合
+ */
+export function resolveBootMonitorHexCdbPair(): { hex: string; cdb: string } {
+  for (const dir of hexSearchDirs()) {
+    for (const name of BOOT_MONITOR_HEX_NAMES) {
+      const hex = path.join(dir, name);
+      const cdb = hex.replace(/\.ihx$/i, ".cdb");
+      if (fs.existsSync(hex) && fs.existsSync(cdb)) {
+        return { hex, cdb };
+      }
+    }
+  }
+  throw new Error(
+    "ブートモニタ IHX+CDB の組が見つからない。retrocpu_boot_monitor を make ihx する",
+  );
+}
+
+/**
  * Intel HEX テキストを DMA 用の連続バイト列にする。
  * @param hexText Intel HEX 全文
  * @returns スライス。データが無ければ null

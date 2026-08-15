@@ -84,22 +84,22 @@ describe("MN1610 命令: B（分岐）", () => {
   test("B [*5], X1  間接インデックス1", () =>
     assert.equal(asm1("        B [*5], X1"), 0xff05));
 
-  test("B TARGET  相対直接(MMM=001) TARGET=addr3 rel=2", () =>
+  test("B TARGET  相対直接(MMM=001) TARGET=addr3 rel=3", () =>
     assert.equal(
       asmAt(
         "        .org 0\n        B TARGET\n        H\n        H\nTARGET: H\n",
         0,
       ),
-      0xcf02, // X=1, MMM=001, RRR=111, d=2
+      0xcf03, // X=1, MMM=001, RRR=111, d=3（基準は当該命令）
     ));
 
-  test("B [TARGET]  相対間接(MMM=011) rel=2", () =>
+  test("B [TARGET]  相対間接(MMM=011) rel=3", () =>
     assert.equal(
       asmAt(
         "        .org 0\n        B [TARGET]\n        H\n        H\nTARGET: H\n",
         0,
       ),
-      0xdf02, // X=1, MMM=011, RRR=111, d=2
+      0xdf03, // X=1, MMM=011, RRR=111, d=3
     ));
 });
 
@@ -112,13 +112,13 @@ describe("MN1610 命令: BAL（分岐リンク）", () => {
   test("BAL 5, X0", () => assert.equal(asm1("        BAL 5, X0"), 0xa705));
   test("BAL 5, X1", () => assert.equal(asm1("        BAL 5, X1"), 0xaf05));
 
-  test("BAL TARGET  相対直接 rel=2", () =>
+  test("BAL TARGET  相対直接 rel=3", () =>
     assert.equal(
       asmAt(
         "        .org 0\n        BAL TARGET\n        H\n        H\nTARGET: H\n",
         0,
       ),
-      0x8f02, // X=0, MMM=001, RRR=111, d=2
+      0x8f03, // X=0, MMM=001, RRR=111, d=3
     ));
 });
 
@@ -167,15 +167,15 @@ describe("MN1610 アドレッシングモード 8種（L R0 で検証）", () =>
   test("MMM=111 間接インデックス1 [*5], X1", () =>
     assert.equal(asm1("        L R0, [*5], X1"), 0xf805));
 
-  // 相対系はラベルで検証（TARGET=addr3, PC=0, IC=1, rel=2）
+  // 相対系はラベルで検証（TARGET=addr3, 命令=addr0, rel=3）
   const relSrc =
     "        .org 0\n        L R0, TARGET\n        H\n        H\nTARGET: H\n";
   const relISrc =
     "        .org 0\n        L R0, [TARGET]\n        H\n        H\nTARGET: H\n";
-  test("MMM=001 相対直接 TARGET rel=2", () =>
-    assert.equal(asmAt(relSrc, 0), 0xC802));
-  test("MMM=011 相対間接 [TARGET] rel=2", () =>
-    assert.equal(asmAt(relISrc, 0), 0xD802));
+  test("MMM=001 相対直接 TARGET rel=3", () =>
+    assert.equal(asmAt(relSrc, 0), 0xC803));
+  test("MMM=011 相対間接 [TARGET] rel=3", () =>
+    assert.equal(asmAt(relISrc, 0), 0xD803));
 });
 
 describe("MN1610 アドレッシングモード sdas 風書式", () => {
@@ -201,8 +201,8 @@ describe("MN1610 アドレッシングモード sdas 風書式", () => {
   const bParen =
     "        .org 0\n        B (TARGET)\n        H\n        H\nTARGET: H\n";
   test("MMM=011 (TARGET) 相対間接", () =>
-    assert.equal(asmAt(relParen, 0), 0xd802));
-  test("B (TARGET) 相対間接", () => assert.equal(asmAt(bParen, 0), 0xdf02));
+    assert.equal(asmAt(relParen, 0), 0xd803));
+  test("B (TARGET) 相対間接", () => assert.equal(asmAt(bParen, 0), 0xdf03));
 });
 
 // ─── 2項演算命令 ─────────────────────────────────────────────────────────────

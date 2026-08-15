@@ -29,6 +29,7 @@ export function resolveTestSettings(
   ioMock: JsonTestSettings["ioMock"];
   cpuLogFile?: string;
   cpuLogMode?: CpuLogMode;
+  maxCycles?: number;
 } {
   const hexFile = resolveSuitePath(settings.hexFile, fromDir);
   const cdbFile = resolveSuitePath(settings.cdbFile, fromDir);
@@ -43,6 +44,7 @@ export function resolveTestSettings(
     ioMock: settings.ioMock,
     cpuLogFile,
     cpuLogMode: settings.cpuLogMode,
+    maxCycles: settings.maxCycles,
   };
 }
 
@@ -66,5 +68,6 @@ export function createSessionFromSettings(
     ioMock: resolved.ioMock,
     cpuLogFile: resolved.cpuLogFile,
     cpuLogMode: resolved.cpuLogMode,
+    maxCycles: resolved.maxCycles,
   });
 }

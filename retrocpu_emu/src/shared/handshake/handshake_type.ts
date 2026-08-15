@@ -140,6 +140,21 @@ export const ADDR_BREAK_SET_FRAME_LEN = 1 + ADDR_BREAK_SET_PAYLOAD_LEN;
 /** 11h の線上／TCP 全長（コマンド＋スロット） */
 export const ADDR_BREAK_CLR_FRAME_LEN = 2;
 
+/** 13h メモリ読み出し要求（cmd + addr32 BE + count32 BE）。TCP／論理ヘッダ。線上は末尾にパッド 1B */
+export const MEM_READ_REQ_FRAME_LEN = 9;
+
+/** 14h メモリ書き込み要求ヘッダ（cmd + addr32 BE + count32 BE。続けて data）。TCP／論理。線上はパッド 1B のあと data */
+export const MEM_WRITE_REQ_HEADER_LEN = 9;
+
+/** 13h/14h 線上ヘッダ長（cmd + addr32 + count32 + パッド 0） */
+export const MEM_RW_WIRE_HEADER_LEN = 10;
+
+/** 15h/16h の最大転送バイト数 */
+export const HSHK_IO_MAX_BYTES = 254;
+
+/** TCP 13h/14h の 1 回あたり最大バイト数 */
+export const DEBUG_MEM_MAX_BYTES = 65536;
+
 /** ブレイク対象 */
 export const BREAK_TARGET = {
   MEM: 0,
@@ -181,30 +196,6 @@ export function u32be(n: number): [number, number, number, number] {
   return [(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff];
 }
 
-/**
- * ブロック単位（デフォルト256バイト）のチェックサムを計算する。
- * チェックサムは各バイトの単純加算の下位8ビット。
- */
-export function calcBlockChecksum(block: Uint8Array): number {
-  let sum = 0;
-  for (const b of block) {
-    sum = (sum + b) & 0xff;
-  }
-  return sum;
-}
-
-/**
- * データを blockSize バイトのブロック列に分割する。
- * 端数はパディングなしでそのまま末尾ブロックとして返す。
- */
-export function splitToBlocks(data: Uint8Array, blockSize = 256): Uint8Array[] {
-  const blocks: Uint8Array[] = [];
-  for (let offset = 0; offset < data.length; offset += blockSize) {
-    blocks.push(data.slice(offset, offset + blockSize));
-  }
-  return blocks;
-}
-
 // ─────────────────────────────────────────────
 // 内部ユーティリティ（両ボード共通）
 // ─────────────────────────────────────────────
@@ -214,14 +205,14 @@ export const DEFAULT_TIMEOUT_MS = 5000;
 /** ACK=0 チェックの最大リトライ回数（HandShake.mdc: 最大10回 ≒ 1ms） */
 export const ACK0_RETRY_MAX = 10;
 
-/** ACK=0 チェック待機の下限 [us] */
-export const ACK0_DELAY_MIN_US = 50;
+/** ACK=0 チェック待機の下限 [us]（HandShake.mdc: 10us～30us） */
+export const ACK0_DELAY_MIN_US = 10;
 
 /** ACK=0 チェック待機の上限 [us] */
-export const ACK0_DELAY_MAX_US = 100;
+export const ACK0_DELAY_MAX_US = 30;
 
 /**
- * 50us～100us のランダム待機（HandShake.mdc ACK=0 チェック用）。
+ * 10us～30us のランダム待機（HandShake.mdc ACK=0 チェック用）。
  * エミュレータ上は実時間ではなく短い非同期 yield で近似する。
  */
 export function delayAck0RandomUs(): Promise<void> {
@@ -233,7 +224,8 @@ export function delayAck0RandomUs(): Promise<void> {
 }
 
 /**
- * HSHK_ENA==0 になるまで、50us～100us（ランダム）待機を最大 maxRetry 回繰り返す。
+ * HSHK_ENA==0 になるまで、10us～30us（ランダム）待機を最大 maxRetry 回繰り返す。
+ * 既に 0 なら待たない。
  * @param isEna0 - ENA が 0 なら true を返す
  * @param maxRetry - 最大リトライ回数
  * @throws 超過時 Error
@@ -242,6 +234,7 @@ export async function waitEna0Check(
   isEna0: () => boolean,
   maxRetry: number = ACK0_RETRY_MAX,
 ): Promise<void> {
+  if (isEna0()) return;
   for (let i = 0; i < maxRetry; i += 1) {
     await delayAck0RandomUs();
     if (isEna0()) return;
@@ -253,17 +246,31 @@ export async function waitEna0Check(
 export const waitAck0Check = waitEna0Check;
 
 /**
+ * 信号待ち 1 ターンで CPU を進める上限。
+ * 2 バイト DENA/DACK の片側は数十命令なので、この回数以内で揃えば setTimeout しない。
+ */
+export const WAIT_CONDITION_POLL_BUDGET = 4096;
+
+/**
  * condition が true を返すまでポーリングで待機する。
+ * @param condition 成立したら true
+ * @param timeoutMs 上限ミリ秒
+ * @param onPoll 1 回の確認で条件未成立のとき呼ぶ（同一スレッドの 1 命令 tick）
  * @throws timeoutMs を超えた場合に Error をスロー
  */
 export function waitCondition(
   condition: () => boolean,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  onPoll?: () => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
-    /** 条件成立なら resolve、期限切れなら reject、それ以外は次のタスクで再試行 */
-    const check = () => {
+    const yieldTurn =
+      typeof setImmediate === "function"
+        ? (fn: () => void) => setImmediate(fn)
+        : (fn: () => void) => setTimeout(fn, 0);
+    /** 条件成立なら resolve、期限切れなら reject、それ以外は CPU を進めて yield */
+    const check = (): void => {
       if (condition()) {
         resolve();
         return;
@@ -272,7 +279,16 @@ export function waitCondition(
         reject(new Error("handshake timeout"));
         return;
       }
-      setTimeout(check, 0);
+      if (onPoll) {
+        for (let i = 0; i < WAIT_CONDITION_POLL_BUDGET; i += 1) {
+          onPoll();
+          if (condition()) {
+            resolve();
+            return;
+          }
+        }
+      }
+      yieldTurn(check);
     };
     check();
   });

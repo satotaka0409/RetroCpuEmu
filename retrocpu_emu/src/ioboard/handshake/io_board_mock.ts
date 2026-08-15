@@ -23,6 +23,7 @@ import {
 } from "./command_cpu_to_io";
 import { IoControlHandshake } from "../../shared/handshake/handshake_ioboard";
 import {
+  CMD_IO_TO_CPU,
   createHandshakeBus,
   DEFAULT_TIMEOUT_MS,
   intCauseForTimer,
@@ -530,6 +531,32 @@ export class IoBoardHandshakeMock {
         response: reply.slice(),
       });
       return reply;
+    });
+  }
+
+  /**
+   * IO→CPU 13h でメモリを読む（同一 ENA。ヘッダ＋データ＋status）。
+   * @param byteAddr 開始バイトアドレス
+   * @param byteCount バイト数（0 ならヘッダのみ）
+   * @returns 読み出したバイト列
+   */
+  memReadFromCpu(byteAddr: number, byteCount: number): Promise<Uint8Array> {
+    return this.withBusLock(async () => {
+      this.pushLog({
+        at: Date.now(),
+        dir: "io_to_cpu",
+        cmd: CMD_IO_TO_CPU.MEM_READ,
+        frame: Uint8Array.from([CMD_IO_TO_CPU.MEM_READ]),
+      });
+      const data = await this.io.memRead(byteAddr, byteCount);
+      this.pushLog({
+        at: Date.now(),
+        dir: "cpu_to_io",
+        cmd: CMD_IO_TO_CPU.MEM_READ,
+        frame: Uint8Array.from([CMD_IO_TO_CPU.MEM_READ]),
+        response: data.slice(),
+      });
+      return data;
     });
   }
 

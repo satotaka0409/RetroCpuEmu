@@ -25,44 +25,73 @@
   }
 
   /**
+   * コンテキストメニューを隠す。
+   */
+  function hideMemMenu() {
+    const menu = document.getElementById("memMenu");
+    if (menu) menu.hidden = true;
+  }
+
+  /**
+   * アドレス入力ダイアログの開閉。
+   * @param {boolean} open 開くなら true
+   */
+  function setGotoOpen(open) {
+    const modal = document.getElementById("memGoto");
+    const input = document.getElementById("memGotoInput");
+    if (!modal) return;
+    modal.hidden = !open;
+    if (open && input) {
+      const cur = state.memStart != null ? Number(state.memStart) : 0;
+      input.value = (cur & 0x3ffff).toString(16).toUpperCase().padStart(5, "0");
+      input.focus();
+      input.select();
+    }
+  }
+
+  /**
+   * 入力した 16 進を物理ワードにして拡張へ送る。
+   */
+  function submitGoto() {
+    const input = document.getElementById("memGotoInput");
+    const raw = (input && input.value ? input.value : "").trim();
+    if (!/^[0-9A-Fa-f]{1,5}$/.test(raw)) {
+      return;
+    }
+    const addr = parseInt(raw, 16) & 0x3ffff;
+    setGotoOpen(false);
+    vscode.postMessage({ type: "command", cmd: "gotoMem", addr });
+  }
+
+  /**
    * 表示対象のレジスタを決める。
    * @returns {{ regs: Regs, meta: string, breakText: string }}
    */
   function resolveView() {
-    if (state.viewMode === "instr") {
+    if (state.viewMode === "hist") {
       const h =
-        state.instrHistory.find(
+        (state.slotHistory || []).find(
           (x) => x.slot === state.pointSlot && x.histIndex === state.histIndex,
-        ) || state.instrHistory[state.histIndex];
+        ) || (state.slotHistory || [])[state.histIndex];
       const regs = h ? h.regs : state.current;
-      return {
-        regs,
-        meta:
-          `命令ブレイク:${h ? h.slot : state.pointSlot}  履歴:${state.histIndex}`,
-        breakText: h
-          ? `命令ブレイク slot ${h.slot}\n履歴 ${h.histIndex} / 最大 7\nIC=${regs.IC} で停止（モック）`
-          : "命令ブレイク履歴なし",
-      };
-    }
-    if (state.viewMode === "addr") {
-      const h =
-        state.addrHistory.find(
-          (x) => x.slot === state.pointSlot && x.histIndex === state.histIndex,
-        ) || state.addrHistory[state.histIndex];
-      const regs = h ? h.regs : state.current;
+      const slot = h ? h.slot : state.pointSlot;
+      const kind = h ? h.kind : "INST";
       const meta = h
-        ? `メモリブレイク:${h.slot}  履歴:${h.histIndex}\nブレイク条件 ${h.access} ${h.condition}\n${h.access}:${h.value}  前回WRITE:${h.prevWrite}`
-        : `アドブレイク:${state.pointSlot}  履歴:${state.histIndex}`;
+        ? `スロット:${slot}  ${kind}  履歴:${h.histIndex}\n` +
+          (kind === "MEM"
+            ? `条件 ${h.access} ${h.condition}\n${h.access}:${h.value}  前回WRITE:${h.prevWrite}`
+            : `アクセス ${h.access}`)
+        : `スロット:${state.pointSlot}  履歴:${state.histIndex}`;
       const breakText = h
-        ? `${h.kind}ブレイク slot ${h.slot}\n条件 ${h.access} ${h.condition}\nVALUE ${h.value}  PREV ${h.prevWrite}`
-        : "アドレスブレイク履歴なし";
+        ? `${kind} スロット ${h.slot}\n履歴 ${h.histIndex}\nIC=${regs.IC}`
+        : "このスロットの履歴なし";
       return { regs, meta, breakText };
     }
     return {
       regs: state.current,
       meta: "現在値",
       breakText:
-        "ブレイク未発生（モック）。\n命令ブレイクは逆アセンブラ、メモリブレイクはダンプ上で設定予定。",
+        "ブレイク未発生（モック）。\n比較器 0–7 は命令／メモリ／IO。ステップは比較器を使わない。",
     };
   }
 
@@ -75,24 +104,31 @@
     const histBtns = [];
     for (let i = 0; i < 8; i += 1) {
       const active =
-        state.viewMode !== "current" && state.histIndex === i ? " active" : "";
+        state.viewMode === "hist" && state.histIndex === i ? " active" : "";
       histBtns.push(
         `<button type="button" data-hist="${i}" class="${active.trim()}">${i}</button>`,
       );
     }
+    const slotBtns = [];
+    for (let i = 0; i < 8; i += 1) {
+      const active =
+        state.viewMode === "hist" && state.pointSlot === i ? " active" : "";
+      slotBtns.push(
+        `<button type="button" data-slot="${i}" class="${active.trim()}">${i}</button>`,
+      );
+    }
     const curActive = state.viewMode === "current" ? " active" : "";
-    const instrActive = state.viewMode === "instr" ? " active" : "";
-    const addrActive = state.viewMode === "addr" ? " active" : "";
     el.innerHTML = `
       <div class="group">
         <button type="button" data-mode="current" class="${curActive.trim()}">現在</button>
       </div>
       <div class="sep"></div>
-      <div class="group">${histBtns.join("")}</div>
+      <div class="group">
+        <span class="tab-label">履歴</span>${histBtns.join("")}
+      </div>
       <div class="sep"></div>
       <div class="group">
-        <button type="button" data-mode="instr" class="${instrActive.trim()}">命令 0-7</button>
-        <button type="button" data-mode="addr" class="${addrActive.trim()}">アド 0-5</button>
+        <span class="tab-label">スロット</span>${slotBtns.join("")}
       </div>
     `;
   }
@@ -170,32 +206,22 @@
       .join("");
   }
 
-  /** BP 一覧を描画する */
+  /** BP 一覧を描画する（スロット 0–7） */
   function renderBp() {
-    const instr = document.getElementById("bpInstr");
-    const addr = document.getElementById("bpAddr");
-    if (instr) {
-      instr.innerHTML = state.bpInstr
-        .map(
-          (b) =>
-            `<li class="${b.enabled ? "on" : ""}">` +
-            `<span class="slot">${b.slot}</span>` +
-            `<span>${esc(b.addr)}</span>` +
-            `</li>`,
-        )
-        .join("");
-    }
-    if (addr) {
-      addr.innerHTML = state.bpAddr
-        .map(
-          (b) =>
-            `<li class="${b.enabled ? "on" : ""}">` +
-            `<span class="slot">${b.slot}</span>` +
-            `<span>${esc(b.kind)} ${esc(b.addr)} ${esc(b.access)}</span>` +
-            `</li>`,
-        )
-        .join("");
-    }
+    const list = document.getElementById("bpSlots");
+    if (!list) return;
+    const slots = state.bpSlots || [];
+    list.innerHTML = slots
+      .map(
+        (b) =>
+          `<li class="${b.enabled ? "on" : ""}">` +
+          `<span class="slot">${b.slot}</span>` +
+          `<span>${esc(b.kind)}</span>` +
+          `<span class="addr">${esc(b.addr)}</span>` +
+          `<span>${esc(b.access)}${b.history ? " H" : ""}</span>` +
+          `</li>`,
+      )
+      .join("");
   }
 
   /**
@@ -207,29 +233,110 @@
     if (el) el.textContent = text;
   }
 
-  /** メモリダンプを描画する */
-  function renderMem() {
+  /** メモリダンプを描画する（アドレス 5 桁、データ 4 桁） */
+  function renderMem(scrollToAddr) {
     const el = document.getElementById("memDump");
     if (!el) return;
-    el.innerHTML = state.memDump
+    const keep = el.scrollTop;
+    el.innerHTML = (state.memDump || [])
       .map((row) => {
         const words = row.words
-          .map((w) => `<span class="word" data-addr="${esc(row.addr)}">${esc(w)}</span>`)
+          .map(
+            (w) =>
+              `<span class="word" data-row="${esc(row.addr)}">${esc(w)}</span>`,
+          )
           .join("");
         return (
-          `<div class="line mem">` +
-          `<span class="addr">${esc(row.addr)}</span>` +
+          `<div class="line mem" data-addr="${esc(row.addr)}">` +
+          `<span class="addr phys">${esc(row.addr)}</span>` +
           words +
           `</div>`
         );
       })
       .join("");
+    if (scrollToAddr != null) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollMemTo(el, Number(scrollToAddr));
+          reportMemScroll();
+        });
+      });
+    } else {
+      el.scrollTop = keep;
+    }
+  }
+
+  /**
+   * 指定ワードを含む行（または直前の行）をダンプ先頭に出す。
+   * @param {HTMLElement} el スクロール容器
+   * @param {number} scrollToAddr 物理ワード
+   */
+  function scrollMemTo(el, scrollToAddr) {
+    const target = Number(scrollToAddr) & 0x3ffff;
+    const lines = el.querySelectorAll(".line.mem");
+    let best = null;
+    let bestAddr = -1;
+    for (let i = 0; i < lines.length; i += 1) {
+      const node = /** @type {HTMLElement} */ (lines[i]);
+      const a = parseInt(node.dataset.addr || "0", 16);
+      if (!Number.isFinite(a)) continue;
+      if (a <= target && a >= bestAddr) {
+        bestAddr = a;
+        best = node;
+      }
+    }
+    if (!best && lines.length) {
+      best = /** @type {HTMLElement} */ (lines[0]);
+    }
+    if (!best) return;
+    const first = /** @type {HTMLElement | null} */ (el.firstElementChild);
+    const base = first ? first.offsetTop : 0;
+    el.scrollTop = Math.max(0, best.offsetTop - base);
+  }
+
+  /**
+   * 可視行の先頭／末尾ワードを拡張へ送り、窓の再取得判定させる。
+   */
+  function reportMemScroll() {
+    const el = document.getElementById("memDump");
+    if (!el) return;
+    const lines = el.querySelectorAll(".line.mem");
+    if (!lines.length) return;
+    const box = el.getBoundingClientRect();
+    let first = null;
+    let last = null;
+    for (let i = 0; i < lines.length; i += 1) {
+      const node = /** @type {HTMLElement} */ (lines[i]);
+      const r = node.getBoundingClientRect();
+      if (r.bottom <= box.top + 0.5) continue;
+      if (r.top >= box.bottom - 0.5) break;
+      const a = parseInt(node.dataset.addr || "0", 16);
+      if (!Number.isFinite(a)) continue;
+      if (first === null) first = a;
+      last = a + 15;
+    }
+    if (first === null || last === null) return;
+    vscode.postMessage({ type: "memScroll", firstAddr: first, lastAddr: last });
+  }
+
+  let memScrollTimer = 0;
+  /**
+   * スクロールをまとめて報告する。
+   */
+  function onMemScrollDebounced() {
+    if (memScrollTimer) clearTimeout(memScrollTimer);
+    memScrollTimer = setTimeout(() => {
+      memScrollTimer = 0;
+      reportMemScroll();
+    }, 80);
   }
 
   /** 全体を再描画する */
   function render() {
     const title = document.getElementById("title");
     if (title) title.textContent = state.title;
+    const note = document.getElementById("memNote");
+    if (note && state.memNote) note.textContent = state.memNote;
     renderTabs();
     const view = resolveView();
     renderRegs(view.regs, view.meta);
@@ -242,28 +349,68 @@
 
   document.body.addEventListener("click", (ev) => {
     const t = /** @type {HTMLElement} */ (ev.target);
+    hideMemMenu();
     const btn = t.closest("button");
     if (!btn) {
-      if (t.classList.contains("word")) {
-        vscode.postMessage({ type: "command", cmd: "memBreakDialog" });
-      }
+      return;
+    }
+    if (btn.dataset.memCmd === "goto") {
+      setGotoOpen(true);
+      return;
+    }
+    if (btn.dataset.memCmd === "gotoOk") {
+      submitGoto();
+      return;
+    }
+    if (btn.dataset.memCmd === "gotoCancel") {
+      setGotoOpen(false);
       return;
     }
     if (btn.dataset.cmd) {
       vscode.postMessage({ type: "command", cmd: btn.dataset.cmd });
       return;
     }
-    if (btn.dataset.mode) {
-      state.viewMode = btn.dataset.mode;
-      if (state.viewMode === "instr") state.pointSlot = 1;
-      if (state.viewMode === "addr") state.pointSlot = 0;
+    if (btn.dataset.mode === "current") {
+      state.viewMode = "current";
+      render();
+      return;
+    }
+    if (btn.dataset.slot !== undefined) {
+      state.pointSlot = Number(btn.dataset.slot);
+      state.viewMode = "hist";
       render();
       return;
     }
     if (btn.dataset.hist !== undefined) {
       state.histIndex = Number(btn.dataset.hist);
-      if (state.viewMode === "current") state.viewMode = "instr";
+      state.viewMode = "hist";
       render();
+    }
+  });
+
+  document.body.addEventListener("contextmenu", (ev) => {
+    const t = /** @type {HTMLElement} */ (ev.target);
+    const pane = t.closest(".pane-mem");
+    if (!pane) return;
+    ev.preventDefault();
+    const menu = document.getElementById("memMenu");
+    if (!menu) return;
+    menu.hidden = false;
+    const x = Math.min(ev.clientX, window.innerWidth - 160);
+    const y = Math.min(ev.clientY, window.innerHeight - 48);
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+  });
+
+  document.body.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      hideMemMenu();
+      setGotoOpen(false);
+    }
+    const modal = document.getElementById("memGoto");
+    if (modal && !modal.hidden && ev.key === "Enter") {
+      ev.preventDefault();
+      submitGoto();
     }
   });
 
@@ -272,8 +419,24 @@
     if (msg && msg.type === "state" && msg.state) {
       state = msg.state;
       render();
+      return;
+    }
+    if (msg && msg.type === "mem") {
+      state.memDump = msg.memDump;
+      state.memStart = msg.memStart;
+      state.memCacheLo = msg.memCacheLo;
+      state.memCacheHi = msg.memCacheHi;
+      if (msg.memNote) state.memNote = msg.memNote;
+      const note = document.getElementById("memNote");
+      if (note && state.memNote) note.textContent = state.memNote;
+      renderMem(msg.scrollToAddr);
     }
   });
+
+  const memEl = document.getElementById("memDump");
+  if (memEl) {
+    memEl.addEventListener("scroll", onMemScrollDebounced);
+  }
 
   render();
   vscode.postMessage({ type: "ready" });

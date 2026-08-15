@@ -14,6 +14,8 @@ import {
   parseAddrBreakSetFrame,
 } from "../../src/ioboard/debug_addr_break";
 import { DebugHost } from "../../src/ioboard/debug_host";
+import { encodeMemReadFrame } from "../../src/ioboard/debug_mem_read";
+import { encodeMemWriteFrame } from "../../src/ioboard/debug_mem_write";
 import {
   CMD_IO_TO_CPU,
   RESPONSE_CODE,
@@ -165,5 +167,65 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     const port = await host.listen();
     const status = await roundTrip(port, Uint8Array.from([0x99]));
     expect(status).toBe(RESPONSE_CODE.NG);
+  });
+
+  it("13h はハンドシェイク相当のデータを status+長さ付きで返す", async () => {
+    const seen: { byteAddr: number; byteCount: number }[] = [];
+    host = new DebugHost({
+      port: 0,
+      host: "127.0.0.1",
+      handlers: {
+        addrBreakSet: async () => RESPONSE_CODE.NG,
+        addrBreakClr: async () => RESPONSE_CODE.NG,
+        memRead: async (byteAddr, byteCount) => {
+          seen.push({ byteAddr, byteCount });
+          return Uint8Array.from([0x12, 0x34, 0x56, 0x78]);
+        },
+      },
+    });
+    const port = await host.listen();
+    const frame = encodeMemReadFrame(0x2000, 4);
+    const body = await new Promise<Buffer>((resolve, reject) => {
+      const sock = net.connect({ host: "127.0.0.1", port }, () => {
+        sock.write(Buffer.from(frame));
+      });
+      const chunks: Buffer[] = [];
+      sock.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        const buf = Buffer.concat(chunks);
+        if (buf.length >= 5) {
+          const m = buf.readUInt32BE(1);
+          if (buf.length >= 5 + m) {
+            sock.end();
+            resolve(buf);
+          }
+        }
+      });
+      sock.on("error", reject);
+    });
+    expect(body[0]).toBe(RESPONSE_CODE.OK);
+    expect(body.readUInt32BE(1)).toBe(4);
+    expect([...body.subarray(5)]).toEqual([0x12, 0x34, 0x56, 0x78]);
+    expect(seen[0]).toEqual({ byteAddr: 0x2000, byteCount: 4 });
+  });
+
+  it("14h はハンドラへデータを渡し OK を返す", async () => {
+    const seen: { byteAddr: number; data: number[] }[] = [];
+    host = new DebugHost({
+      port: 0,
+      host: "127.0.0.1",
+      handlers: {
+        addrBreakSet: async () => RESPONSE_CODE.NG,
+        addrBreakClr: async () => RESPONSE_CODE.NG,
+        memWrite: async (byteAddr, data) => {
+          seen.push({ byteAddr, data: [...data] });
+        },
+      },
+    });
+    const port = await host.listen();
+    const frame = encodeMemWriteFrame(0x3000, new Uint8Array([0xab, 0xcd]));
+    const status = await roundTrip(port, frame);
+    expect(status).toBe(RESPONSE_CODE.OK);
+    expect(seen[0]).toEqual({ byteAddr: 0x3000, data: [0xab, 0xcd] });
   });
 });

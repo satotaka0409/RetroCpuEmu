@@ -993,12 +993,12 @@ describe("統合テスト: sum 1 to 10", () => {
     //   0001 090A  MVI R1, #10
     //   0002 5809  A R0, R1        (LOOP)
     //   0003 4141  SI R1, #1, Z    (スキップ条件 Z=0x04, DDDD=1)
-    //   0004 CFFD  B LOOP          (相対 -3)
-    //   0005 8801  ST R0, RESULT   (相対 +1)
+    //   0004 CFFE  B LOOP          (相対 -2。基準は当該命令)
+    //   0005 8802  ST R0, RESULT   (相対 +2)
     //   0006 2000  H
     //   0007 0000  RESULT: .word 0
     await runHalt([
-      0x0800, 0x090a, 0x5809, 0x4141, 0xcffd, 0x8801, 0x2000, 0x0000,
+      0x0800, 0x090a, 0x5809, 0x4141, 0xcffe, 0x8802, 0x2000, 0x0000,
     ]);
     expect(getExecStatus()).toBe("halted");
     // getMemory() で addr 0x0007 を直接確認

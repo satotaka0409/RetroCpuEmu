@@ -435,7 +435,7 @@ function stop(): void {
 
 /**
  * PC（Cursor 拡張）向けデバッグ TCP を 29000 で待つ。
- * 10h/11h は CPU ハンドシェイクの結果を待って OK/NG を返す。
+ * 10h/11h/13h/14h は CPU ハンドシェイクの結果を待って返す。
  */
 async function startDebugHost(): Promise<void> {
   await stopDebugHost();
@@ -443,6 +443,9 @@ async function startDebugHost(): Promise<void> {
     handlers: {
       addrBreakSet: (payload) => link.addrBreakSet(payload),
       addrBreakClr: (slot) => link.addrBreakClr(slot),
+      memRead: (byteAddr, byteCount) =>
+        link.memReadBytes(byteAddr >>> 1, byteCount),
+      memWrite: (byteAddr, data) => link.memWriteBytes(byteAddr >>> 1, data),
     },
   });
   debugHost = host;

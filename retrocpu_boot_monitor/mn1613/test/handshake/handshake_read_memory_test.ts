@@ -25,20 +25,21 @@ const WORD_ADDR = 0x1800;
 const BYTE_ADDR = WORD_ADDR * 2;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
-  withMn1613CpuLog(mn1613MonHandshakeSettings, import.meta.url),
+  withMn1613CpuLog(
+    {
+      ...mn1613MonHandshakeSettings,
+      maxCycles: 250_000_000,
+      ioMock: [{ type: "handshake", timeoutMs: 30_000, syncIrq2: false }],
+    },
+    import.meta.url,
+  ),
 );
 
-/**
- * ブロックのチェックサム（各バイト加算の下位 8bit）。
- * @param data ブロック
- * @returns 0–255
- */
-function blockChecksum(data: readonly number[]): number {
-  return data.reduce((s, b) => (s + (b & 0xff)) & 0xff, 0);
-}
+/** デバッグダンプ窓 ±800h ワード（16 ワード境界）のバイト数 */
+const DUMP_WINDOW_BYTES = 0x1220;
 
 /**
- * 13h ヘッダ（cmd + addr32 BE + count32 BE）。
+ * 13h ヘッダ（cmd + addr32 BE + count32 BE + パッド）。
  * @param byteAddr バイトアドレス
  * @param byteCount バイト数
  * @returns IO→CPU 先頭フレーム
@@ -54,6 +55,7 @@ function memReadHeader(byteAddr: number, byteCount: number): Uint8Array {
     (byteCount >>> 16) & 0xff,
     (byteCount >>> 8) & 0xff,
     byteCount & 0xff,
+    0,
   ]);
 }
 
@@ -94,8 +96,8 @@ async function waitReq1(
 /**
  * 13h を IRQ ハンドラ経由で実行する。
  * @param mock IO モック
- * @param toCpu IO→CPU（ヘッダ）
- * @param fromCpu CPU→IO 待ちバイト数（データ+checksum）
+ * @param toCpu IO→CPU（ヘッダ 10B）
+ * @param fromCpu CPU→IO 待ちバイト数（データ）
  * @param thenToCpu status（OK/NG）
  * @returns CPU→IO 応答
  */
@@ -113,7 +115,7 @@ async function callRead(
   return io;
 }
 
-test("13h は指定バイトをビッグエンディアンで返しチェックサムを付ける", async () => {
+test("13h は指定バイトをビッグエンディアンで返す", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(WORD_ADDR, 0x1234);
     s.writeWord(WORD_ADDR + 1, 0xabcd);
@@ -121,10 +123,25 @@ test("13h は指定バイトをビッグエンディアンで返しチェック�
     const reply = await callRead(
       mock,
       memReadHeader(BYTE_ADDR, 4),
-      5,
+      4,
       Uint8Array.from([0x00]),
     );
-    expect(Array.from(reply)).toEqual([...data, blockChecksum(data)]);
+    expect(Array.from(reply)).toEqual(data);
+    s.expectRegisters({ R0: 0, R4: 0x4444 });
+  });
+});
+
+test("13h はワード 8000h（バイト 10000h、byte_hi の LSB）を読む", async () => {
+  await withCase(async (s, mock) => {
+    const word = 0x8000;
+    s.writeWord(word, 0xa5a5);
+    const reply = await callRead(
+      mock,
+      memReadHeader(word * 2, 2),
+      2,
+      Uint8Array.from([0x00]),
+    );
+    expect(Array.from(reply)).toEqual([0xa5, 0xa5]);
     s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
 });
@@ -137,17 +154,85 @@ test("13h 奇数バイトアドレスから読める", async () => {
     const reply = await callRead(
       mock,
       memReadHeader(BYTE_ADDR + 1, 2),
-      3,
+      2,
       Uint8Array.from([0x00]),
     );
-    expect(Array.from(reply)).toEqual([...data, blockChecksum(data)]);
+    expect(Array.from(reply)).toEqual([...data]);
   });
 });
 
 test("13h バイト数 0 はデータなしで完了する", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callRead(mock, memReadHeader(BYTE_ADDR, 0), 0);
+    const reply = await callRead(
+      mock,
+      memReadHeader(BYTE_ADDR, 0),
+      0,
+      Uint8Array.from([0x00]),
+    );
     expect(reply.length).toBe(0);
     s.expectRegisters({ R4: 0x4444 });
+  });
+});
+
+/**
+ * パターンバイト列をユーザ RAM に書く。
+ * @param s セッション
+ * @param byteAddr 開始バイトアドレス
+ * @param n バイト数
+ * @returns 書いた列
+ */
+function fillPattern(s: Mn1613AsmSession, byteAddr: number, n: number): number[] {
+  const data: number[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const b = (i * 13 + 7) & 0xff;
+    data.push(b);
+    const waddr = (byteAddr + i) >>> 1;
+    const cur = s.readWord(waddr);
+    if ((byteAddr + i) & 1) {
+      s.writeWord(waddr, (cur & 0xff00) | b);
+    } else {
+      s.writeWord(waddr, (b << 8) | (cur & 0x00ff));
+    }
+  }
+  return data;
+}
+
+/**
+ * 13h を IoControlHandshake.memRead で実行する。
+ * @param mock IO モック
+ * @param byteAddr 開始バイトアドレス
+ * @param byteCount バイト数
+ * @returns 読み出したバイト
+ */
+async function callMemReadBlocks(
+  mock: IoBoardHandshakeMock,
+  byteAddr: number,
+  byteCount: number,
+): Promise<Uint8Array> {
+  const io = mock.memReadFromCpu(byteAddr, byteCount);
+  await waitReq1(mock);
+  await session.call("g_handshake_interrupt_handler", {
+    registers: { ...BASE_REGS },
+  });
+  return io;
+}
+
+test("13h は 257 バイトを返す", async () => {
+  await withCase(async (s, mock) => {
+    const n = 257;
+    const expected = fillPattern(s, BYTE_ADDR, n);
+    const reply = await callMemReadBlocks(mock, BYTE_ADDR, n);
+    expect(Array.from(reply)).toEqual(expected);
+    s.expectRegisters({ R0: 0, R4: 0x4444 });
+  });
+});
+
+test("13h はダンプ窓 0x1220 バイトを返す", async () => {
+  await withCase(async (s, mock) => {
+    const expected = fillPattern(s, BYTE_ADDR, DUMP_WINDOW_BYTES);
+    const reply = await callMemReadBlocks(mock, BYTE_ADDR, DUMP_WINDOW_BYTES);
+    expect(reply.length).toBe(DUMP_WINDOW_BYTES);
+    expect(Array.from(reply)).toEqual(expected);
+    s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
 });

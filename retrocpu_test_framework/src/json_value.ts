@@ -38,6 +38,11 @@ export type JsonTestSettings = {
    * 省略時は START/END のみ。`checkpoint` / `instruction` で本文を出す。
    */
   cpuLogMode?: CpuLogMode;
+  /**
+   * run / call の最大サイクル。省略時はセッション既定（2_000_000）。
+   * 13h の複数ブロックなど、ハンドシェイク待ち込みで命令数が多いときに上げる。
+   */
+  maxCycles?: number;
   /** テスト前処理 */
   beforeTest?: () => Promise<void> | void;
   /** テスト後処理 */

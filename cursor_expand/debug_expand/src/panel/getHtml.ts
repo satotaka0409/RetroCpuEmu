@@ -17,6 +17,10 @@ export function getDebugHtml(
   state: DebugViewState,
 ): string {
   const stateJson = JSON.stringify(state).replace(/</g, "\\u003c");
+  const noteEsc = String(state.memNote ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -35,7 +39,7 @@ export function getDebugHtml(
       <button type="button" data-cmd="run" title="実行（未実装）">実行</button>
       <button type="button" data-cmd="halt" title="停止（未実装）">停止</button>
       <button type="button" data-cmd="step" title="ステップ（未実装）">Step</button>
-      <span class="toolbar-note">HEX/CDB 読込可 — 実行接続は後続</span>
+      <span class="toolbar-note" id="memNote">${noteEsc}</span>
     </div>
   </header>
 
@@ -59,28 +63,32 @@ export function getDebugHtml(
       <div class="code-scroll" id="source"></div>
     </section>
 
-    <aside class="pane-bp" aria-label="ブレイクポイント一覧">
-      <div class="pane-head">BP</div>
-      <div class="bp-block">
-        <div class="bp-label">命令 0–7</div>
-        <ul class="bp-list" id="bpInstr"></ul>
-      </div>
-      <div class="bp-block">
-        <div class="bp-label">アド 0–7</div>
-        <ul class="bp-list" id="bpAddr"></ul>
-      </div>
-    </aside>
+    <section class="pane-mem" aria-label="メモリダンプ">
+      <div class="pane-head">メモリダンプ（±800h をハンドシェイク取得／端で再取得）</div>
+      <div class="code-scroll mem" id="memDump"></div>
+    </section>
 
     <section class="pane-break" aria-label="ブレイク情報">
       <div class="pane-head">ブレイク情報</div>
+      <ul class="bp-list" id="bpSlots"></ul>
       <div class="break-body" id="breakInfo"></div>
     </section>
-
-    <section class="pane-mem" aria-label="メモリダンプ">
-      <div class="pane-head">メモリダンプ</div>
-      <div class="code-scroll mem" id="memDump"></div>
-    </section>
   </main>
+
+  <div id="memMenu" class="ctx-menu" hidden>
+    <button type="button" data-mem-cmd="goto">アドレス指定…</button>
+  </div>
+  <div id="memGoto" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-title">表示アドレス</div>
+      <p class="modal-hint">物理ワード（16進、最大5桁。例 01800 / 3F000）</p>
+      <input id="memGotoInput" type="text" maxlength="5" spellcheck="false" autocomplete="off" />
+      <div class="modal-actions">
+        <button type="button" data-mem-cmd="gotoOk">表示</button>
+        <button type="button" data-mem-cmd="gotoCancel">取消</button>
+      </div>
+    </div>
+  </div>
 
   <script nonce="${nonce}">window.__RETRO_DEBUG_STATE__ = ${stateJson};</script>
   <script nonce="${nonce}" src="${jsUri}"></script>

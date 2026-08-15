@@ -10,6 +10,9 @@ import {
   ADDR_BREAK_SET_PAYLOAD_LEN,
   ADDR_BREAK_SLOT_COUNT,
   CMD_IO_TO_CPU,
+  DEBUG_MEM_MAX_BYTES,
+  MEM_READ_REQ_FRAME_LEN,
+  MEM_WRITE_REQ_HEADER_LEN,
   RESPONSE_CODE,
 } from "../shared/handshake/handshake_type";
 
@@ -113,14 +116,36 @@ export function isAddrBreakSlot(slot: number): boolean {
 }
 
 /**
+ * 受信バッファから次フレームの必要長を返す。ヘッダ不足なら null。
+ * 14h は count がヘッダに入ってから全長が決まる。
+ * @param buf 未処理受信
+ * @returns 必要バイト数。まだ足りないときは null
+ */
+export function debugPcNeededBytes(buf: Uint8Array): number | null {
+  if (buf.length < 1) return null;
+  const cmd = buf[0]!;
+  if (cmd === CMD_IO_TO_CPU.MEM_WRITE) {
+    if (buf.length < MEM_WRITE_REQ_HEADER_LEN) return null;
+    const n =
+      ((buf[5]! << 24) | (buf[6]! << 16) | (buf[7]! << 8) | buf[8]!) >>> 0;
+    if (n > DEBUG_MEM_MAX_BYTES) return MEM_WRITE_REQ_HEADER_LEN;
+    return MEM_WRITE_REQ_HEADER_LEN + n;
+  }
+  return debugPcFrameLength(cmd);
+}
+
+/**
  * コマンド先頭バイトから、続きを含めた必要バイト数を返す。
  * 未知コマンドは 1（そのバイトだけ消費して NG）。
+ * 14h は可変長なので {@link debugPcNeededBytes} を使う。
  * @param cmd 先頭バイト
  * @returns フレーム全長
  */
 export function debugPcFrameLength(cmd: number): number {
   if (cmd === CMD_IO_TO_CPU.BREAK_MEM_IO_SET) return ADDR_BREAK_SET_FRAME_LEN;
   if (cmd === CMD_IO_TO_CPU.BREAK_MEM_IO_CLR) return ADDR_BREAK_CLR_FRAME_LEN;
+  if (cmd === CMD_IO_TO_CPU.MEM_READ) return MEM_READ_REQ_FRAME_LEN;
+  if (cmd === CMD_IO_TO_CPU.MEM_WRITE) return MEM_WRITE_REQ_HEADER_LEN;
   return 1;
 }
 

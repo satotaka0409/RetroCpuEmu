@@ -910,26 +910,27 @@ function _seg(bb: number): number {
 
 // ─────────────────────────────────────────────
 // 実効アドレス計算（MN1610 互換 8 モード）
-// IC はフェッチ後（次命令位置）を指す
+// 相対の (IC) は当該命令自身のアドレス（次命令ではない）
 // ─────────────────────────────────────────────
 /**
  * 実効アドレスを計算する（MN1610 互換 8 モード）。
- * IC はフェッチ済みで次命令位置を指している前提。
+ * フェッチ後の IC は次命令位置なので、相対は IC-1（当該命令）+ d。
  * @param mmm アドレッシングモード 0〜7
  * @param d ディスプレースメント（8bit。相対モードでは符号付き）
  * @returns 論理ワードアドレス（16bit）
  */
 function _ea(mmm: number, d: number): number {
   const sd = d < 0x80 ? d : d - 0x100; // 符号付き 8bit
+  const insnIc = (cpuRegister.IC - 1) & 0xffff;
   switch (mmm & 7) {
     case 0:
       return d & 0xff;
     case 1:
-      return (cpuRegister.IC + sd) & 0xffff;
+      return (insnIc + sd) & 0xffff;
     case 2:
       return _rdC(d & 0xff);
     case 3:
-      return _rdC((cpuRegister.IC + sd) & 0xffff);
+      return _rdC((insnIc + sd) & 0xffff);
     case 4:
       return (cpuRegister.R[3] + (d & 0xff)) & 0xffff;
     case 5:

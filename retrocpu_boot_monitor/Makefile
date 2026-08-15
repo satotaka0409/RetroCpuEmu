@@ -64,6 +64,7 @@ ASM_SRCS := \
 	$(SRC_DIR)/handshake/handshake_lcd2.asm \
 	$(SRC_DIR)/handshake/handshake_read_memory.asm \
 	$(SRC_DIR)/handshake/handshake_write_memory.asm \
+	$(SRC_DIR)/handshake/handshake_io_rw.asm \
 	$(SRC_DIR)/handshake/handshake_break_hist.asm
 
 REL_MAIN      := $(OBJ_DIR)/main.rel
@@ -86,9 +87,11 @@ REL_HSHK_LCD1 := $(OBJ_DIR)/handshake_lcd1.rel
 REL_HSHK_LCD2 := $(OBJ_DIR)/handshake_lcd2.rel
 REL_HSHK_RM   := $(OBJ_DIR)/handshake_read_memory.rel
 REL_HSHK_WM   := $(OBJ_DIR)/handshake_write_memory.rel
+REL_HSHK_IO   := $(OBJ_DIR)/handshake_io_rw.rel
 REL_HSHK_BH   := $(OBJ_DIR)/handshake_break_hist.rel
 REL_BIOS      := $(OBJ_DIR)/bios_common.rel
-RELS          := $(REL_MAIN) $(REL_INT) $(REL_BP) $(REL_BP_H) $(REL_BP_S) $(REL_BIOS) $(REL_HSHK_C) $(REL_HSHK_M) $(REL_HSHK_AB) $(REL_HSHK_CM) $(REL_HSHK_K) $(REL_HSHK_PK) $(REL_HSHK_L) $(REL_HSHK_B) $(REL_HSHK_T) $(REL_HSHK_GT) $(REL_HSHK_UL) $(REL_HSHK_LCD1) $(REL_HSHK_LCD2) $(REL_HSHK_RM) $(REL_HSHK_WM) $(REL_HSHK_BH)
+RELS          := $(REL_MAIN) $(REL_INT) $(REL_BP) $(REL_BP_H) $(REL_BP_S) $(REL_BIOS) $(REL_HSHK_C) $(REL_HSHK_M) $(REL_HSHK_AB) $(REL_HSHK_CM) $(REL_HSHK_K) $(REL_HSHK_PK) $(REL_HSHK_L) $(REL_HSHK_B) $(REL_HSHK_T) $(REL_HSHK_GT) $(REL_HSHK_UL) $(REL_HSHK_LCD1) $(REL_HSHK_LCD2) $(REL_HSHK_RM) $(REL_HSHK_WM) $(REL_HSHK_IO) $(REL_HSHK_BH)
+$(RELS): $(ASM_CLI)
 
 INC_DEPS := \
 	$(SRC_DIR)/memmap.inc \
@@ -219,6 +222,9 @@ $(REL_HSHK_RM): $(SRC_DIR)/handshake/handshake_read_memory.asm $(INC_DEPS) | ret
 
 $(REL_HSHK_WM): $(SRC_DIR)/handshake/handshake_write_memory.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_WRITE_MEM
+
+$(REL_HSHK_IO): $(SRC_DIR)/handshake/handshake_io_rw.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
+	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_IO_RW
 
 $(REL_HSHK_BH): $(SRC_DIR)/handshake/handshake_break_hist.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_BRK_HIST

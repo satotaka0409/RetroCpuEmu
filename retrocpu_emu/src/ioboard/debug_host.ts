@@ -1,19 +1,23 @@
 /**
  * IO ボード側のデバッグ TCP サーバ（PC＝クライアントがつなぐ）。
- * 根拠: retrocpu_debug.mdc（バイナリ、コマンド番号はハンドシェイクと同じ）。
- * 当面はアドレス／IO ブレイク設定（10h）と解除（11h）のみ。
+ * 根拠: retrocpu_debug.mdc。コマンド番号は当面ハンドシェイクと同じ（10h/11h/13h/14h）。
  */
 
 import net from "node:net";
 import { getLogger } from "../log/logger";
 import {
   addrBreakSetPayload,
-  debugPcFrameLength,
+  debugPcNeededBytes,
   isAddrBreakSlot,
   parseAddrBreakClrSlot,
   parseAddrBreakSetFrame,
 } from "./debug_addr_break";
-import { RESPONSE_CODE } from "../shared/handshake/handshake_type";
+import { parseMemReadFrame } from "./debug_mem_read";
+import { parseMemWriteFrame } from "./debug_mem_write";
+import {
+  DEBUG_MEM_MAX_BYTES,
+  RESPONSE_CODE,
+} from "../shared/handshake/handshake_type";
 
 /** 製品の待ち受けポート（ベタ書き。PC 側がつなぎに来る） */
 export const DEBUG_TCP_PORT = 29000;
@@ -21,7 +25,7 @@ export const DEBUG_TCP_PORT = 29000;
 /** 待ち受けアドレス。WSL 上のエミュへホスト PC からつなぐため全インタフェース */
 export const DEBUG_TCP_HOST = "0.0.0.0";
 
-/** CPU への 10h/11h 中継（ハンドシェイク結果を待って status を返す） */
+/** CPU への 10h/11h/13h/14h 中継（ハンドシェイク結果を待って返す） */
 export type DebugHostHandlers = {
   /**
    * アドレス／IO ブレイク設定（10h）を CPU へ中継する。
@@ -35,6 +39,19 @@ export type DebugHostHandlers = {
    * @returns OK=0 / NG=1
    */
   addrBreakClr: (slot: number) => Promise<number>;
+  /**
+   * メモリ読み出し（13h）を CPU ハンドシェイクへ中継する。
+   * @param byteAddr 開始バイトアドレス
+   * @param byteCount バイト数
+   * @returns 読み出したバイト列
+   */
+  memRead?: (byteAddr: number, byteCount: number) => Promise<Uint8Array>;
+  /**
+   * メモリ書き込み（14h）を CPU ハンドシェイクへ中継する。
+   * @param byteAddr 開始バイトアドレス
+   * @param data 書き込むバイト列
+   */
+  memWrite?: (byteAddr: number, data: Uint8Array) => Promise<void>;
 };
 
 export type DebugHostOptions = {
@@ -46,7 +63,7 @@ export type DebugHostOptions = {
 };
 
 /**
- * PC（Cursor 拡張）からのバイナリ接続を受け、10h/11h を CPU ハンドシェイクへ中継する。
+ * PC（Cursor 拡張）からのバイナリ接続を受け、10h/11h/13h/14h を CPU ハンドシェイクへ中継する。
  */
 export class DebugHost {
   private readonly handlers: DebugHostHandlers;
@@ -127,14 +144,15 @@ export class DebugHost {
     const pump = (): void => {
       if (busy) return;
       if (buf.length < 1) return;
-      const need = debugPcFrameLength(buf[0]!);
-      if (buf.length < need) return;
+      const need = debugPcNeededBytes(buf);
+      if (need === null || buf.length < need) return;
       const frame = Uint8Array.from(buf.subarray(0, need));
       buf = buf.subarray(need);
       busy = true;
       void this.dispatch(frame)
-        .then((status) => {
-          if (!sock.destroyed) sock.write(Uint8Array.from([status & 0xff]));
+        .then((reply) => {
+          if (sock.destroyed) return;
+          sock.write(reply);
         })
         .catch((e: unknown) => {
           getLogger("io").error("デバッグ TCP コマンド処理に失敗", {
@@ -162,28 +180,72 @@ export class DebugHost {
   /**
    * 1 フレームを解釈し、CPU ハンドシェイクの結果を待つ。
    * @param frame コマンドを含む受信バイト
-   * @returns OK / NG
+   * @returns 応答（10h/11h/14h は 1 バイト。13h OK は status+長さ+データ）
    */
-  private async dispatch(frame: Uint8Array): Promise<number> {
+  private async dispatch(frame: Uint8Array): Promise<Uint8Array> {
     const set = parseAddrBreakSetFrame(frame);
     if (set) {
-      if (!isAddrBreakSlot(set.slot)) return RESPONSE_CODE.NG;
+      if (!isAddrBreakSlot(set.slot)) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
       const payload = addrBreakSetPayload(frame);
-      if (!payload) return RESPONSE_CODE.NG;
+      if (!payload) return Uint8Array.from([RESPONSE_CODE.NG]);
       getLogger("io").info("デバッグ 10h アドレスブレイク設定", {
         slot: set.slot,
         flags: set.flags,
         count: set.count,
         addr: `0x${set.addr.toString(16)}`,
       });
-      return (await this.handlers.addrBreakSet(payload)) & 0xff;
+      const status = (await this.handlers.addrBreakSet(payload)) & 0xff;
+      return Uint8Array.from([status]);
     }
     const slot = parseAddrBreakClrSlot(frame);
     if (slot !== null) {
-      if (!isAddrBreakSlot(slot)) return RESPONSE_CODE.NG;
+      if (!isAddrBreakSlot(slot)) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
       getLogger("io").info("デバッグ 11h アドレスブレイク解除", { slot });
-      return (await this.handlers.addrBreakClr(slot)) & 0xff;
+      const status = (await this.handlers.addrBreakClr(slot)) & 0xff;
+      return Uint8Array.from([status]);
     }
-    return RESPONSE_CODE.NG;
+    const rd = parseMemReadFrame(frame);
+    if (rd) {
+      if (!this.handlers.memRead) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
+      if (rd.byteCount < 1 || rd.byteCount > DEBUG_MEM_MAX_BYTES) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
+      getLogger("io").info("デバッグ 13h メモリ読み出し", {
+        byteAddr: `0x${rd.byteAddr.toString(16)}`,
+        byteCount: rd.byteCount,
+      });
+      const data = await this.handlers.memRead(rd.byteAddr, rd.byteCount);
+      const m = data.byteLength >>> 0;
+      const out = new Uint8Array(5 + m);
+      out[0] = RESPONSE_CODE.OK;
+      out[1] = (m >>> 24) & 0xff;
+      out[2] = (m >>> 16) & 0xff;
+      out[3] = (m >>> 8) & 0xff;
+      out[4] = m & 0xff;
+      out.set(data, 5);
+      return out;
+    }
+    const wr = parseMemWriteFrame(frame);
+    if (wr) {
+      if (!this.handlers.memWrite) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
+      if (wr.data.byteLength < 1 || wr.data.byteLength > DEBUG_MEM_MAX_BYTES) {
+        return Uint8Array.from([RESPONSE_CODE.NG]);
+      }
+      getLogger("io").info("デバッグ 14h メモリ書き込み", {
+        byteAddr: `0x${wr.byteAddr.toString(16)}`,
+        byteCount: wr.data.byteLength,
+      });
+      await this.handlers.memWrite(wr.byteAddr, wr.data);
+      return Uint8Array.from([RESPONSE_CODE.OK]);
+    }
+    return Uint8Array.from([RESPONSE_CODE.NG]);
   }
 }

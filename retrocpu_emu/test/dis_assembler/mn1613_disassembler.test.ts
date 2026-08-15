@@ -58,10 +58,10 @@ describe("Mn1613Disassembler 基本命令", () => {
   });
 
   it("相対 L はターゲットアドレスを出す", () => {
-    // L R0, rel: mmm=001, d=+2 → target = addr+1+2
+    // L R0, rel: mmm=001, d=+2 → target = addr+2
     // encodeMem(1, 1, 0, 2) = 0xC000 | (1<<11) | 2 = 0xC802
     const r = d.disassemble(0x20, fromWords([0xc802], 0x20));
-    expect(r.text).toBe("L R0, 0x0023");
+    expect(r.text).toBe("L R0, 0x0022");
     expect(r.wordCount).toBe(1);
     expect(r.nextAddr).toBe(0x21);
   });
@@ -432,7 +432,7 @@ describe("Mn1613Disassembler ラベル", () => {
   it("初期化のラベル:アドレスペアで相対／直接が名前になる", () => {
     const d = new Mn1613Disassembler({
       labels: [
-        { name: "LOOP", wordAddr: 0x0023 },
+        { name: "LOOP", wordAddr: 0x0022 },
         { name: "ENTRY", wordAddr: 0x1800 },
         { name: "ZPBUF", wordAddr: 0x0010 },
       ],

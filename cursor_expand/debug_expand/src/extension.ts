@@ -12,11 +12,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     vscode.commands.registerCommand("retroDebug.openPanel", () => {
-      DebugPanel.show(context.extensionUri);
+      DebugPanel.show(context.extensionUri, output);
       output.appendLine("[openPanel] debug view");
     }),
     vscode.commands.registerCommand("retroDebug.loadProgram", async () => {
-      const panel = DebugPanel.show(context.extensionUri);
+      const panel = DebugPanel.show(context.extensionUri, output);
       await panel.loadProgram();
       output.appendLine("[loadProgram] HEX/CDB loaded");
     }),
@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // Extension Development Host 起動直後に画面が出るようにする
-  DebugPanel.show(context.extensionUri);
+  DebugPanel.show(context.extensionUri, output);
   output.appendLine("Retro CPU Debug activated (panel opened).");
 }
 

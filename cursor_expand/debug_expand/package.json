@@ -54,8 +54,8 @@
         },
         "retroDebug.port": {
           "type": "number",
-          "default": 23540,
-          "description": "IO ボード（エミュ）TCP ポート（既定 23540）"
+          "default": 29000,
+          "description": "IO ボード（エミュ DebugHost）TCP ポート（既定 29000）"
         }
       }
     }

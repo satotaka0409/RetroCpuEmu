@@ -56,14 +56,14 @@ export function riName(ii: number): string {
 }
 
 /**
- * 符号付き 8bit 相対のターゲット（フェッチ後 IC = 命令アドレス+1）。
+ * 符号付き 8bit 相対のターゲット（基準は当該命令自身のワードアドレス）。
  * @param instrAddr 命令先頭ワードアドレス
  * @param d 符号なし 8bit ディスプレースメント
  * @returns ターゲットワードアドレス
  */
 export function relTarget(instrAddr: number, d: number): number {
   const sd = d < 0x80 ? d : d - 0x100;
-  return (instrAddr + 1 + sd) & 0xffff;
+  return (instrAddr + sd) & 0xffff;
 }
 
 /**

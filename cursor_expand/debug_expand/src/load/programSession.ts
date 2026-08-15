@@ -13,13 +13,20 @@ import type {
   MemDumpRow,
   RegisterSnapshot,
 } from "../panel/mockState";
-import { createMockDebugState } from "../panel/mockState";
+import {
+  createMockDebugState,
+  hex4,
+  makeMemDumpRows,
+  memFetchRange,
+  MEM_WORDS_PER_ROW,
+  PHYS_WORD_MASK,
+} from "../panel/mockState";
 
-/** 16bit ワード空間（バイト） */
-export const MEM_BYTE_SIZE = 0x10000 * 2;
+/** 18bit 物理ワード空間のバイト数（256K ワード） */
+export const MEM_BYTE_SIZE = 0x40000 * 2;
 
-/** エントリ候補ラベル（大文字比較）。仕様の main/run に加え本リポジトリ慣例 */
-export const ENTRY_LABELS = ["main", "run", "g_main", "gl_main"] as const;
+/** エントリ候補（大文字比較）。モニタは g_main を優先 */
+export const ENTRY_LABELS = ["g_main", "gl_main", "main", "run"] as const;
 
 /**
  * 読み込み結果のセッション。
@@ -33,7 +40,7 @@ export class ProgramSession {
   entryWord = 0;
 
   /**
-   * @param byteSize メモリバイト数（既定 128KiB = 64K ワード）
+   * @param byteSize メモリバイト数（既定 512KiB = 256K ワード）
    */
   constructor(byteSize = MEM_BYTE_SIZE) {
     this.memory = new Uint8Array(byteSize);
@@ -65,12 +72,12 @@ export class ProgramSession {
   }
 
   /**
-   * ワードアドレスの 16bit 値を読む（ビッグエンディアン）。
-   * @param wordAddr ワードアドレス
+   * 物理ワードアドレスの 16bit 値を読む（ビッグエンディアン）。
+   * @param wordAddr 物理ワード（18bit）
    * @returns 16bit
    */
   readWord = (wordAddr: number): number => {
-    const a = (wordAddr & 0xffff) * 2;
+    const a = (wordAddr & PHYS_WORD_MASK) * 2;
     if (a + 1 >= this.memory.length) return 0;
     return ((this.memory[a]! << 8) | this.memory[a + 1]!) & 0xffff;
   };
@@ -105,7 +112,12 @@ export class ProgramSession {
     const base = createMockDebugState();
     const entry = this.entryWord & 0xffff;
     const disasm = this.buildDisasm(entry, 48);
-    const memDump = this.buildMemDump(entry, 16);
+    const win = memFetchRange(entry);
+    const memDump = makeMemDumpRows(
+      win.lo,
+      Math.ceil(win.wordCount / MEM_WORDS_PER_ROW),
+      () => 0,
+    );
     const ic = hex4(entry);
     const current: RegisterSnapshot = {
       ...base.current,
@@ -122,22 +134,21 @@ export class ProgramSession {
       sourceFocusLine: source?.focusLine ?? 1,
       disasm,
       memDump,
+      memStart: entry & PHYS_WORD_MASK,
+      memCacheLo: win.lo,
+      memCacheHi: win.hi,
+      memNote: "handshake 13h 取得待ち（retrocpu_emu が必要）",
       current,
-      instrHistory: [],
-      addrHistory: [],
+      slotHistory: [],
       viewMode: "current",
       histIndex: 0,
       pointSlot: 0,
-      bpInstr: base.bpInstr.map((b) => ({
+      bpSlots: base.bpSlots.map((b) => ({
         ...b,
         enabled: false,
-        addr: "----",
-      })),
-      bpAddr: base.bpAddr.map((b) => ({
-        ...b,
-        enabled: false,
-        addr: "----",
+        addr: "-----",
         access: "-",
+        history: false,
       })),
     };
   }
@@ -185,32 +196,13 @@ export class ProgramSession {
 
   /**
    * メモリダンプ行を作る。
-   * @param startWord 開始ワード
-   * @param rows 行数（1 行 8 ワード）
+   * @param startWord 開始物理ワード
+   * @param rows 行数（1 行 16 ワード）
    * @returns ダンプ
    */
-  private buildMemDump(startWord: number, rows: number): MemDumpRow[] {
-    const out: MemDumpRow[] = [];
-    let a = startWord & 0xffff;
-    for (let r = 0; r < rows; r += 1) {
-      const words: string[] = [];
-      for (let i = 0; i < 8; i += 1) {
-        words.push(hex4(this.readWord(a + i)));
-      }
-      out.push({ addr: hex4(a), words });
-      a = (a + 8) & 0xffff;
-    }
-    return out;
+  buildMemDump(startWord: number, rows: number): MemDumpRow[] {
+    return makeMemDumpRows(startWord, rows, this.readWord);
   }
-}
-
-/**
- * 16 進 4 桁。
- * @param n 値
- * @returns 大文字 4 桁
- */
-function hex4(n: number): string {
-  return (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 }
 
 /**

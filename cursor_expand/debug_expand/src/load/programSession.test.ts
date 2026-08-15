@@ -20,6 +20,14 @@ describe("loadIntelHex + ProgramSession", () => {
     assert.equal(s.entryWord, 0x0108);
   });
 
+  test("CDB の g_main が main より優先", () => {
+    const hex = wordsToIntelHex(0x0108, [0x2000]);
+    const s = new ProgramSession();
+    s.loadHex(hex, "t.ihx");
+    s.loadCdb("L:G$main$0$0:0220\nL:G$g_main$0$0:0210\n", "t.cdb");
+    assert.equal(s.entryWord, 0x108);
+  });
+
   test("CDB の main があればエントリ優先", () => {
     const hex = wordsToIntelHex(0x0108, [0x2000]);
     const cdb = "L:G$main$0$0:0220\n"; // byte 0x220 = word 0x110
@@ -41,6 +49,9 @@ describe("loadIntelHex + ProgramSession", () => {
     assert.match(st.disasm[0]!.text, /^H\b/);
     assert.equal(st.disasm[0]!.addr, "0108");
     assert.equal(st.current.IC, "0108");
+    assert.equal(st.memDump[0]!.addr, "00000");
+    assert.equal(st.memDump[0]!.words[0], "0000");
+    assert.equal(st.memStart, 0x0108);
     assert.match(st.title, /halt\.ihx/);
   });
 });

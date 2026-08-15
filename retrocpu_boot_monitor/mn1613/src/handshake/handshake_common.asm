@@ -7,10 +7,11 @@
 ; IO -> CPU（割り込み入口）:
 ;   g_hshk_accept_request -> g_hshk_recv_byte*N -> g_hshk_finalize_recv
 ;
-; 1バイト: DENA 0→1 → DACK 0→1 → DENA 1→0 → DACK 1→0
+; 2バイト単位: 1バイト目 DENA 0→1 → DACK 0→1、2バイト目 DENA 1→0 → DACK 1→0。
+; 奇数長は finalize で 0 パッド。論理は send_byte / recv_byte のまま。
 ;
 ; 引数は第1=R0、第2=R1、第3=R2、第4以降はスタック（asm-rules.mdc）。
-; g_hshk_recv_byte の受信バイトは R1（リエントラント。グローバル作業域は使わない）。
+; g_hshk_recv_byte の受信バイトは R1。ペア途中は _SYS_PAGE0 の GL_HSHK_PAIR。
 ; ENA0 待ちの乱数は bios_common.asm の g_get_rnd（BALD）。待ち時間は厳密でなくてよい。
 ; g_* / l_* は BALD / RET。コードはセグメント 0。拡張 SBR はデータ専用。
 
@@ -34,6 +35,7 @@
 	.global g_hshk_mem_ld8
 	.global g_hshk_mem_st8
 	.global g_get_rnd
+	.global GL_HSHK_PAIR
 
 ; -------------------------------------------------------
 ; ENA=0 チェック用の待機（g_get_rnd でばらした粗いスピン）
@@ -223,6 +225,8 @@ g_hshk_initiate_send:
 	c	R1, R0, Z
 	b	l_hshk_init_send_fail
 
+	bald	l_hshk_pair_reset
+
 	mvwi	R0, #HSHK_DENA_BIT
 	bald	l_hshk_ctrl_clr
 
@@ -247,40 +251,132 @@ l_hshk_init_send_fail:
 	mvwi	R0, #HSHK_NG
 	ret
 ; -------------------------------------------------------
-; CPU -> IO 1バイト送信
+; ペア位相を 0 にする
+; @Destruction R0
+; -------------------------------------------------------
+l_hshk_pair_reset:
+	eor	R0, R0
+	st	R0, *GL_HSHK_PAIR
+	ret
+
+; -------------------------------------------------------
+; 送信ユニットの奇数残りを 0 パッドで閉じる
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_flush_send:
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_SEND
+	mv	R0, R0, NZ
+	b	l_hshk_fs_even
+	eor	R0, R0
+	wt	R0, HSHK_IN_DATA
+	mvwi	R0, #HSHK_DENA_BIT
+	bald	l_hshk_ctrl_clr
+	eor	R0, R0
+	bald	l_hshk_wait_dack
+	mv	R1, R0
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	st	R0, *GL_HSHK_PAIR
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_hshk_fs_fail
+	ret
+l_hshk_fs_even:
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_fs_fail:
+	mvwi	R0, #HSHK_NG
+	ret
+
+; -------------------------------------------------------
+; 受信ユニットの奇数残り（パッド）を捨てる
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1
+; -------------------------------------------------------
+l_hshk_flush_recv:
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	mv	R0, R0, NZ
+	b	l_hshk_fr_even
+	eor	R0, R0
+	bald	l_hshk_wait_dena
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_fr_fail
+	mvwi	R0, #HSHK_DACK_BIT
+	bald	l_hshk_ctrl_clr
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_SEND
+	st	R0, *GL_HSHK_PAIR
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_fr_even:
+	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_fr_fail:
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_SEND
+	st	R0, *GL_HSHK_PAIR
+	mvwi	R0, #HSHK_NG
+	ret
+
+; -------------------------------------------------------
+; CPU -> IO 1バイト送信（2バイト単位の片方。奇数は finalize でパッド）
 ; @param R0 - 送信バイト（下位8bit）
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_send_byte:
+	push	R3
+	mv	R3, R0
+	bald	l_hshk_flush_recv
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_send_fail
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_SEND
+	mv	R0, R0, Z
+	b	l_hshk_send_2
+	mv	R0, R3
 	wt	R0, HSHK_IN_DATA
-
 	mvwi	R0, #HSHK_DENA_BIT
 	bald	l_hshk_ctrl_set
-
 	mvwi	R0, #HSHK_DACK_BIT
 	bald	l_hshk_wait_dack
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z
 	b	l_hshk_send_fail
-
+	l	R0, *GL_HSHK_PAIR
+	mvwi	R1, #HSHK_PAIR_SEND
+	or	R0, R1
+	st	R0, *GL_HSHK_PAIR
+	mvwi	R0, #HSHK_OK
+	pop	R3
+	ret
+l_hshk_send_2:
+	mv	R0, R3
+	wt	R0, HSHK_IN_DATA
 	mvwi	R0, #HSHK_DENA_BIT
 	bald	l_hshk_ctrl_clr
-
 	eor	R0, R0
 	bald	l_hshk_wait_dack
 	mv	R1, R0
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	st	R0, *GL_HSHK_PAIR
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z
 	b	l_hshk_send_fail
-
-	mvwi	R0, #HSHK_OK
+	pop	R3
 	ret
 l_hshk_send_fail:
 	mvwi	R0, #HSHK_DENA_BIT
 	bald	l_hshk_ctrl_clr
+	eor	R0, R0
+	st	R0, *GL_HSHK_PAIR
 	mvwi	R0, #HSHK_NG
+	pop	R3
 	ret
 ; -------------------------------------------------------
 ; CPU -> IO 16bit をビッグエンディアン 2 バイトで送る
@@ -306,6 +402,7 @@ g_hshk_send_word:
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_finalize_send:
+	bald	l_hshk_flush_send
 	eor	R0, R0
 	bald	l_hshk_wait_ena
 	ret
@@ -316,6 +413,7 @@ g_hshk_finalize_send:
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_accept_request:
+	bald	l_hshk_pair_reset
 	mvwi	R0, #HSHK_DACK_BIT
 	bald	l_hshk_ctrl_clr
 
@@ -336,41 +434,61 @@ l_hshk_accept_fail:
 	mvwi	R0, #HSHK_NG
 	ret
 ; -------------------------------------------------------
-; IO -> CPU 1バイト受信
-; @note 受信バイトは R1（下位 8bit）。DACK 中はスタックに退避する
+; IO -> CPU 1バイト受信（2バイト単位の片方。奇数は finalize でパッド捨て）
+; @note 受信バイトは R1（下位 8bit）
 ; @return R0 - HSHK_OK / HSHK_NG、R1 - 受信バイト（OK 時）
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_recv_byte:
+	push	R3
+	bald	l_hshk_flush_send
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_recv_fail
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	mv	R0, R0, Z
+	b	l_hshk_recv_2
 	mvwi	R0, #HSHK_DENA_BIT
 	bald	l_hshk_wait_dena
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_recv_fail
-
 	rd	R0, HSHK_OUT_DATA
 	andi	R0, #0x00ff
-	push	R0
-
+	mv	R3, R0
 	mvwi	R0, #HSHK_DACK_BIT
 	bald	l_hshk_ctrl_set
-
+	l	R0, *GL_HSHK_PAIR
+	mvwi	R1, #HSHK_PAIR_RECV
+	or	R0, R1
+	st	R0, *GL_HSHK_PAIR
+	mv	R1, R3
+	mvwi	R0, #HSHK_OK
+	pop	R3
+	ret
+l_hshk_recv_2:
 	eor	R0, R0
 	bald	l_hshk_wait_dena
 	cwi	R0, #HSHK_OK, Z
-	b	l_hshk_recv_fail2
-
+	b	l_hshk_recv_fail
+	rd	R0, HSHK_OUT_DATA
+	andi	R0, #0x00ff
+	mv	R3, R0
 	mvwi	R0, #HSHK_DACK_BIT
 	bald	l_hshk_ctrl_clr
-	pop	R1
-	andi	R1, #0x00ff
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_SEND
+	st	R0, *GL_HSHK_PAIR
+	mv	R1, R3
 	mvwi	R0, #HSHK_OK
+	pop	R3
 	ret
-l_hshk_recv_fail2:
+l_hshk_recv_fail:
 	mvwi	R0, #HSHK_DACK_BIT
 	bald	l_hshk_ctrl_clr
-	pop	R1
-l_hshk_recv_fail:
+	eor	R0, R0
+	st	R0, *GL_HSHK_PAIR
 	mvwi	R0, #HSHK_NG
+	pop	R3
 	ret
 ; -------------------------------------------------------
 ; IO -> CPU ハンドシェイク完了
@@ -378,6 +496,8 @@ l_hshk_recv_fail:
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_finalize_recv:
+	bald	l_hshk_flush_send
+	bald	l_hshk_flush_recv
 	mvwi	R0, #HSHK_ENA_BIT
 	bald	l_hshk_ctrl_clr
 	mvwi	R0, #HSHK_OK
@@ -401,9 +521,10 @@ g_hshk_mem_map:
 	mv	R0, R1
 	andi	R0, #1			; 奇偶
 	; phys[15:0] = (byte_lo >> 1) | ((byte_hi & 1) << 15)
+	; TBIT のビット番号は MSB=0 / LSB=15（MN1613.mdc）。byte_hi の LSB は #15。
 	mv	R1, R3
 	sr	R1, RE
-	tbit	R2, #0, Z
+	tbit	R2, #15, Z
 	awi	R1, #0x8000
 	; TSR0 = phys[17:16] << 2 = (byte_hi >> 1) << 2
 	sr	R2, RE
@@ -462,3 +583,6 @@ l_hshk_mst_wr:
 	pop	R4
 	pop	R3
 	ret
+
+	.area	_SYS_PAGE0		(REL,NOLOAD)
+GL_HSHK_PAIR:	.ds	1

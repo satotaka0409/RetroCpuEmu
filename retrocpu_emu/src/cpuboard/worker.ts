@@ -29,6 +29,10 @@ import {
   tickCpu,
 } from "./mn1613/mn1613";
 import { getLogger, initLogging } from "../log/logger";
+import {
+  cpuSlicePlan,
+  handshakeBusyFromBus,
+} from "./cpu_slice";
 
 type WorkerInit = {
   control: SharedArrayBuffer;
@@ -133,21 +137,28 @@ function publishStatus(): void {
 }
 
 /**
- * 1 スライス分（stepsPerSlice 命令）実行して状態を公開し、次のスライスを予約する。
+ * 1 スライス分実行して状態を公開し、次のスライスを予約する。
  * DMA 中は CPU を進めない。
+ * ハンドシェイク中は間隔 0・大きいバーストで連続実行し、IO の setTimeout(0) へ戻す。
  */
 function slice(): void {
   if (!running) return;
   frame++;
 
+  const turbo = handshakeBusyFromBus(hshkAgent.bus);
+  const plan = cpuSlicePlan(turbo, stepsPerSlice, sliceMs);
+
   if (Atomics.load(board.ctrl, CTRL.DMA_BUSY) === 0) {
-    for (let i = 0; i < stepsPerSlice; i++) {
+    for (let i = 0; i < plan.steps; i++) {
       tickCpu();
     }
   }
 
   publishStatus();
-  timer = setTimeout(slice, sliceMs);
+  timer = setTimeout(
+    slice,
+    handshakeBusyFromBus(hshkAgent.bus) ? 0 : sliceMs,
+  );
 }
 
 /** スライス実行を開始する（多重呼び出しは無視） */

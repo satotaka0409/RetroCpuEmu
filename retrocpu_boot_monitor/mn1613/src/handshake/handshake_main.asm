@@ -19,6 +19,8 @@
 	.global g_hshk_send_byte
 	.global g_hshk_read_memory
 	.global g_hshk_write_memory
+	.global g_hshk_read_io
+	.global g_hshk_write_io
 	.global g_hshk_addr_break_set
 	.global g_hshk_addr_break_clr
 	.global g_hshk_break_hist_get
@@ -126,6 +128,16 @@ l_hshk_irq_14:
 	bald	g_hshk_write_memory
 	ret
 
+; 15h IO読み出し
+l_hshk_irq_15:
+	bald	g_hshk_read_io
+	ret
+
+; 16h IO書き込み
+l_hshk_irq_16:
+	bald	g_hshk_write_io
+	ret
+
 ; 17h ブレイク履歴取得
 l_hshk_irq_17:
 	bald	g_hshk_break_hist_get
@@ -149,7 +161,7 @@ l_hshk_irq_cmd_tab:
 	.dw	l_hshk_irq_12			; 12 実行指示
 	.dw	l_hshk_irq_13			; 13 メモリ読み出し
 	.dw	l_hshk_irq_14			; 14 メモリ書き込み
-	.dw	l_hshk_irq_unknown		; 15 IO読み出し（未実装）
-	.dw	l_hshk_irq_unknown		; 16 IO書き込み（未実装）
+	.dw	l_hshk_irq_15			; 15 IO読み出し
+	.dw	l_hshk_irq_16			; 16 IO書き込み
 	.dw	l_hshk_irq_17			; 17 ブレイク履歴取得
 	.dw	l_hshk_irq_18			; 18 ブレイク復帰

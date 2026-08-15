@@ -29,16 +29,7 @@ const session: Mn1613AsmSession = createSessionFromSettings(
 );
 
 /**
- * ブロックのチェックサム（各バイト加算の下位 8bit）。
- * @param data ブロック
- * @returns 0–255
- */
-function blockChecksum(data: readonly number[]): number {
-  return data.reduce((s, b) => (s + (b & 0xff)) & 0xff, 0);
-}
-
-/**
- * 14h ヘッダ＋データ＋チェックサム。
+ * 14h ヘッダ（パッド込み）＋データ。
  * @param byteAddr バイトアドレス
  * @param data 書き込みバイト
  * @returns IO→CPU フレーム
@@ -55,8 +46,8 @@ function memWriteFrame(byteAddr: number, data: readonly number[]): Uint8Array {
     (count >>> 16) & 0xff,
     (count >>> 8) & 0xff,
     count & 0xff,
+    0,
     ...data,
-    blockChecksum(data),
   ]);
 }
 
@@ -97,7 +88,7 @@ async function waitReq1(
 /**
  * 14h を IRQ ハンドラ経由で実行する。
  * @param mock IO モック
- * @param toCpu IO→CPU（ヘッダ＋データ＋checksum。件数0はヘッダのみ）
+ * @param toCpu IO→CPU（ヘッダ＋データ。件数0はヘッダ＋パッド）
  * @param fromCpu CPU→IO 待ちバイト数（status。件数0は 0）
  * @returns CPU→IO status
  */
@@ -124,9 +115,17 @@ test("14h は指定バイトをビッグエンディアンで書き OK を返す
     expect(s.readWord(WORD_ADDR)).toBe(0x1234);
     expect(s.readWord(WORD_ADDR + 1)).toBe(0xabcd);
     s.expectRegisters({ R0: 0, R4: 0x4444 });
-    const heap = await s.call("g_malloc", { registers: { R0: 256 } });
-    expect(heap.registers.R[0]).toBeTruthy();
-    await s.call("g_free", { registers: { R0: heap.registers.R[0] } });
+  });
+});
+
+test("14h はワード 8000h（バイト 10000h）へ書ける", async () => {
+  await withCase(async (s, mock) => {
+    const word = 0x8000;
+    s.writeWord(word, 0);
+    const reply = await callWrite(mock, memWriteFrame(word * 2, [0xa5, 0xa5]));
+    expect(Array.from(reply)).toEqual([0x00]);
+    expect(s.readWord(word)).toBe(0xa5a5);
+    s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
 });
 
@@ -154,10 +153,11 @@ test("14h バイト数 0 はデータなしで完了する", async () => {
         0,
         0,
         0,
+        0,
       ]),
-      0,
+      1,
     );
-    expect(reply.length).toBe(0);
+    expect(Array.from(reply)).toEqual([0x00]);
     expect(s.readWord(WORD_ADDR)).toBe(0x5555);
     s.expectRegisters({ R4: 0x4444 });
   });
