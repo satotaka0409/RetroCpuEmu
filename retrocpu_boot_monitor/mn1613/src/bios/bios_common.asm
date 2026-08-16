@@ -17,12 +17,17 @@
 
 	.global g_rnd_init
 	.global g_get_rnd
+	; @unwarning
 	.global g_mem_cpy
 	.global g_malloc_init
+	; @unwarning
 	.global g_malloc
+	; @unwarning
 	.global g_free
 	.global g_malloc2_init
+	; @unwarning
 	.global g_malloc2
+	; @unwarning
 	.global g_free2
 	.global g_write_cpu_registers
 	.global GL_RND_SEED
@@ -31,7 +36,6 @@
 	.global GL_ALLOC2_ADR
 	.global GL_ALLOC2_SBR
 	.global GL_ALLOC2_SIZE
-	.global GL_BAL_TMP
 
 ; 16bit Galois LFSR（M系列）のタップ
 ; 原始多項式 x^16 + x^14 + x^13 + x^11 + 1 → 0xB400

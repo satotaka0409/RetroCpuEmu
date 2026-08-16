@@ -147,16 +147,24 @@ test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", as
   });
 });
 
-test("g_step_interrupt_handler は 1Bh を送り R0=1", async () => {
+test("要因 4 の停止は 1Bh に監視 IC を載せ履歴は書かない", async () => {
   await withCase(async (s, mock) => {
-    s.writeWord(IC_SAVE, USER_IC);
-    await Promise.all([
-      s.call("g_step_interrupt_handler", {
-        registers: { ...BASE_REGS },
-      }),
+    // 要因 4 の INT2 から 1Bh。開始 IC が通知アドレスになる。
+    s.writeWord(USER_IC, OP_H);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: 0xff00,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+    });
+    mock.bus.INT_CAUSE = 4;
+    triggerInterrupt(2);
+    const [status] = await Promise.all([
+      run(USER_IC, s.maxCycles),
       mock.handleOneRequest(),
     ]);
-    s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
+    expect(status).toBe("halted");
     expect(mock.state.lastBreakNotify).toBe(null);
     expect(mock.state.lastStepNotify?.addr).toBe(USER_IC);
     expect(mock.state.lastStepNotify?.ic).toBe(USER_IC);

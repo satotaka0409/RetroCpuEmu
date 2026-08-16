@@ -35,6 +35,7 @@ export function parseSubroutineDocAbove(
     if (!m) break;
     const body = m[1]!.replace(/^\*\s?/, "").trim();
     if (/^[@\uFF20]cp\b/i.test(body)) continue;
+    if (/^[@\uFF20]unwarning\b/i.test(body)) continue;
     collected.unshift(body);
   }
 

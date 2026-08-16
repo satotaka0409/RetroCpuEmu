@@ -954,6 +954,7 @@ export function encodeInstruction(
     case "SBIT":
     case "RBIT":
     case "TBIT": {
+      // ビット番号は MSB=0 / LSB=15（#15 が最下位 0x0001。IISR 未定義フラグと同じ）
       expectArgs(line, 2, 3);
       const r = parseReg(line.args[0], true);
       const i4 = parseImm4(line.args[1], symbols, allowUndefined);

@@ -4,6 +4,7 @@
   "scopeName": "source.mn1613asm",
   "patterns": [
     { "include": "#checkpoints" },
+    { "include": "#unwarnings" },
     { "include": "#todos" },
     { "include": "#comments" },
     { "include": "#directives" },
@@ -24,6 +25,18 @@
             "1": { "name": "punctuation.definition.comment.checkpoint.mn1613asm" },
             "3": { "name": "keyword.other.checkpoint.mn1613asm" },
             "5": { "name": "entity.name.checkpoint.mn1613asm" }
+          }
+        }
+      ]
+    },
+    "unwarnings": {
+      "patterns": [
+        {
+          "name": "meta.unwarning.mn1613asm",
+          "match": "(;)(\\s*)([@\\uFF20]unwarning)\\b.*$",
+          "captures": {
+            "1": { "name": "punctuation.definition.comment.unwarning.mn1613asm" },
+            "3": { "name": "keyword.other.unwarning.mn1613asm" }
           }
         }
       ]

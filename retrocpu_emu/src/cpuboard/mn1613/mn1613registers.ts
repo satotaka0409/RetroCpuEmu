@@ -6,7 +6,7 @@
  * - 16-bit: Uint16Array(1)（値は [0]）
  * - 24-bit (SP/STR): Uint16Array(2)（[0]=上位8bit, [1]=下位16bit）
  * - 下位4bit 有効 (CSBR/SSBR/TSR/OSR/SBRB): Uint8Array(1)（値は [0] & 0xf）
- * - IISR（下位1bit 有効）: boolean
+ * - IISR（MN1613 ビット15＝LSB 1bit。未定義命令）: boolean
  */
 
 /** 8/16-bit レジスタ値を Uint16Array(1) にする */
@@ -80,7 +80,7 @@ export interface CpuRegisters {
   OSR3: Uint8Array;
   /** ノーマルプロセスポインタ NPP (8-bit) */
   NPP: Uint16Array;
-  /** 割り込み識別レジスタ IISR（下位1bit。未定義命令など） */
+  /** 割り込み識別レジスタ IISR（MN1613 ビット15＝LSB。未定義命令） */
   IISR: boolean;
   /** セグメントベースレジスタバックアップ SBRB（下位4bit） */
   SBRB: Uint8Array;

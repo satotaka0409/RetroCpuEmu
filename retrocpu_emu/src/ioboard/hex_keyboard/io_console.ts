@@ -66,7 +66,7 @@ export type IoConsoleState = {
   focus: ConsoleFocus;
   mode: ConsoleMode;
   halted: boolean;
-  /** 未定義命令検出（IISR bit15 / 砲弾 B） */
+  /** 未定義命令検出（IISR ビット15=LSB 0x0001 / 砲弾 B） */
   undefInsn: boolean;
 };
 

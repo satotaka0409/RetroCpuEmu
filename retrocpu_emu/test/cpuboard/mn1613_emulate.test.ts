@@ -73,6 +73,7 @@ import {
   STR_OVF,
   STR_M0,
   STR_M2,
+  IISR_UNDEF,
 } from "../../src/cpuboard/mn1613/mn1613";
 
 // ─────────────────────────────────────────────
@@ -1008,8 +1009,8 @@ describe("統合テスト: sum 1 to 10", () => {
 });
 
 // ─────────────────────────────────────────────
-// 未定義命令（IISR bit15 + レベル0内部割り込み）
-// 根拠: MN1613.mdc「未定義命令を実行すると、レベル0内部割り込みが発生し、IISRのビット15が1にセット」
+// 未定義命令（IISR ビット15 = LSB 0x0001 + レベル0内部割り込み）
+// 根拠: MN1613.mdc。ビット番号は MSB=0 / LSB=15。
 // ─────────────────────────────────────────────
 describe("未定義命令", () => {
   /**
@@ -1033,11 +1034,11 @@ describe("未定義命令", () => {
 
   it("op=0x00（例: 0x0000）は IISR bit15 を立て、halted にはならない", () => {
     loadUndefWithLevel0Isr(0x0000);
-    expect(getState().IISR & 0x8000).toBe(0);
+    expect(getState().IISR & IISR_UNDEF).toBe(0);
     const s = step();
     expect(getExecStatus()).not.toBe("halted");
-    expect(s.IISR & 0x8000).toBe(0x8000);
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(s.IISR & IISR_UNDEF).toBe(IISR_UNDEF);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
   });
 
   it("レベル0 OPSW 退避と NPSW ロードが走る（M0 オフでも）", () => {
@@ -1046,7 +1047,7 @@ describe("未定義命令", () => {
     setState({ STR: 0, CSBR: 3 });
     step();
     const s = getState();
-    expect(s.IISR & 0x8000).toBe(0x8000);
+    expect(s.IISR & IISR_UNDEF).toBe(IISR_UNDEF);
     expect(s.IC).toBe(0x0110);
     expect(s.CSBR).toBe(0); // 割り込み受理で CSBR クリア
     expect(s.OSR[0] & 0xf).toBe(3); // 旧 CSBR → OSR0
@@ -1076,7 +1077,7 @@ describe("未定義命令", () => {
 
     step(); // undef → L0 ISR 先頭へ
     expect(getState().IC).toBe(0x0110);
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
     step(); // MVWI R0
     step(); // LPSW 0 → IC=0x21（未定義の次）
     expect(getState().IC).toBe(0x21);
@@ -1088,7 +1089,7 @@ describe("未定義命令", () => {
   it("op=0x00 の他ワード（0x00AB）も同様にレベル0割り込み", () => {
     loadUndefWithLevel0Isr(0x00ab);
     step();
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
     expect(getState().IC).toBe(0x0110);
     expect(getExecStatus()).not.toBe("halted");
   });
@@ -1097,14 +1098,14 @@ describe("未定義命令", () => {
     loadWords([0x2000]);
     step();
     expect(getExecStatus()).toBe("halted");
-    expect(getState().IISR & 0x8000).toBe(0);
+    expect(getState().IISR & IISR_UNDEF).toBe(0);
   });
 
   it("グループ 0x04 の未定義パターンも IISR + レベル0割り込み", () => {
     // op=0x04 / rrr=1 / lo=0x00 → _exec04 末尾の未定義経路
     loadUndefWithLevel0Isr(0x2100);
     step();
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
     expect(getState().IC).toBe(0x0110);
     expect(getExecStatus()).not.toBe("halted");
   });
@@ -1117,15 +1118,33 @@ describe("未定義命令", () => {
     expect(view.getUint16(0 * 2, false)).toBe(STR_M0);
     expect(view.getUint16(1 * 2, false)).toBe(1);
     expect(getState().IC).toBe(0x0110);
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
   });
 
   it("リセットで IISR の UNDEF がクリアされる", () => {
     loadUndefWithLevel0Isr(0x0000);
     step();
-    expect(getState().IISR & 0x8000).toBe(0x8000);
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
     reset();
-    expect(getState().IISR & 0x8000).toBe(0);
+    expect(getState().IISR & IISR_UNDEF).toBe(0);
+  });
+
+  it("SETH 0 で IISR ビット15（LSB）が落ち、0x8000 は残さない", () => {
+    const isrIc = 0x0110;
+    const words: number[] = new Array(0x120).fill(0);
+    words[0] = 0x0000;
+    words[0x100] = 0;
+    words[0x101] = isrIc;
+    words[isrIc] = 0x7807; // MVWI R0, #0
+    words[isrIc + 1] = 0x0000;
+    words[isrIc + 2] = 0x3f60; // SETH R0, IISR
+    words[isrIc + 3] = 0x2000; // H
+    loadWords(words);
+    step(); // 未定義 → ISR
+    expect(getState().IISR & IISR_UNDEF).toBe(IISR_UNDEF);
+    step(); // MVWI R0, #0
+    step(); // SETH R0, IISR
+    expect(getState().IISR).toBe(0);
   });
 });
 

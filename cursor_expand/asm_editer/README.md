@@ -20,6 +20,7 @@ Cursor / VS Code 向けレトロ CPU **アセンブラ編集**拡張（`cursor_e
 - **シンボル索引** — ワークスペース内のラベル / `.equ` を収集（保存時・起動時に再構築）
 - **CPU 選択** — 左下ステータスバーで MN1610 / MN1613 / TMS9995 を切替（切替時に索引・診断を再初期化）。アクティブな `.asm` 先頭の `.cpu` があれば自動でそれに合わせる
 - **未定義ラベル診断** — 参照先が無いラベルに赤い波線
+- **未使用グローバル警告** — `.global` / `.globl` があるが命令・データからの参照が無い名前に黄色い波線。`; @unwarning` で抑止できる
 - **TMS9995 構文診断** — TI 風 `@` / `*R` の拒否、即値の `#`、インデックス R0 禁止、CRU/シフト/XOP の範囲
 - **定義へ移動** — ラベル / `.equ` 上で F12、または右クリック「定義へ移動」
 - **参照へ移動** — Shift+F12、または右クリック「参照へ移動」
@@ -71,6 +72,19 @@ ADD:
 - 色は `workbench.colorCustomizations` の `retroAsm.checkpointForeground` / `retroAsm.checkpointBackground` で変更できる。
 - テスト実行時は CDB `L:__CP$name$serial:addr` と CPU ログ（実行前・実行後）に出る。`; @cp` はラベルではない（同一ワードでも可。同名は `$0001` / `$0002`）。
 
+### 未使用グローバル警告の抑止
+
+BIOS の公開エントリなど、ワークスペース内に呼び出しが無い `.global` は黄色い波線になる。直上または同一行に `; @unwarning` を置くと、**その 1 行だけ**警告しない。連続する `.global` には効かない（各行に付ける）。全角 `＠unwarning` も同じ。
+
+```asm
+	; @unwarning
+	.global g_mem_cpy
+	.global g_malloc_init
+	.global g_free			; @unwarning
+```
+
+上の例では `g_mem_cpy` と `g_free` だけ抑止し、`g_malloc_init` は従来どおり警告する。
+
 ### TODO コメント
 
 ```asm
@@ -110,7 +124,7 @@ src/
   symbols/       # ワークスペース索引
   diagnostics/   # 未定義ラベル / アドレッシング / TMS9995 構文
   providers/     # ホバー / 定義・参照へ移動 等
-  comments/      # JSDoc 風パーサ / ; @cp
+  comments/      # JSDoc 風パーサ / ; @cp / ; @unwarning
   ui/            # ステータスバー / チェックポイント色分け
   extension.ts
 ```

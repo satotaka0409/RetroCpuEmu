@@ -95,5 +95,12 @@
       "; @cp ${1:checkpoint_name}"
     ],
     "description": "デバッグチェックポイント（CDB / テストログ）"
+  },
+  "Unwarning": {
+    "prefix": "@unwarning",
+    "body": [
+      "; @unwarning"
+    ],
+    "description": "直後の .global の未使用警告を抑止"
   }
 }

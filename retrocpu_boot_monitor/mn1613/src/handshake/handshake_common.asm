@@ -23,8 +23,8 @@
 
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
-	.global g_hshk_send_word
 	.global g_hshk_reg_send16
+	.global g_hshk_send_word
 	.global g_hshk_finalize_send
 	.global g_hshk_accept_request
 	.global g_hshk_recv_byte
@@ -379,21 +379,24 @@ l_hshk_send_fail:
 	pop	R3
 	ret
 ; -------------------------------------------------------
-; CPU -> IO 16bit をビッグエンディアン 2 バイトで送る
-; @param R0 - 送信ワード
-; @return R0 - HSHK_OK / HSHK_NG（最後のバイト）
+; CPU -> IO 16bit 送信（ビッグエンディアン。同一入口）
+; @param R0 - 送信ワード（16bit）
+; @return R0 - HSHK_OK / HSHK_NG（最後の 1 バイト）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
 g_hshk_reg_send16:
 g_hshk_send_word:
 	push	R3
-	mv	R2, R0
-	bswp	R0, R2
+	mv	R3, R0
+	bswp	R0, R3
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
-	andi	R2, #0x00ff
-	mv	R0, R2
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_sw_done
+	mv	R0, R3
+	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
+l_hshk_sw_done:
 	pop	R3
 	ret
 ; -------------------------------------------------------

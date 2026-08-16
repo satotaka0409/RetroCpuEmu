@@ -17,6 +17,7 @@
 
 	.area	_CODE		(REL,CON)
 
+	; @unwarning
 	.global g_bios_timer_set
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte

@@ -48,6 +48,7 @@ export function checkpointsByWordAddr(cdbText: string): Map<number, string> {
 
 /**
  * レジスタをログ用 1 フィールドにする。
+ * IISR 未定義フラグは MN1613 ビット15 = LSB（`0001`）。
  * @param st CPU 状態（フェッチ直前）
  * @returns 空白区切り
  */

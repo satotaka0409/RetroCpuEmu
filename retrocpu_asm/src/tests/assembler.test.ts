@@ -105,7 +105,7 @@ describe("evalExpr: 数値リテラル全形式", () => {
     assert.equal(evalExpr("0b1", empty, false), 1);
     assert.equal(evalExpr("0b1010", empty, false), 10);
     assert.equal(evalExpr("0B11111111", empty, false), 255);
-    assert.equal(evalExpr("0b1000000000000000", empty, false), 0x8000); // ビット15
+    assert.equal(evalExpr("0b1000000000000000", empty, false), 0x8000); // 1<<15（MSB）。MN1613 のビット15（LSB）は 0x0001
   });
 
   test("2進数: B suffix（既存、小文字も可）", () => {

@@ -19,8 +19,11 @@
 
 	.area	_CODE		(REL,CON)
 
+	; @unwarning
 	.global g_bios_led_display
+	; @unwarning
 	.global g_bios_led_seven_seg
+	; @unwarning
 	.global g_bios_led_bullet
 	.global GL_HSHK_LED_LATCH
 	.global g_hshk_initiate_send

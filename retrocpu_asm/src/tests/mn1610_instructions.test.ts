@@ -444,6 +444,7 @@ describe("MN1610 命令: TBIT（ビットテスト）", () => {
   test("TBIT R0, #0", () => assert.equal(asm1("        TBIT R0, #0"), 0x2800));
   test("TBIT R0, #5", () => assert.equal(asm1("        TBIT R0, #5"), 0x2805));
   test("TBIT R0, #15", () =>
+    // MN1613 ビット15 = LSB（マスク 0x0001）。即値はビット番号で 15。
     assert.equal(asm1("        TBIT R0, #15"), 0x280f));
   test("TBIT R1, #3", () => assert.equal(asm1("        TBIT R1, #3"), 0x2903));
   test("TBIT STR, #0, Z", () =>

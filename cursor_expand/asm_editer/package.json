@@ -110,6 +110,26 @@
           "highContrast": "#5C9CFF44",
           "highContrastLight": "#0050A022"
         }
+      },
+      {
+        "id": "retroAsm.unwarningForeground",
+        "description": "; @unwarning コメントの文字色",
+        "defaults": {
+          "dark": "#9CDCFE",
+          "light": "#0451A5",
+          "highContrast": "#9CDCFE",
+          "highContrastLight": "#0000CC"
+        }
+      },
+      {
+        "id": "retroAsm.unwarningBackground",
+        "description": "; @unwarning コメントの背景色",
+        "defaults": {
+          "dark": "#9CDCFE22",
+          "light": "#0451A522",
+          "highContrast": "#9CDCFE33",
+          "highContrastLight": "#0000CC22"
+        }
       }
     ],
     "configuration": {

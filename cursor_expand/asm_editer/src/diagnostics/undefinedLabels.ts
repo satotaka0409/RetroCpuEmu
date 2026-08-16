@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
 import { findCheckpointComment } from "../comments/checkpoint";
+import { unusedGlobalWarningSuppressed } from "../comments/unwarning";
 import { detectArchitecture } from "../cpu/registry";
 import { MN1613_COPY_SET_MNEMONICS } from "../cpu/mn1613/arch";
 import { findInvalidAddressingOperands } from "./addressingModes";
 import { findImmRangeOverflows } from "./immRange";
 import { findTms9995SyntaxIssues } from "./tms9995Syntax";
+import { findUnusedGlobalDeclarations } from "./unusedGlobals";
 import {
   findInvalidCopySetOperands,
   findInvalidGprOperands,
@@ -17,7 +19,7 @@ import {
 import { findIdentRangesInLine } from "../symbols/occurrences";
 
 /**
- * アセンブリ診断（未定義ラベル / 未知命令 / 不正レジスタオペランド）。
+ * アセンブリ診断（未定義ラベル / 未使用グローバル / 未知命令 / 不正レジスタオペランド）。
  */
 export class AsmDiagnostics {
   private readonly collection: vscode.DiagnosticCollection;
@@ -67,6 +69,30 @@ export class AsmDiagnostics {
 
       // `.global` / `.globl` は外部宣言。オペランドを未定義ラベルにしない
       if (parseGlobalDirectiveNames(line.text) !== null) {
+        if (
+          unusedGlobalWarningSuppressed(
+            (i) =>
+              i >= 0 && i < document.lineCount
+                ? document.lineAt(i).text
+                : undefined,
+            lineNo,
+          )
+        ) {
+          continue;
+        }
+        for (const hit of findUnusedGlobalDeclarations(
+          line.text,
+          arch,
+          (n) => this.index.hasOperandReference(n),
+        )) {
+          const d = new vscode.Diagnostic(
+            new vscode.Range(lineNo, hit.start, lineNo, hit.end),
+            hit.message,
+            vscode.DiagnosticSeverity.Warning,
+          );
+          d.source = "mn1613asm";
+          diagnostics.push(d);
+        }
         continue;
       }
 
@@ -149,6 +175,16 @@ export class AsmDiagnostics {
   refreshVisible(): void {
     for (const editor of vscode.window.visibleTextEditors) {
       this.refresh(editor.document);
+    }
+  }
+
+  /**
+   * 開いているアセンブラを再診断する（索引は呼び出し側で更新済み想定）。
+   * 他ファイルの参照追加で未使用グローバル警告を消す。
+   */
+  refreshOpen(): void {
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.languageId === "mn1613asm") this.refresh(doc);
     }
   }
 }

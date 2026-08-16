@@ -15,6 +15,7 @@
 
 	.area	_CODE		(REL,CON)
 
+	; @unwarning
 	.global g_bios_lcd_text
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte

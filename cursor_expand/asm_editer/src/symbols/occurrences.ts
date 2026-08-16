@@ -131,3 +131,28 @@ export function collectSymbolOccurrences(
 
   return out;
 }
+
+/**
+ * 命令・データディレクティブのオペランドにあるラベル参照を数える。
+ * `.global` / `.globl` 宣言とラベル定義そのものは含めない。
+ * @param text ソース全文
+ * @param arch CPU
+ * @returns 名前（大文字）→ 出現回数
+ */
+export function collectOperandRefCounts(
+  text: string,
+  arch: CpuArchitecture,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const line of text.split(/\r?\n/)) {
+    if (parseGlobalDirectiveNames(line) !== null) continue;
+    const parsed = parseAsmLine(line, arch);
+    if (parsed.kind !== "instruction" && parsed.kind !== "directive") {
+      continue;
+    }
+    for (const name of parsed.refs) {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return counts;
+}

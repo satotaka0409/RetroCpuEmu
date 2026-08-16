@@ -2,9 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { parseSubroutineDocAbove } from "../comments/jsdoc";
+import { detectArchitecture } from "../cpu/registry";
 import type { AsmSymbol } from "../cpu/types";
 import { tryEvalExpr } from "../expression";
 import { collectEquDefs, stripAsmComment } from "./equParse";
+import { collectOperandRefCounts } from "./occurrences";
 import { parseGlobalDirectiveNames } from "./parseLine";
 import { collectIncludePaths, resolveIncludePath } from "./includeParse";
 
@@ -24,6 +26,8 @@ const ASM_GLOBS = "**/*.{asm,s,mn1613,mn1610,tms9995,inc,h}";
 export class SymbolIndex {
   private readonly byName = new Map<string, AsmSymbol[]>();
   private readonly byUri = new Map<string, AsmSymbol[]>();
+  /** ファイルごとのオペランド参照回数（大文字名） */
+  private readonly refsByUri = new Map<string, Map<string, number>>();
 
   /**
    * 名前（大文字）でシンボルを検索する。
@@ -44,6 +48,20 @@ export class SymbolIndex {
   }
 
   /**
+   * 命令／データオペランドにその名前の参照があるか（ワークスペース索引）。
+   * `.global` 宣言と `name:` 定義だけでは true にならない。
+   * @param name シンボル名
+   * @return 1 箇所以上参照されていれば true
+   */
+  hasOperandReference(name: string): boolean {
+    const key = name.toUpperCase();
+    for (const counts of this.refsByUri.values()) {
+      if ((counts.get(key) ?? 0) > 0) return true;
+    }
+    return false;
+  }
+
+  /**
    * ワークスペースを走査して索引を再構築する。
    * @return 収集したシンボル数
    */
@@ -55,6 +73,7 @@ export class SymbolIndex {
     // 収集完了まで既存索引を残し、診断が空索引を見ないようにする
     const nextByName = new Map<string, AsmSymbol[]>();
     const nextByUri = new Map<string, AsmSymbol[]>();
+    const nextRefs = new Map<string, Map<string, number>>();
     const addTemp = (sym: AsmSymbol): void => {
       const list = nextByName.get(sym.name) ?? [];
       list.push(sym);
@@ -72,12 +91,20 @@ export class SymbolIndex {
         const text = doc.getText();
         const found = this.collectSymbolsFromText(uriKey, text, addTemp);
         nextByUri.set(uriKey, found);
+        nextRefs.set(
+          uriKey,
+          collectOperandRefCounts(
+            text,
+            detectArchitecture(doc.fileName, text),
+          ),
+        );
         count += found.length;
         this.walkIncludes(
           doc.uri.fsPath,
           text,
           visited,
           nextByUri,
+          nextRefs,
           addTemp,
         );
       } catch {
@@ -87,8 +114,10 @@ export class SymbolIndex {
 
     this.byName.clear();
     this.byUri.clear();
+    this.refsByUri.clear();
     for (const [k, v] of nextByName) this.byName.set(k, v);
     for (const [k, v] of nextByUri) this.byUri.set(k, v);
+    for (const [k, v] of nextRefs) this.refsByUri.set(k, v);
     this.resolveEquValues();
     return count;
   }
@@ -106,6 +135,13 @@ export class SymbolIndex {
     const text = document.getText();
     const found = this.collectSymbolsFromText(uriKey, text);
     this.byUri.set(uriKey, found);
+    this.refsByUri.set(
+      uriKey,
+      collectOperandRefCounts(
+        text,
+        detectArchitecture(document.fileName, text),
+      ),
+    );
 
     this.indexIncludesRecursive(document.uri.fsPath, text, new Set([uriKey]));
     this.resolveEquValues();
@@ -206,6 +242,7 @@ export class SymbolIndex {
    * @param text 本文
    * @param visited 処理済み URI
    * @param nextByUri URI マップ
+   * @param nextRefs 参照回数マップ
    * @param addSym 追加コールバック
    */
   private walkIncludes(
@@ -213,6 +250,7 @@ export class SymbolIndex {
     text: string,
     visited: Set<string>,
     nextByUri: Map<string, AsmSymbol[]>,
+    nextRefs: Map<string, Map<string, number>>,
     addSym: (sym: AsmSymbol) => void,
   ): void {
     const dir = path.dirname(fromFsPath);
@@ -232,7 +270,11 @@ export class SymbolIndex {
 
       const found = this.collectSymbolsFromText(uriKey, incText, addSym);
       nextByUri.set(uriKey, found);
-      this.walkIncludes(abs, incText, visited, nextByUri, addSym);
+      nextRefs.set(
+        uriKey,
+        collectOperandRefCounts(incText, detectArchitecture(abs, incText)),
+      );
+      this.walkIncludes(abs, incText, visited, nextByUri, nextRefs, addSym);
     }
   }
 
@@ -265,6 +307,10 @@ export class SymbolIndex {
       this.removeUri(uriKey);
       const found = this.collectSymbolsFromText(uriKey, incText);
       this.byUri.set(uriKey, found);
+      this.refsByUri.set(
+        uriKey,
+        collectOperandRefCounts(incText, detectArchitecture(abs, incText)),
+      );
       this.indexIncludesRecursive(abs, incText, visited);
     }
   }
@@ -313,5 +359,6 @@ export class SymbolIndex {
       else this.byName.set(sym.name, next);
     }
     this.byUri.delete(uriKey);
+    this.refsByUri.delete(uriKey);
   }
 }

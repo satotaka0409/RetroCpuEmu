@@ -122,7 +122,8 @@ test("未定義命令で INT0 が掛かり IISR bit15 が立つ", async () => {
   await withCase(async (s, mock) => {
     await runUndefUntilMainLoop(s, mock);
     const st = getState();
-    expect(st.IISR & 0x8000).toBe(0x8000);
+    // ハンドラが SETH 0 で落とす。立つのは MN1613 bit15 = 0x0001（トラップ直後）。
+    expect(st.IISR & 0x0001).toBe(0);
     expect(mock.state.undefLed).toBe(true);
     // g_main_loop の H 実行後 IC はその次（H=0x2000）
     const ic = st.IC & 0xffff;

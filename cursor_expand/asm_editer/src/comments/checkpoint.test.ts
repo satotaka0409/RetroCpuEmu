@@ -61,6 +61,11 @@ describe("parseSubroutineDocAbove: @cp は JSDoc に混ぜない", () => {
     assert.equal(parseSubroutineDocAbove(lines, 1), undefined);
   });
 
+  test("@unwarning だけの上はドキュメント無し", () => {
+    const lines = ["; @unwarning", "g_mem_cpy:", "\tret"];
+    assert.equal(parseSubroutineDocAbove(lines, 1), undefined);
+  });
+
   test("@brief と @cp が混在しても brief は残る", () => {
     const lines = [
       "; @brief 初期化",

@@ -8,6 +8,7 @@ import { createReferenceProvider } from "./providers/references";
 import { SymbolIndex } from "./symbols/index";
 import { registerCheckpointHighlight } from "./ui/checkpointHighlight";
 import { registerTodoHighlight } from "./ui/todoHighlight";
+import { registerUnwarningHighlight } from "./ui/unwarningHighlight";
 import { CpuStatusBar } from "./ui/cpuStatusBar";
 
 /**
@@ -21,6 +22,7 @@ import { CpuStatusBar } from "./ui/cpuStatusBar";
  * - サブルーチン呼び出しホバー（呼び出し規約）
  * - 保存時整形でソースを壊さない no-op フォーマッタ
  * - `; @cp` チェックポイントの色分け（asm_editer.mdc）
+ * - `; @unwarning` 未使用グローバル警告の抑止
  * - `; TODO` コメントの色分け（概要ルーラー付き）
  */
 export function activate(context: vscode.ExtensionContext): void {
@@ -30,6 +32,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerNoOpFormatter(context);
   registerCheckpointHighlight(context);
+  registerUnwarningHighlight(context);
   registerTodoHighlight(context);
 
   /** 再初期化を直列化し、索引クリア競合を防ぐ */
@@ -85,7 +88,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.document.languageId === "mn1613asm") {
-        diagnostics.refresh(e.document);
+        diagnostics.refreshOpen();
       }
     }),
     vscode.workspace.onDidOpenTextDocument((doc) => {

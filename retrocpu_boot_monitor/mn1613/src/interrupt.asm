@@ -10,6 +10,7 @@
 
 	.area	_CODE		(REL,CON)
 
+	; @unwarning
 	.global g_set_int_adr
 	.global g_int0_handler
 	.global g_int1_handler
@@ -21,6 +22,7 @@
 	.global g_step_arm_cpld
 	.global g_bios_undef_led
 	.global g_write_cpu_registers
+	; @unwarning
 	.global g_main_loop
 	.global GL_UNDEF_INST_REG
 	.global GL_INT0_ADR
@@ -69,9 +71,9 @@ g_set_int_adr:
 ; -------------------------------------------------------
 g_int0_handler:
 	pshm
-	; 未定義命令が実行されたかチェック（MN1613.mdc: IISR bit15）
+	; 未定義命令が実行されたかチェック（IISR bit15 = LSB 0x0001）
 	cpyh	R0, IISR
-	andi	R0, #0x8000, NZ
+	andi	R0, #0x0001, NZ
 	; @cp undefined_instruction
 	b	l_int0_handler_normal_interrupt
 	; @cp copy_registers
