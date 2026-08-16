@@ -81,7 +81,7 @@ async function cpuToIoBytes(
     expect(init.registers.R[0]).toBe(HSHK_OK);
     for (const b of bytes) {
       const sent = await session.call("g_hshk_send_byte", {
-      registers: { ...BASE_REGS, R0: b & 0xff },
+        registers: { ...BASE_REGS, R0: b & 0xff },
       });
       expect(sent.registers.R[0]).toBe(HSHK_OK);
     }
@@ -107,11 +107,11 @@ async function ioToCpuBytes(
   const ioP = mock.io.send(Uint8Array.from(bytes));
   await waitReq1(mock);
   const wait = await session.call("g_hshk_wait_req1_1", {
-      registers: { ...BASE_REGS },
+    registers: { ...BASE_REGS },
   });
   expect(wait.registers.R[0]).toBe(HSHK_OK);
   const acc = await session.call("g_hshk_accept_request", {
-      registers: { ...BASE_REGS },
+    registers: { ...BASE_REGS },
   });
   expect(acc.registers.R[0]).toBe(HSHK_OK);
   const got: number[] = [];
@@ -123,7 +123,7 @@ async function ioToCpuBytes(
     got.push(rec.registers.R[1] & 0xff);
   }
   const fin = await session.call("g_hshk_finalize_recv", {
-      registers: { ...BASE_REGS },
+    registers: { ...BASE_REGS },
   });
   expect(fin.registers.R[0]).toBe(HSHK_OK);
   await ioP;
@@ -148,20 +148,20 @@ test("CPU→IO 複数バイトが順に届く", async () => {
   });
 });
 
-test("g_hshk_reg_send16 は 16bit をビッグエンディアン 2 バイトで送る", async () => {
+test("g_hshk_send_word は 16bit をビッグエンディアン 2 バイトで送る", async () => {
   await withCase(async (s, mock) => {
     const ioP = mock.io.receive(2);
     const cpuP = (async () => {
       const init = await s.call("g_hshk_initiate_send", {
-      registers: { ...BASE_REGS },
+        registers: { ...BASE_REGS },
       });
       expect(init.registers.R[0]).toBe(HSHK_OK);
-      const sent = await s.call("g_hshk_reg_send16", {
-      registers: { ...BASE_REGS, R0: 0xabcd },
+      const sent = await s.call("g_hshk_send_word", {
+        registers: { ...BASE_REGS, R0: 0xabcd },
       });
       expect(sent.registers.R[0]).toBe(HSHK_OK);
       const fin = await s.call("g_hshk_finalize_send", {
-      registers: { ...BASE_REGS },
+        registers: { ...BASE_REGS },
       });
       expect(fin.registers.R[0]).toBe(HSHK_OK);
     })();
@@ -248,7 +248,8 @@ test("g_hshk_wait_ena_delay は乱数種を進め R3–R4 を保つ", async () =
   await withCase(async (s) => {
     const seedBefore = s.readWord(s.wordAddr("GL_RND_SEED"));
     await s.call("g_hshk_wait_ena_delay", {
-      registers: { ...BASE_REGS } });
+      registers: { ...BASE_REGS },
+    });
     const seedAfter = s.readWord(s.wordAddr("GL_RND_SEED"));
     expect(seedAfter === seedBefore).toBe(false);
     expect(seedAfter).toBeGreaterThanOrEqual(1);

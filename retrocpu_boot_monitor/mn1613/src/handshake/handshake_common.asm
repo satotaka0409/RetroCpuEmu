@@ -23,7 +23,6 @@
 
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
-	.global g_hshk_reg_send16
 	.global g_hshk_send_word
 	.global g_hshk_finalize_send
 	.global g_hshk_accept_request
@@ -384,7 +383,6 @@ l_hshk_send_fail:
 ; @return R0 - HSHK_OK / HSHK_NG（最後の 1 バイト）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_hshk_reg_send16:
 g_hshk_send_word:
 	push	R3
 	mv	R3, R0
