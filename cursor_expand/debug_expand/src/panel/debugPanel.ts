@@ -48,8 +48,9 @@ export class DebugPanel {
   private session: ProgramSession | null = null;
   private state: DebugViewState;
   private io: DebugIoClient | null = null;
-  private memBusy = false;
+  private ioBusy = false;
   private memQueued: { center: number; scrollTo: number } | null = null;
+  private disasmQueued: { center: number; scrollTo: number } | null = null;
   private readonly entryReady: Promise<number>;
 
   /**
@@ -105,7 +106,8 @@ export class DebugPanel {
     this.extensionUri = extensionUri;
     this.log = log;
     this.state = createMockDebugState();
-    this.entryReady = this.resolveGMainWord();
+    this.session = new ProgramSession();
+    this.entryReady = this.bootstrapSession();
     this.panel.webview.html = this.buildHtml();
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
@@ -135,6 +137,10 @@ export class DebugPanel {
           this.onMemScroll(Number(msg.firstAddr), Number(msg.lastAddr));
           return;
         }
+        if (msg.type === "disasmScroll") {
+          this.onDisasmScroll(Number(msg.firstAddr), Number(msg.lastAddr));
+          return;
+        }
         if (msg.type === "command" && msg.cmd) {
           void vscode.window.showInformationMessage(
             `Retro CPU Debug: 「${msg.cmd}」は未実装`,
@@ -147,50 +153,68 @@ export class DebugPanel {
   }
 
   /**
-   * 初期表示を g_main に合わせて handshake 13h で読む。
+   * 初期表示を g_main（または HEX 最小）から逆アセンブルし、handshake 13h で読む。
    */
   private async onWebviewReady(): Promise<void> {
     const entry = await this.entryReady;
-    this.state = { ...this.state, memStart: entry };
+    this.state = {
+      ...this.state,
+      memStart: entry,
+      disasmStart: entry,
+    };
     void this.panel.webview.postMessage({
       type: "state",
       state: this.state,
     });
     await this.requestMemWindow(entry, entry);
+    await this.requestDisasmWindow(entry, entry);
   }
 
   /**
-   * ワークスペースのモニタ CDB から g_main のワードアドレスを取る。
-   * @returns 物理ワード（無ければ 0108h）
+   * ワークスペースのモニタ IHX/CDB をセッションに載せる。
+   * @returns 逆アセンブル先頭の物理ワード
    */
-  private async resolveGMainWord(): Promise<number> {
+  private async bootstrapSession(): Promise<number> {
+    const session = this.session ?? new ProgramSession();
+    this.session = session;
     try {
-      const files = await vscode.workspace.findFiles(
+      const cdbFiles = await vscode.workspace.findFiles(
         "**/mn1613_mon.cdb",
         "**/node_modules/**",
         8,
       );
-      if (files.length === 0) {
+      if (cdbFiles.length === 0) {
         this.log?.appendLine(
           `entry: mn1613_mon.cdb なし → ${hex5(DEFAULT_ENTRY_WORD)}h`,
         );
+        session.entryWord = DEFAULT_ENTRY_WORD;
         return DEFAULT_ENTRY_WORD;
       }
-      const uri = files[0]!;
-      const text = Buffer.from(
-        await vscode.workspace.fs.readFile(uri),
+      const cdbUri = cdbFiles[0]!;
+      const ihxPath = cdbUri.fsPath.replace(/\.cdb$/i, ".ihx");
+      try {
+        const ihxBytes = await vscode.workspace.fs.readFile(
+          vscode.Uri.file(ihxPath),
+        );
+        session.loadHex(Buffer.from(ihxBytes).toString("utf8"), ihxPath);
+        this.log?.appendLine(`hex: ${ihxPath}`);
+      } catch {
+        this.log?.appendLine(`hex: ${ihxPath} なし（13h 待ち）`);
+      }
+      const cdbText = Buffer.from(
+        await vscode.workspace.fs.readFile(cdbUri),
       ).toString("utf8");
-      const session = new ProgramSession();
-      session.loadCdb(text, uri.fsPath);
+      session.loadCdb(cdbText, cdbUri.fsPath);
       const word = (session.entryWord || DEFAULT_ENTRY_WORD) & PHYS_WORD_MASK;
-      const name = entryLabelName(session) ?? "HEX/default";
+      const name = entryLabelName(session) ?? "HEX最小";
       this.log?.appendLine(
-        `entry: ${uri.fsPath} ${name}=${hex5(word)}h`,
+        `entry: ${cdbUri.fsPath} ${name}=${hex5(word)}h`,
       );
       return word;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.log?.appendLine(`entry: CDB 読込失敗 ${msg} → ${hex5(DEFAULT_ENTRY_WORD)}h`);
+      this.log?.appendLine(`entry: 読込失敗 ${msg} → ${hex5(DEFAULT_ENTRY_WORD)}h`);
+      session.entryWord = DEFAULT_ENTRY_WORD;
       return DEFAULT_ENTRY_WORD;
     }
   }
@@ -228,6 +252,55 @@ export class DebugPanel {
   }
 
   /**
+   * 逆アセンブル可視範囲がキャッシュ端に出たら再取得する。
+   * @param firstAddr 可視先頭ワード
+   * @param lastAddr 可視末尾ワード
+   */
+  onDisasmScroll(firstAddr: number, lastAddr: number): void {
+    if (
+      !Number.isFinite(firstAddr) ||
+      !Number.isFinite(lastAddr) ||
+      lastAddr < firstAddr
+    ) {
+      return;
+    }
+    const center = memNextCenter(
+      firstAddr & PHYS_WORD_MASK,
+      lastAddr & PHYS_WORD_MASK,
+      this.state.disasmCacheLo,
+      this.state.disasmCacheHi,
+    );
+    if (center === null) {
+      return;
+    }
+    const win = memFetchRange(center);
+    if (
+      win.lo === this.state.disasmCacheLo &&
+      win.hi === this.state.disasmCacheHi
+    ) {
+      return;
+    }
+    void this.requestDisasmWindow(center, firstAddr & PHYS_WORD_MASK);
+  }
+
+  /**
+   * 進行中の 13h が終わったら、残っているダンプ／逆アセンブル要求を続ける。
+   */
+  private drainIoQueue(): void {
+    const mem = this.memQueued;
+    this.memQueued = null;
+    if (mem) {
+      void this.requestMemWindow(mem.center, mem.scrollTo);
+      return;
+    }
+    const dis = this.disasmQueued;
+    this.disasmQueued = null;
+    if (dis) {
+      void this.requestDisasmWindow(dis.center, dis.scrollTo);
+    }
+  }
+
+  /**
    * ±800h 窓を取得してダンプを更新する（進行中なら最新要求だけ残す）。
    * @param centerWord 窓の中心
    * @param scrollTo 再描画後に合わせるワード
@@ -235,18 +308,37 @@ export class DebugPanel {
   async requestMemWindow(centerWord: number, scrollTo: number): Promise<void> {
     const center = centerWord & PHYS_WORD_MASK;
     const scroll = scrollTo & PHYS_WORD_MASK;
-    if (this.memBusy) {
+    if (this.ioBusy) {
       this.memQueued = { center, scrollTo: scroll };
       return;
     }
-    this.memBusy = true;
+    this.ioBusy = true;
     try {
       await this.fetchMemWindow(center, scroll);
     } finally {
-      this.memBusy = false;
-      const q = this.memQueued;
-      this.memQueued = null;
-      if (q) void this.requestMemWindow(q.center, q.scrollTo);
+      this.ioBusy = false;
+      this.drainIoQueue();
+    }
+  }
+
+  /**
+   * ±800h 窓を取得して逆アセンブルを更新する（進行中なら最新要求だけ残す）。
+   * @param centerWord 窓の中心
+   * @param scrollTo 再描画後に合わせるワード
+   */
+  async requestDisasmWindow(centerWord: number, scrollTo: number): Promise<void> {
+    const center = centerWord & PHYS_WORD_MASK;
+    const scroll = scrollTo & PHYS_WORD_MASK;
+    if (this.ioBusy) {
+      this.disasmQueued = { center, scrollTo: scroll };
+      return;
+    }
+    this.ioBusy = true;
+    try {
+      await this.fetchDisasmWindow(center, scroll);
+    } finally {
+      this.ioBusy = false;
+      this.drainIoQueue();
     }
   }
 
@@ -260,6 +352,72 @@ export class DebugPanel {
     scrollTo: number,
   ): Promise<void> {
     const win = memFetchRange(centerWord);
+    const read = await this.readPhysWindow(win, "mem");
+    this.state = {
+      ...this.state,
+      memStart: scrollTo & PHYS_WORD_MASK,
+      memCacheLo: win.lo,
+      memCacheHi: win.hi,
+      memDump: read.dump,
+      memNote: read.memNote,
+    };
+    void this.panel.webview.postMessage({
+      type: "mem",
+      memDump: read.dump,
+      memStart: this.state.memStart,
+      memCacheLo: win.lo,
+      memCacheHi: win.hi,
+      memNote: read.memNote,
+      scrollToAddr: this.state.memStart,
+    });
+  }
+
+  /**
+   * 13h で窓を読み、その範囲を逆アセンブルする。
+   * @param centerWord 中心
+   * @param scrollTo スクロール先
+   */
+  private async fetchDisasmWindow(
+    centerWord: number,
+    scrollTo: number,
+  ): Promise<void> {
+    const win = memFetchRange(centerWord);
+    const read = await this.readPhysWindow(win, "disasm");
+    const disasm = this.ensureSession().buildDisasm(
+      win.lo,
+      win.wordCount,
+      win.hi,
+      scrollTo & PHYS_WORD_MASK,
+    );
+    this.state = {
+      ...this.state,
+      disasm,
+      disasmStart: scrollTo & PHYS_WORD_MASK,
+      disasmCacheLo: win.lo,
+      disasmCacheHi: win.hi,
+      memNote: read.memNote,
+    };
+    void this.panel.webview.postMessage({
+      type: "disasm",
+      disasm,
+      disasmStart: this.state.disasmStart,
+      disasmCacheLo: win.lo,
+      disasmCacheHi: win.hi,
+      memNote: read.memNote,
+      scrollToAddr: this.state.disasmStart,
+    });
+  }
+
+  /**
+   * 物理ワード窓を 13h で読む。ダンプ行も返す。
+   * @param win 取得範囲
+   * @param kind ログ用
+   * @returns ダンプとメモ
+   */
+  private async readPhysWindow(
+    win: { lo: number; hi: number; wordCount: number },
+    kind: "mem" | "disasm",
+  ): Promise<{ dump: DebugViewState["memDump"]; memNote: string }> {
     const cfg = vscode.workspace.getConfiguration("retroDebug");
     const host = cfg.get<string>("host") ?? "127.0.0.1";
     const port = cfg.get<number>("port") ?? 29000;
@@ -272,11 +430,12 @@ export class DebugPanel {
     try {
       const io = this.requireIo(host, port);
       this.log?.appendLine(
-        `mem 13h ${host}:${port} word ${hex5(win.lo)}–${hex5(win.hi)} (${win.wordCount} words)`,
+        `${kind} 13h ${host}:${port} word ${hex5(win.lo)}–${hex5(win.hi)} (${win.wordCount} words)`,
       );
       const bytes = await io.memRead(win.lo * 2, win.wordCount * 2);
       dump = memDumpFromBeBytes(win.lo, bytes);
-      memNote = `handshake 13h OK  ${hex5(win.lo)}–${hex5(win.hi)}  表示 ${hex5(scrollTo)}`;
+      this.ensureSession().patchBytes(win.lo * 2, bytes);
+      memNote = `handshake 13h OK  ${hex5(win.lo)}–${hex5(win.hi)}`;
       this.log?.appendLine(memNote);
     } catch (e) {
       this.io?.close();
@@ -285,23 +444,16 @@ export class DebugPanel {
       memNote = `未接続 — retrocpu_emu を起動（DebugHost ${host}:${port}）。${msg}`;
       this.log?.appendLine(memNote);
     }
-    this.state = {
-      ...this.state,
-      memStart: scrollTo & PHYS_WORD_MASK,
-      memCacheLo: win.lo,
-      memCacheHi: win.hi,
-      memDump: dump,
-      memNote,
-    };
-    void this.panel.webview.postMessage({
-      type: "mem",
-      memDump: dump,
-      memStart: this.state.memStart,
-      memCacheLo: win.lo,
-      memCacheHi: win.hi,
-      memNote,
-      scrollToAddr: this.state.memStart,
-    });
+    return { dump, memNote };
+  }
+
+  /**
+   * プログラムセッションを用意する。
+   * @returns セッション
+   */
+  private ensureSession(): ProgramSession {
+    if (!this.session) this.session = new ProgramSession();
+    return this.session;
   }
 
   /**
@@ -326,6 +478,7 @@ export class DebugPanel {
     this.state = loaded.state;
     void this.panel.webview.postMessage({ type: "state", state: this.state });
     void this.requestMemWindow(this.state.memStart, this.state.memStart);
+    void this.requestDisasmWindow(this.state.disasmStart, this.state.disasmStart);
     const cdbNote = this.session.cdbPath
       ? pathBase(this.session.cdbPath)
       : "CDB なし";

@@ -1,57 +1,18 @@
 /**
- * VS Code UI 経由の HEX/CDB 読込とソース検索。
+ * VS Code UI 経由の HEX/CDB 読込。
  * 根拠: retrocpu_debug.mdc「プログラム読み込み」
  */
 
 import * as fs from "node:fs";
 import * as vscode from "vscode";
 import type { DebugViewState } from "../panel/mockState";
-import {
-  entryLabelName,
-  ProgramSession,
-} from "./programSession";
+import { ProgramSession } from "./programSession";
 
 export { ProgramSession } from "./programSession";
-/**
- * ワークスペースからラベル定義のある .asm を探し、表示用ソースを返す。
- * @param label ラベル名（main / run 等）
- * @returns ソース情報。無ければ undefined
- */
-export async function findSourceForLabel(
-  label: string,
-): Promise<{ path: string; lines: string[]; focusLine: number } | undefined> {
-  const uris = await vscode.workspace.findFiles(
-    "**/*.{asm,s,mn1613,mn1610}",
-    "**/node_modules/**",
-    200,
-  );
-  const re = new RegExp(
-    `^\\s*${label.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*:`,
-    "i",
-  );
-  for (const uri of uris) {
-    let text: string;
-    try {
-      text = fs.readFileSync(uri.fsPath, "utf8");
-    } catch {
-      continue;
-    }
-    const lines = text.replace(/\r\n/g, "\n").split("\n");
-    for (let i = 0; i < lines.length; i += 1) {
-      if (re.test(lines[i]!)) {
-        return {
-          path: vscode.workspace.asRelativePath(uri),
-          lines,
-          focusLine: i + 1,
-        };
-      }
-    }
-  }
-  return undefined;
-}
 
 /**
  * HEX（必須）と CDB（任意）を選んでセッションを作る。
+ * 逆アセンブル先頭は `g_main`、無ければ HEX 最小アドレス。
  * @returns セッションと画面状態。キャンセル時 null
  */
 export async function pickAndLoadProgram(): Promise<{
@@ -89,8 +50,6 @@ export async function pickAndLoadProgram(): Promise<{
     session.loadCdb(fs.readFileSync(cdbPath, "utf8"), cdbPath);
   }
 
-  const label = entryLabelName(session);
-  const source = label ? await findSourceForLabel(label) : undefined;
-  const state = session.toViewState(source);
+  const state = session.toViewState();
   return { session, state };
 }

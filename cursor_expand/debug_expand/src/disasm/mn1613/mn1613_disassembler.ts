@@ -48,9 +48,19 @@ export class Mn1613Disassembler {
    * 1 件追加する。
    * @param name ラベル名
    * @param wordAddr ワードアドレス
+   * @param scope CDB スコープ（`G` のみアドレス／オペランドに出す）
    */
-  addLabel(name: string, wordAddr: number): void {
-    this.labels.addLabel(name, wordAddr, "G");
+  addLabel(name: string, wordAddr: number, scope = "G"): void {
+    this.labels.addLabel(name, wordAddr, scope);
+  }
+
+  /**
+   * 指定ワードのグローバルラベル名。
+   * @param wordAddr ワードアドレス
+   * @returns 名前。無ければ undefined
+   */
+  globalLabelAt(wordAddr: number): string | undefined {
+    return this.labels.lookupGlobal(wordAddr);
   }
 
   /**

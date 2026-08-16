@@ -60,10 +60,10 @@ function writeByteWords(
 /**
  * g_bios_lcd_text を呼び、CPU→IO 1 トランザクションと並行する。
  * @param mock IO モック
- * @param row 行（R0）
- * @param col 列（R1）
- * @param len 文字数（R2）
- * @param textAddr 文字列先頭（R3）
+ * @param row 行（R0 Bit8–9）
+ * @param col 列（R0 Bit0–7）
+ * @param len 文字数（R1）
+ * @param textAddr 文字列先頭（R2）
  */
 async function callLcd2(
   mock: IoBoardHandshakeMock,
@@ -76,10 +76,10 @@ async function callLcd2(
     session.call("g_bios_lcd_text", {
       registers: {
         ...BASE_REGS,
-        R0: row,
-        R1: col,
-        R2: len,
-        R3: textAddr,
+        R0: ((row & 0x3) << 8) | (col & 0xff),
+        R1: len,
+        R2: textAddr,
+        R3: 0x3333,
       },
     }),
     mock.handleOneRequest(),
@@ -127,6 +127,6 @@ test("R3/R4 は呼び出しの前後で保たれる", async () => {
   await withCase(async (s, mock) => {
     writeByteWords(s, TEXT_BUF, [0x48, 0x49]); // HI
     await callLcd2(mock, 0, 0, 2, TEXT_BUF);
-    s.expectRegisters({ R3: TEXT_BUF, R4: BASE_REGS.R4 });
+    s.expectRegisters({ R3: 0x3333, R4: BASE_REGS.R4 });
   });
 });

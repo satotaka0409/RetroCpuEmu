@@ -15,6 +15,7 @@ import {
 } from "../mn1613_mon_settings.js";
 
 const BASE_REGS = {
+  R3: 0x3333,
   R4: 0x4444,
 } as const;
 
@@ -43,8 +44,8 @@ async function withCase(
  * @param mock IO モック
  * @param kind 種別（R0）
  * @param argA 引数A（R1）
- * @param argB 引数B（R2）
- * @param argC 引数C（R3）
+ * @param argB 引数B（R2 Bit8–9）
+ * @param argC 引数C（R2 Bit0–7）
  */
 async function callLcd1(
   mock: IoBoardHandshakeMock,
@@ -59,8 +60,7 @@ async function callLcd1(
         ...BASE_REGS,
         R0: kind,
         R1: argA,
-        R2: argB,
-        R3: argC,
+        R2: ((argB & 3) << 8) | (argC & 0xff),
       },
     }),
     mock.handleOneRequest(),
@@ -85,6 +85,6 @@ test("17h フレーム（kind/argA/argB/argC）を正しく送る", async () => 
 test("R3/R4 は呼び出しの前後で保たれる", async () => {
   await withCase(async (s, mock) => {
     await callLcd1(mock, 2, 0x07, 0x00, 0x00);
-    s.expectRegisters({ R3: 0x0000, R4: BASE_REGS.R4 });
+    s.expectRegisters({ R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
   });
 });

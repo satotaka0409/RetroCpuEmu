@@ -1,3 +1,4 @@
+import { stripLineComment } from "./parser";
 import type { CpuType } from "./types";
 
 /** `.cpu` / `--cpu` で指定できる CPU（この3つのみ） */
@@ -21,12 +22,7 @@ export function parseCpuType(value: string | undefined): CpuType | null {
  * @returns トリム済み本文
  */
 function lineBody(line: string): string {
-  const semi = line.indexOf(";");
-  const slash = line.indexOf("//");
-  let cut = line.length;
-  if (semi >= 0) cut = Math.min(cut, semi);
-  if (slash >= 0) cut = Math.min(cut, slash);
-  return line.slice(0, cut).trim();
+  return stripLineComment(line).trim();
 }
 
 /**

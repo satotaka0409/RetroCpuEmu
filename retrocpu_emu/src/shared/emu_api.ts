@@ -1,5 +1,9 @@
 /** メイン ↔ レンダラで共有するスナップショット型 */
 
+import type { BeepWire } from "./beep";
+
+export type { BeepWire };
+
 export type LedDisplayWire = {
   sevenSeg: number[];
   bulletLed0_7: number;
@@ -61,9 +65,15 @@ export type EmuSnapshotWire = {
 
 export type EmuApi = {
   onSnapshot: (cb: (snap: EmuSnapshotWire) => void) => () => void;
+  onBeep: (cb: (beep: BeepWire) => void) => () => void;
   getSnapshot: () => Promise<EmuSnapshotWire>;
   keyHex: (digit: string) => void;
   keyFn: (fn: string) => void;
   keyAdsLongPress: () => void;
-  loadIntelHex: (hex: string) => Promise<{ bytesWritten: number }>;
+  loadIntelHex: (hex: string) => Promise<{
+    bytesWritten: number;
+    minAddr: number;
+    maxAddr: number;
+    chunks: number;
+  }>;
 };

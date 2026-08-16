@@ -163,47 +163,52 @@
     }
   }
 
-  /** 逆アセンブルを描画する */
-  function renderDisasm() {
+  /**
+   * 命令語数（空白区切り）。
+   * @param {string} bytes
+   * @returns {number}
+   */
+  function wordCountOf(bytes) {
+    const parts = String(bytes || "").trim().split(/\s+/).filter(Boolean);
+    return parts.length || 1;
+  }
+
+  /**
+   * 逆アセンブルを描画する。
+   * @param {number | undefined} scrollToAddr 合わせるワード。省略時はスクロール位置を維持
+   */
+  function renderDisasm(scrollToAddr) {
     const el = document.getElementById("disasm");
     if (!el) return;
-    el.innerHTML = state.disasm
+    const keep = el.scrollTop;
+    el.innerHTML = (state.disasm || [])
       .map((line) => {
         const cls = ["line", "disasm"];
         if (line.current) cls.push("current");
         const g = line.bp ? "●" : "";
+        const a = parseInt(line.addr, 16);
+        const end = (Number.isFinite(a) ? a : 0) + wordCountOf(line.bytes) - 1;
         return (
-          `<div class="${cls.join(" ")}">` +
+          `<div class="${cls.join(" ")}" data-addr="${esc(line.addr)}" data-end="${end.toString(16)}">` +
           `<span class="gutter${line.bp ? " bp" : ""}">${g}</span>` +
           `<span class="addr">${esc(line.addr)}</span>` +
+          `<span class="sym"${line.label ? ` title="${esc(line.label)}"` : ""}>${line.label ? esc(line.label) : ""}</span>` +
           `<span class="bytes">${esc(line.bytes)}</span>` +
           `<span class="text">${esc(line.text)}</span>` +
           `</div>`
         );
       })
       .join("");
-  }
-
-  /** ソースを描画する */
-  function renderSource() {
-    const head = document.getElementById("sourceHead");
-    const el = document.getElementById("source");
-    if (head) head.textContent = `アセンブラソース — ${state.sourcePath}`;
-    if (!el) return;
-    el.innerHTML = state.sourceLines
-      .map((text, i) => {
-        const n = i + 1;
-        const cls = ["line"];
-        if (n === state.sourceFocusLine) cls.push("focus");
-        return (
-          `<div class="${cls.join(" ")}">` +
-          `<span class="gutter">${n}</span>` +
-          `<span class="addr"></span>` +
-          `<span class="text">${esc(text)}</span>` +
-          `</div>`
-        );
-      })
-      .join("");
+    if (scrollToAddr != null) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollCodeTo(el, Number(scrollToAddr));
+          reportDisasmScroll();
+        });
+      });
+    } else {
+      el.scrollTop = keep;
+    }
   }
 
   /** BP 一覧を描画する（スロット 0–7） */
@@ -267,13 +272,13 @@
   }
 
   /**
-   * 指定ワードを含む行（または直前の行）をダンプ先頭に出す。
+   * 指定ワードを含む行（または直前の行）をスクロール容器の先頭に出す。
    * @param {HTMLElement} el スクロール容器
    * @param {number} scrollToAddr 物理ワード
    */
-  function scrollMemTo(el, scrollToAddr) {
+  function scrollCodeTo(el, scrollToAddr) {
     const target = Number(scrollToAddr) & 0x3ffff;
-    const lines = el.querySelectorAll(".line.mem");
+    const lines = el.querySelectorAll(".line");
     let best = null;
     let bestAddr = -1;
     for (let i = 0; i < lines.length; i += 1) {
@@ -292,6 +297,15 @@
     const first = /** @type {HTMLElement | null} */ (el.firstElementChild);
     const base = first ? first.offsetTop : 0;
     el.scrollTop = Math.max(0, best.offsetTop - base);
+  }
+
+  /**
+   * 指定ワードを含む行（または直前の行）をダンプ先頭に出す。
+   * @param {HTMLElement} el スクロール容器
+   * @param {number} scrollToAddr 物理ワード
+   */
+  function scrollMemTo(el, scrollToAddr) {
+    scrollCodeTo(el, scrollToAddr);
   }
 
   /**
@@ -319,6 +333,36 @@
     vscode.postMessage({ type: "memScroll", firstAddr: first, lastAddr: last });
   }
 
+  /**
+   * 可視命令の先頭／末尾ワードを拡張へ送り、窓の再取得判定させる。
+   */
+  function reportDisasmScroll() {
+    const el = document.getElementById("disasm");
+    if (!el) return;
+    const lines = el.querySelectorAll(".line.disasm");
+    if (!lines.length) return;
+    const box = el.getBoundingClientRect();
+    let first = null;
+    let last = null;
+    for (let i = 0; i < lines.length; i += 1) {
+      const node = /** @type {HTMLElement} */ (lines[i]);
+      const r = node.getBoundingClientRect();
+      if (r.bottom <= box.top + 0.5) continue;
+      if (r.top >= box.bottom - 0.5) break;
+      const a = parseInt(node.dataset.addr || "0", 16);
+      const e = parseInt(node.dataset.end || node.dataset.addr || "0", 16);
+      if (!Number.isFinite(a)) continue;
+      if (first === null) first = a;
+      last = Number.isFinite(e) ? e : a;
+    }
+    if (first === null || last === null) return;
+    vscode.postMessage({
+      type: "disasmScroll",
+      firstAddr: first,
+      lastAddr: last,
+    });
+  }
+
   let memScrollTimer = 0;
   /**
    * スクロールをまとめて報告する。
@@ -328,6 +372,18 @@
     memScrollTimer = setTimeout(() => {
       memScrollTimer = 0;
       reportMemScroll();
+    }, 80);
+  }
+
+  let disasmScrollTimer = 0;
+  /**
+   * 逆アセンブルのスクロールをまとめて報告する。
+   */
+  function onDisasmScrollDebounced() {
+    if (disasmScrollTimer) clearTimeout(disasmScrollTimer);
+    disasmScrollTimer = setTimeout(() => {
+      disasmScrollTimer = 0;
+      reportDisasmScroll();
     }, 80);
   }
 
@@ -341,7 +397,6 @@
     const view = resolveView();
     renderRegs(view.regs, view.meta);
     renderDisasm();
-    renderSource();
     renderBp();
     renderBreak(view.breakText);
     renderMem();
@@ -430,12 +485,27 @@
       const note = document.getElementById("memNote");
       if (note && state.memNote) note.textContent = state.memNote;
       renderMem(msg.scrollToAddr);
+      return;
+    }
+    if (msg && msg.type === "disasm") {
+      if (msg.disasm) state.disasm = msg.disasm;
+      if (msg.disasmStart != null) state.disasmStart = msg.disasmStart;
+      if (msg.disasmCacheLo != null) state.disasmCacheLo = msg.disasmCacheLo;
+      if (msg.disasmCacheHi != null) state.disasmCacheHi = msg.disasmCacheHi;
+      if (msg.memNote) state.memNote = msg.memNote;
+      const note = document.getElementById("memNote");
+      if (note && state.memNote) note.textContent = state.memNote;
+      renderDisasm(msg.scrollToAddr);
     }
   });
 
   const memEl = document.getElementById("memDump");
   if (memEl) {
     memEl.addEventListener("scroll", onMemScrollDebounced);
+  }
+  const disEl = document.getElementById("disasm");
+  if (disEl) {
+    disEl.addEventListener("scroll", onDisasmScrollDebounced);
   }
 
   render();

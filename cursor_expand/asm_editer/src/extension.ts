@@ -45,12 +45,18 @@ export function activate(context: vscode.ExtensionContext): void {
    */
   const reinitialize = (reason: string): Promise<void> => {
     reinitChain = reinitChain.then(async () => {
-      const arch = getPreferredArchitecture();
-      const n = await index.rebuild();
-      diagnostics.refreshVisible();
-      output.appendLine(
-        `[${reason}] CPU=${arch.displayName} (${arch.id}), indexed ${n} symbols.`,
-      );
+      try {
+        const arch = getPreferredArchitecture();
+        const n = await index.rebuild();
+        // 非表示タブの `.global` 未使用警告も、他ファイルの BALD 参照を見て消す
+        diagnostics.refreshOpen();
+        output.appendLine(
+          `[${reason}] CPU=${arch.displayName} (${arch.id}), indexed ${n} symbols.`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        output.appendLine(`[${reason}] symbol index rebuild failed: ${msg}`);
+      }
     });
     return reinitChain;
   };
@@ -87,12 +93,13 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId === "mn1613asm") {
-        diagnostics.refreshOpen();
-      }
+      if (e.document.languageId !== "mn1613asm") return;
+      void reinitChain.then(() => diagnostics.refreshOpen());
     }),
     vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId === "mn1613asm") diagnostics.refresh(doc);
+      if (doc.languageId !== "mn1613asm") return;
+      // 起動直後は索引が空なので、rebuild 完了まで未使用グローバルを出さない
+      void reinitChain.then(() => diagnostics.refresh(doc));
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       void doc;

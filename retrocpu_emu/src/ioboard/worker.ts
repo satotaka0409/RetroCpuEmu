@@ -22,8 +22,7 @@ import { getLcdWire, resetLcdConsole } from "./lcd_console";
 import { getUndefLed, resetUndefLed } from "./bullet_led/io_undef_led";
 import { BoardLinkClient } from "./board_link_client";
 import { IoConsole, type ConsoleFnKey } from "./hex_keyboard/io_console";
-import { loadIntelHex } from "../code_test/intel_hex";
-import { MEM_BYTES } from "../shared/shared_board";
+import { dmaLoadIntelHex } from "./intel_hex_dma";
 import type { EmuSnapshot } from "../shared/emu_types";
 import { getLogger, initLogging } from "../log/logger";
 import { IoTimer } from "./timer/io_timer";
@@ -180,6 +179,7 @@ async function runIoBoardReset(reason: string): Promise<void> {
     resetLedDisplay();
     resetUndefLed();
     resetLcdConsole();
+    emitBeep(0, 0);
     await reloadSettingArea();
     settingInitPromise = Promise.resolve();
     const resetVectorWord = settingRaw
@@ -245,6 +245,19 @@ const cmdDispatcher = new CpuToIoCommandDispatcher(
   createDefaultCpuToIoHandlers(cmdState, intervalTimers, wallClock),
 );
 
+/**
+ * ハンドシェイク 19h をレンダラのスピーカーへ渡す。
+ * @param frequencyHz 周波数 Hz（0 で停止）
+ * @param durationMs 長さ ms（0 で無限）
+ */
+function emitBeep(frequencyHz: number, durationMs: number): void {
+  parentPort?.postMessage({
+    type: "io:beep",
+    frequencyHz: frequencyHz & 0xffff,
+    durationMs: durationMs & 0xffff,
+  });
+}
+
 link.setCpuToIoFrameHandler((frame) => {
   // frame[0] は CPU→IO コマンド番号（HandShake.mdc）。
   const cmd = frame[0] ?? 0;
@@ -267,6 +280,16 @@ link.setCpuToIoFrameHandler((frame) => {
       on: cmdState.undefLed,
       status: response[0],
     });
+  } else if (cmd === CMD_CPU_TO_IO.BEEP) {
+    const beep = cmdState.lastBeep;
+    log.info("BEEP (19h)", {
+      frequencyHz: beep?.frequencyHz ?? 0,
+      durationMs: beep?.durationMs ?? 0,
+      status: response[0],
+    });
+    if (response[0] === 0 && beep) {
+      emitBeep(beep.frequencyHz, beep.durationMs);
+    }
   } else if (
     cmd === CMD_CPU_TO_IO.LCD_CTRL ||
     cmd === CMD_CPU_TO_IO.LCD_TEXT
@@ -275,6 +298,10 @@ link.setCpuToIoFrameHandler((frame) => {
     log.info("LCD (17h/18h)", {
       cmd: `0x${cmd.toString(16)}`,
       status: response[0],
+      kind: cmd === CMD_CPU_TO_IO.LCD_CTRL ? frame[1] : undefined,
+      row: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[1] : undefined,
+      col: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[2] : undefined,
+      len: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[3] : undefined,
       line0: lcd.lines[0],
       line1: lcd.lines[1],
     });
@@ -387,6 +414,8 @@ function slice(): void {
   }
 
   const status = execStatus();
+  const halted = status !== "running";
+  consolePanel.syncCpuHalted(halted);
   if (status !== lastExecStatus) {
     log.info("CPU 実行状態が変化", {
       from: lastExecStatus ?? "-",
@@ -468,26 +497,36 @@ async function stopDebugHost(): Promise<void> {
 }
 
 /**
- * Intel HEX を展開し、使用範囲だけを DMA で CPU ボードの RAM へ書く。
+ * Intel HEX を展開し、記録のある連続区間だけ DMA で CPU RAM へ書く。
  * @param hex Intel HEX テキスト
- * @returns 書き込んだバイト数（データが無ければ 0）
+ * @returns 書き込んだバイト数など（データが無ければ 0）
  */
-async function loadHex(hex: string): Promise<{ bytesWritten: number }> {
-  const buf = new Uint8Array(MEM_BYTES);
-  const result = loadIntelHex(hex, buf);
-  if (result.bytesWritten <= 0 || !Number.isFinite(result.minAddr)) {
+async function loadHex(hex: string): Promise<{
+  bytesWritten: number;
+  minAddr: number;
+  maxAddr: number;
+  chunks: number;
+}> {
+  log.info("Intel HEX DMA 開始", { hexLength: hex.length });
+  const plan = await dmaLoadIntelHex(hex, (byteAddr, data) =>
+    link.writeBytes(byteAddr, data),
+  );
+  if (plan.bytesWritten <= 0) {
     log.warn("Intel HEX に書き込むデータが無い");
-    return { bytesWritten: 0 };
+    return { bytesWritten: 0, minAddr: 0, maxAddr: -1, chunks: 0 };
   }
-  const slice = buf.subarray(result.minAddr, result.maxAddr + 1);
-  log.info("DMA 書き込み開始", {
-    minAddr: result.minAddr,
-    maxAddr: result.maxAddr,
-    bytes: slice.length,
+  log.info("Intel HEX DMA 完了", {
+    bytesWritten: plan.bytesWritten,
+    minAddr: plan.minAddr,
+    maxAddr: plan.maxAddr,
+    chunks: plan.chunks.length,
   });
-  await link.writeBytes(result.minAddr, slice);
-  log.info("DMA 書き込み完了", { bytesWritten: result.bytesWritten });
-  return { bytesWritten: result.bytesWritten };
+  return {
+    bytesWritten: plan.bytesWritten,
+    minAddr: plan.minAddr,
+    maxAddr: plan.maxAddr,
+    chunks: plan.chunks.length,
+  };
 }
 
 parentPort?.on(

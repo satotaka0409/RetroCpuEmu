@@ -3,11 +3,15 @@
  * CPU / IO を別 Worker で起動し、IO ボード画面を開く。
  */
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { existsSync } from "node:fs";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { EmuHost } from "./emu_host";
 import { resolveBootMonitorHexPath } from "../ioboard/io_reset";
 import type { EmuSnapshot } from "../shared/emu_types";
+import type { BeepWire } from "../shared/emu_api";
+import { playHostBeep, stopHostBeep } from "./host_beep";
 import { getLogFilePath, getLogger, initLogging } from "../log/logger";
 
 /** esbuild CJS 出力では __dirname が使える */
@@ -16,10 +20,21 @@ declare const __dirname: string;
 let mainWindow: BrowserWindow | null = null;
 let host: EmuHost | null = null;
 let unsub: (() => void) | null = null;
+let unsubBeep: (() => void) | null = null;
 
 const logDir = path.join(app.getPath("userData"), "logs");
 initLogging({ source: "main", dir: logDir });
 const log = getLogger("main");
+
+/**
+ * WSLg の Pulse ソケットを Chromium に渡す。未設定だと Web Audio が無音になる。
+ */
+function ensureWslPulseEnv(): void {
+  const sock = "/mnt/wslg/PulseServer";
+  if (process.env.PULSE_SERVER || !existsSync(sock)) return;
+  process.env.PULSE_SERVER = `unix:${sock}`;
+  log.info("WSLg Pulse を使う", { PULSE_SERVER: process.env.PULSE_SERVER });
+}
 
 /** 二重起動防止: 2 つ目は既存ウィンドウを前面にして終了 */
 const gotLock = app.requestSingleInstanceLock();
@@ -71,9 +86,108 @@ function broadcastSnapshot(snap: EmuSnapshot): void {
   mainWindow.webContents.send("emu:snapshot", snap);
 }
 
+/**
+ * 19h をスピーカーへ出す（WSL は Windows Beep、それ以外はレンダラの Web Audio）。
+ * @param beep 周波数 Hz と長さ ms
+ */
+function broadcastBeep(beep: BeepWire): void {
+  log.info("BEEP を再生する", {
+    frequencyHz: beep.frequencyHz,
+    durationMs: beep.durationMs,
+  });
+  playHostBeep(beep);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("emu:beep", beep);
+}
+
+/**
+ * アプリケーションメニュー（Intel HEX 読込）。
+ */
+function installMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Open Intel HEX…",
+          accelerator: "CmdOrCtrl+O",
+          click: () => {
+            void openIntelHexFile();
+          },
+        },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/**
+ * ファイルダイアログで IHX を選び、DMA で 2階 RAM へ書く。
+ */
+async function openIntelHexFile(): Promise<void> {
+  if (!host) return;
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  const opts: Electron.OpenDialogOptions = {
+    title: "Open Intel HEX",
+    properties: ["openFile"],
+    filters: [
+      { name: "Intel HEX", extensions: ["ihx", "hex", "ihex"] },
+      { name: "All files", extensions: ["*"] },
+    ],
+  };
+  const picked = win
+    ? await dialog.showOpenDialog(win, opts)
+    : await dialog.showOpenDialog(opts);
+  if (picked.canceled || !picked.filePaths[0]) return;
+  const filePath = picked.filePaths[0];
+  try {
+    const hex = await fs.readFile(filePath, "utf8");
+    const r = await host.loadIntelHex(hex);
+    log.info("Intel HEX を読み込んだ", { filePath, ...r });
+    const range =
+      r.bytesWritten <= 0
+        ? "No data records in this file."
+        : `DMA wrote ${r.bytesWritten} bytes (${r.chunks} span(s), ` +
+          `${r.minAddr.toString(16).toUpperCase()}h–${r.maxAddr.toString(16).toUpperCase()}h).`;
+    await showHexDialog({
+      type: r.bytesWritten > 0 ? "info" : "warning",
+      title: "Intel HEX",
+      message: path.basename(filePath),
+      detail: range,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    log.error("Intel HEX 読込失敗", { filePath, err: msg });
+    await showHexDialog({
+      type: "error",
+      title: "Intel HEX",
+      message: "Failed to load Intel HEX",
+      detail: msg,
+    });
+  }
+}
+
+/**
+ * メッセージボックスを出す。
+ * @param box 内容
+ */
+async function showHexDialog(box: Electron.MessageBoxOptions): Promise<void> {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  if (win) await dialog.showMessageBox(win, box);
+  else await dialog.showMessageBox(box);
+}
+
 if (gotLock) {
+  ensureWslPulseEnv();
+  app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
   app.whenReady().then(async () => {
     log.info("IO ボードを起動する", { logFile: getLogFilePath() });
+    installMenu();
 
     let bootMonitorHex: string | undefined;
     try {
@@ -96,6 +210,7 @@ if (gotLock) {
       bootMonitorHex,
     });
     unsub = host.subscribe(broadcastSnapshot);
+    unsubBeep = host.subscribeBeep(broadcastBeep);
     ipcMain.handle("emu:getSnapshot", () => host!.getSnapshot());
     ipcMain.on("emu:keyHex", (_e, digit: string) => host?.keyHex(digit));
     ipcMain.on("emu:keyFn", (_e, fn: string) => host?.keyFn(fn));
@@ -116,6 +231,9 @@ if (gotLock) {
     log.info("ウィンドウが全て閉じたので停止する");
     unsub?.();
     unsub = null;
+    unsubBeep?.();
+    unsubBeep = null;
+    stopHostBeep();
     void host?.stop();
     host = null;
     if (process.platform !== "darwin") app.quit();

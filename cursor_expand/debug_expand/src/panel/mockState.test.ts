@@ -77,7 +77,6 @@ describe("getDebugHtml", () => {
     for (const id of [
       "regTabs",
       "disasm",
-      "source",
       "bpSlots",
       "breakInfo",
       "memDump",

@@ -161,6 +161,17 @@ describe("IoConsole", () => {
     expect((getLedDisplay().bulletLed8_F >> 6) & 1).toBe(1); // E=ADDR
   });
 
+  it("H 命令相当の停止は RUN を消し HALT を点ける", async () => {
+    const c = new IoConsole(mockBridge());
+    await c.onFunction("F5");
+    expect((getLedDisplay().bulletLed8_F >> 4) & 1).toBe(1); // C=RUN
+    expect((getLedDisplay().bulletLed8_F >> 5) & 1).toBe(0);
+    c.syncCpuHalted(true);
+    expect(c.getState().halted).toBe(true);
+    expect((getLedDisplay().bulletLed8_F >> 4) & 1).toBe(0);
+    expect((getLedDisplay().bulletLed8_F >> 5) & 1).toBe(1); // D=HALT
+  });
+
   it("H/ST はパネル状態でトグル（isHalted が常に true でも HALT できる）", async () => {
     const bridge = mockBridge();
     bridge.isHalted = () => true;

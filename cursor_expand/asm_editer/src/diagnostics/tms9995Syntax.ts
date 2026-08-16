@@ -1,6 +1,6 @@
 /**
  * TMS9995 オペランド診断（sdas 構文）。
- * 根拠: retrocpu_asm encoder_tms9995 / TMS9995_instruction.mdc
+ * 根拠: retrocpu_asm tms9995/tms9995_encode / TMS9995_instruction.mdc
  */
 
 import {

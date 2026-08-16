@@ -4,7 +4,11 @@
  */
 
 export { createMn1613CodeTest, Mn1613CodeTest, readWord, writeWord, readBytes, writeBytes } from "./mn1613_harness";
-export { loadIntelHex, wordsToIntelHex } from "./intel_hex";
+export {
+  loadIntelHex,
+  wordsToIntelHex,
+  intelHexToDmaPlan,
+} from "./intel_hex";
 export {
   parseCdb,
   requireSymbol,

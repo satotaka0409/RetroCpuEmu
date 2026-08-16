@@ -5,7 +5,8 @@
 ; 線上 送信 5B: 17h, kind, argA, argB, argC → 受信 1B: status
 ; モード制約なし（モニター/フリー共通）。
 ;
-; 引数は第1=R0、第2=R1、第3=R2。argC は R3 を使う。
+; 引数は第1=R0、第2=R1、第3=R2（R3 は引数に使わない）。
+; SetCursor の行・列は R2 にパック（Bit8-9=行、Bit0-7=列）。
 ; R3-R4 は非破壊（R0-R2 は破壊可／戻り可）なので先頭で PUSH し、復帰前に逆順で POP する。
 ; 送信フレームはスタック上に確保する（_WORK は使わない）。
 ; 応答は REQ_1 ポーリングで受け取る。
@@ -32,8 +33,8 @@ BIOS_LCD1_FRAME_LEN	.equ	5
 ; LCD制御（17h）
 ; @param R0 - 種別（0:Clear 1:Home 2:DisplayCtrl 3:SetCursor）
 ; @param R1 - 引数A（DisplayCtrl: Bit0=DisplayOn Bit1=CursorOn Bit2=Blink）
-; @param R2 - 引数B（SetCursor: 行 0/1）
-; @param R3 - 引数C（SetCursor: 列 0-15）
+; @param R2 Bit8-9 - 引数B（SetCursor: 行 0/1）
+; @param R2 Bit0-7 - 引数C（SetCursor: 列 0-15）
 ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG / HSHK_NG_OTHER）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
@@ -43,19 +44,20 @@ g_bios_lcd_control:
 
 	si	SP, #BIOS_LCD1_FRAME_LEN
 
-	; X0=R3 なので、退避した argC を SP+7 から拾ってからフレームを組む
 	mv	X0, SP
-	l	R4, 7(X0)
-	andi	R4, #0x00ff
-	st	R4, 5(X0)
 	mvwi	R4, #HSHK_CMD_LCD_CTRL
 	st	R4, 1(X0)
 	andi	R0, #0x00ff
 	st	R0, 2(X0)
 	andi	R1, #0x00ff
 	st	R1, 3(X0)
+	; 行 = R2 Bit8-9
+	bswp	R4, R2
+	andi	R4, #0x0003
+	st	R4, 4(X0)
+	; 列 = R2 Bit0-7
 	andi	R2, #0x00ff
-	st	R2, 4(X0)
+	st	R2, 5(X0)
 
 	bald	g_hshk_initiate_send
 	mv	R1, R0

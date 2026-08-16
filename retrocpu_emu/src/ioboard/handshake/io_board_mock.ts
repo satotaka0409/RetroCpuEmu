@@ -26,6 +26,7 @@ import {
   CMD_IO_TO_CPU,
   createHandshakeBus,
   DEFAULT_TIMEOUT_MS,
+  HSHK_REQ1_NO_IRQ,
   intCauseForTimer,
   MODE,
   RESPONSE_CODE,
@@ -282,7 +283,12 @@ export function wireHshkReq1ToIrq2(bus: CpuIoSignals): () => void {
       const next: 0 | 1 = v ? 1 : 0;
       if (next === req1) return;
       req1 = next;
-      if (next === 1) {
+      const noIrq = Boolean(
+        (this as CpuIoSignals & { [HSHK_REQ1_NO_IRQ]?: boolean })[
+          HSHK_REQ1_NO_IRQ
+        ],
+      );
+      if (next === 1 && !noIrq) {
         setPins({ IRQ2: true });
         triggerInterrupt(2);
       } else {
@@ -483,7 +489,7 @@ export class IoBoardHandshakeMock {
         response: response.slice(),
       });
       if (response.length > 0) {
-        await this.io.send(response);
+        await this.io.send(response, { raiseIrq: false });
       }
       return response;
     });

@@ -13,6 +13,78 @@ export type IntelHexLoadResult = {
   maxAddr: number;
 };
 
+/** DMA 1 回分の連続バイト列（穴は別チャンク） */
+export type IntelHexDmaChunk = {
+  /** 開始バイトアドレス */
+  byteAddr: number;
+  /** 連続データ */
+  data: Uint8Array;
+};
+
+/** Intel HEX を DMA 用チャンクにしたもの */
+export type IntelHexDmaPlan = {
+  /** 連続区間（アドレス昇順） */
+  chunks: IntelHexDmaChunk[];
+  /** データレコードのバイト数 */
+  bytesWritten: number;
+  /** 最小バイトアドレス。データ無しは 0 */
+  minAddr: number;
+  /** 最大バイトアドレス。データ無しは -1 */
+  maxAddr: number;
+};
+
+/**
+ * Intel HEX のデータレコードを順に渡す。EOF 必須。
+ * @param hexText HEX 全文
+ * @param onData 絶対バイトアドレスとペイロード
+ */
+function walkIntelHexData(
+  hexText: string,
+  onData: (abs: number, data: number[]) => void,
+): void {
+  let base = 0;
+  let sawEof = false;
+  const lines = hexText.replace(/\r\n/g, "\n").split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li]!.trim();
+    if (!raw) continue;
+    if (!raw.startsWith(":")) {
+      throw new Error(`Intel HEX line ${li + 1}: missing ':'`);
+    }
+    const hex = raw.slice(1);
+    if (hex.length < 10 || hex.length % 2 !== 0) {
+      throw new Error(`Intel HEX line ${li + 1}: bad length`);
+    }
+    const bytes: number[] = [];
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes.push(parseInt(hex.slice(i, i + 2), 16));
+    }
+    if (!checksumOk(bytes)) {
+      throw new Error(`Intel HEX line ${li + 1}: checksum error`);
+    }
+    const count = bytes[0]!;
+    const addr = (bytes[1]! << 8) | bytes[2]!;
+    const type = bytes[3]!;
+    const data = bytes.slice(4, 4 + count);
+
+    if (type === 0x00) {
+      onData((base + addr) >>> 0, data);
+    } else if (type === 0x01) {
+      sawEof = true;
+      break;
+    } else if (type === 0x02) {
+      if (data.length !== 2) throw new Error(`Intel HEX line ${li + 1}: type 02`);
+      base = ((data[0]! << 8) | data[1]!) << 4;
+    } else if (type === 0x04) {
+      if (data.length !== 2) throw new Error(`Intel HEX line ${li + 1}: type 04`);
+      base = ((data[0]! << 8) | data[1]!) << 16;
+    }
+  }
+  if (!sawEof) {
+    throw new Error("Intel HEX: missing EOF record (type 01)");
+  }
+}
+
 /**
  * レコードのチェックサムを検証する。
  * @param bytes チェックサムを含むレコード全バイト
@@ -50,65 +122,58 @@ export function loadIntelHex(
   let bytesWritten = 0;
   let minAddr = Number.POSITIVE_INFINITY;
   let maxAddr = -1;
-  let base = 0; // extended linear / segment（簡易）
-  let sawEof = false;
-
-  const lines = hexText.replace(/\r\n/g, "\n").split("\n");
-  for (let li = 0; li < lines.length; li++) {
-    const raw = lines[li]!.trim();
-    if (!raw) continue;
-    if (!raw.startsWith(":")) {
-      throw new Error(`Intel HEX line ${li + 1}: missing ':'`);
+  walkIntelHexData(hexText, (abs, data) => {
+    for (let i = 0; i < data.length; i++) {
+      const a = abs + i;
+      writeByte(a, data[i]!);
+      bytesWritten++;
+      if (a < minAddr) minAddr = a;
+      if (a > maxAddr) maxAddr = a;
     }
-    const hex = raw.slice(1);
-    if (hex.length < 10 || hex.length % 2 !== 0) {
-      throw new Error(`Intel HEX line ${li + 1}: bad length`);
-    }
-    const bytes: number[] = [];
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes.push(parseInt(hex.slice(i, i + 2), 16));
-    }
-    if (!checksumOk(bytes)) {
-      throw new Error(`Intel HEX line ${li + 1}: checksum error`);
-    }
-    const count = bytes[0]!;
-    const addr = (bytes[1]! << 8) | bytes[2]!;
-    const type = bytes[3]!;
-    const data = bytes.slice(4, 4 + count);
-
-    if (type === 0x00) {
-      const abs = (base + addr) >>> 0;
-      for (let i = 0; i < data.length; i++) {
-        const a = abs + i;
-        writeByte(a, data[i]!);
-        bytesWritten++;
-        if (a < minAddr) minAddr = a;
-        if (a > maxAddr) maxAddr = a;
-      }
-    } else if (type === 0x01) {
-      sawEof = true;
-      break;
-    } else if (type === 0x02) {
-      // extended segment address (addr * 16)
-      if (data.length !== 2) throw new Error(`Intel HEX line ${li + 1}: type 02`);
-      base = ((data[0]! << 8) | data[1]!) << 4;
-    } else if (type === 0x04) {
-      // extended linear address
-      if (data.length !== 2) throw new Error(`Intel HEX line ${li + 1}: type 04`);
-      base = ((data[0]! << 8) | data[1]!) << 16;
-    } else {
-      // 03/05 等は無視（エントリポイント）
-    }
-  }
-
-  if (!sawEof) {
-    throw new Error("Intel HEX: missing EOF record (type 01)");
-  }
+  });
   if (bytesWritten === 0) {
     minAddr = 0;
     maxAddr = -1;
   }
   return { bytesWritten, minAddr, maxAddr };
+}
+
+/**
+ * Intel HEX を DMA 用の連続チャンクにする（レコード間の穴は 0 埋めしない）。
+ * 根拠: ioboard.mdc（HEX ロードは DMA。未記録番地は触らない）
+ * @param hexText HEX 全文
+ * @returns チャンクと集計
+ */
+export function intelHexToDmaPlan(hexText: string): IntelHexDmaPlan {
+  const raw: { byteAddr: number; bytes: number[] }[] = [];
+  walkIntelHexData(hexText, (abs, data) => {
+    if (data.length === 0) return;
+    const last = raw[raw.length - 1];
+    if (last && last.byteAddr + last.bytes.length === abs) {
+      last.bytes.push(...data);
+      return;
+    }
+    raw.push({ byteAddr: abs, bytes: data.slice() });
+  });
+  const chunks: IntelHexDmaChunk[] = raw.map((c) => ({
+    byteAddr: c.byteAddr,
+    data: Uint8Array.from(c.bytes),
+  }));
+  let bytesWritten = 0;
+  let minAddr = Number.POSITIVE_INFINITY;
+  let maxAddr = -1;
+  for (const c of chunks) {
+    bytesWritten += c.data.length;
+    if (c.data.length === 0) continue;
+    if (c.byteAddr < minAddr) minAddr = c.byteAddr;
+    const hi = c.byteAddr + c.data.length - 1;
+    if (hi > maxAddr) maxAddr = hi;
+  }
+  if (bytesWritten === 0) {
+    minAddr = 0;
+    maxAddr = -1;
+  }
+  return { chunks, bytesWritten, minAddr, maxAddr };
 }
 
 /**

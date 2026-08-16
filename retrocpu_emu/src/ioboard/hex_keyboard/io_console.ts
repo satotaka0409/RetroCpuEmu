@@ -130,6 +130,17 @@ export class IoConsole {
   }
 
   /**
+   * CPU 実行状態を砲弾 C/D に反映する（ioboard.mdc: RUN と HALT は排他）。
+   * H 命令やブレークで止まったときはパネルの F5/F6 を待たずに HALT を点ける。
+   * @param halted true=停止（HALT 点灯） / false=実行中（RUN 点灯）
+   */
+  syncCpuHalted(halted: boolean): void {
+    if (this.halted === halted) return;
+    this.halted = halted;
+    this.refreshLeds();
+  }
+
+  /**
    * ハンドシェイク 13h で UNDEF LED（砲弾 B）を明示設定する。
    * sticky: 消灯指示または RST まで点灯を維持する。
    * @param on true=点灯 / false=消灯
@@ -231,7 +242,7 @@ export class IoConsole {
         this.halted = false;
         this.refreshLeds();
         break;
-      case "F6": // H/ST（パネル状態でトグル。isHalted は即時反映されない／H 即停止でも RUN 表示と食い違う）
+      case "F6": // H/ST（パネル状態でトグル。H 命令停止は syncCpuHalted が砲弾を合わせる）
         if (this.halted) {
           await this.cpu.setHalt(false);
           this.halted = false;

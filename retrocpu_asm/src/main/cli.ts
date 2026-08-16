@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { assemble } from "./assembler";
 import { parseCpuType, resolveCpuType } from "./cpuType";
 import { writeLst } from "./lstWriter";
+import { stripLineComment } from "./parser";
 import { writeRel } from "./relWriter";
 import type { AssemblyResult, CpuType } from "./types";
 
@@ -21,20 +22,6 @@ interface CliOptions {
 
 const USAGE =
   "Usage: retrocpu_asm [--cpu|-m mn1610|mn1613|tms9995] <input.asm> [-o out.rel] [--lst out.lst] [--module NAME]";
-
-/**
- * 行末のセミコロン／スラッシュコメントを除去する。
- * @param line - 入力1行
- * @return コメント除去後の文字列
- */
-function stripLineComment(line: string): string {
-  const semi: number = line.indexOf(";");
-  const slash: number = line.indexOf("//");
-  let cut: number = line.length;
-  if (semi >= 0) cut = Math.min(cut, semi);
-  if (slash >= 0) cut = Math.min(cut, slash);
-  return line.slice(0, cut);
-}
 
 /**
  * INCLUDEディレクティブのオペランドからファイルパスを取り出す。

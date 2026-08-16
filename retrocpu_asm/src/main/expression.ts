@@ -179,6 +179,61 @@ export function matchExternalWordDiff(
 }
 
 /**
+ * `'A'` 形式の文字リテラルを ASCII コード（10進）に置き換える。
+ * 根拠: asm_rules.mdc（文字 `'A'` は 0x41）。
+ * @param expr - 式文字列
+ * @returns 置換後の式
+ * @throws 閉じ引用符が無い、または 1 文字でない
+ */
+function substCharLiterals(expr: string): string {
+  let out = "";
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i]!;
+    if (ch !== "'") {
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (i + 2 >= expr.length || expr[i + 2] !== "'") {
+      throw new Error(`Invalid character literal: ${expr}`);
+    }
+    const code = expr.charCodeAt(i + 1);
+    if (code > 255) {
+      throw new Error(`Character literal out of range: ${expr}`);
+    }
+    out += String(code);
+    i += 3;
+  }
+  return out;
+}
+
+/**
+ * `.dw` / `.word` の二重引用符文字列なら、1 文字 1 ワードの ASCII コード列を返す。
+ * `"HELLO"` → `[0x48, 0x45, 0x4C, 0x4C, 0x4F]`。該当しなければ null。
+ * @param arg - オペランド（前後空白可）
+ * @returns ASCII コード列。文字列でなければ null
+ * @throws 引用符の入れ子、または 8bit を超える文字
+ */
+export function asciiCodesFromStringArg(arg: string): number[] | null {
+  const t = arg.trim();
+  if (t.length < 2 || t[0] !== '"' || t[t.length - 1] !== '"') return null;
+  const body = t.slice(1, -1);
+  if (body.includes('"')) {
+    throw new Error(`Invalid string literal: ${arg}`);
+  }
+  const codes: number[] = [];
+  for (const ch of body) {
+    const code = ch.charCodeAt(0);
+    if (code > 255) {
+      throw new Error(`String character out of range: ${arg}`);
+    }
+    codes.push(code);
+  }
+  return codes;
+}
+
+/**
  * 数値リテラルトークンを解析して数値を返す。
  * 対応形式:
  *   16進： `0x`/`0X` prefix, `H`/`h` suffix （例: `0xFF`, `1AH`, `0abH`）
@@ -217,6 +272,7 @@ function parseNumber(token: string): number | undefined {
  *   `|`（ビットOR） `^`（ビットXOR） `&`（ビットAND）
  *   `<<` `>>`（シフト） `+` `-`（加減算） `*` `/` `%`（乗除剰余）
  *   単項 `+` `-` `~`、括弧 `()`
+ * 文字リテラル `'A'` は ASCII（0x41）。根拠: asm_rules.mdc。
  * @param expr - 式文字列
  * @param symbols - シンボルテーブル
  * @param allowUndefined - 未定義シンボル許可フラグ
@@ -227,7 +283,8 @@ export function evalExpr(
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  const matched: RegExpMatchArray | null = expr.match(
+  const rewritten = substCharLiterals(expr);
+  const matched: RegExpMatchArray | null = rewritten.match(
     /[A-Za-z_.$][A-Za-z0-9_.$]*|>[0-9A-Fa-f]+|0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|[0-9A-Fa-f]+[Hh]|[0-7]+[OoQq]|[01]+[Bb]|[0-9]+[Dd]?|<<|>>|[()+\-*/%&|^~]/g,
   );
   if (!matched || matched.length === 0) {

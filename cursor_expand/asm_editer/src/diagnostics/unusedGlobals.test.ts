@@ -66,6 +66,12 @@ describe("collectOperandRefCounts", () => {
     assert.equal(c.get("FOO"), 1);
   });
 
+  test("BALD のタブ区切りオペランドも参照に数える", () => {
+    const src = "\tbald\tg_hshk_finalize_send\n";
+    const c = collectOperandRefCounts(src, arch);
+    assert.equal(c.get("G_HSHK_FINALIZE_SEND"), 1);
+  });
+
   test(".word のラベルは参照に数える", () => {
     const src = "        .word g_main\n";
     const c = collectOperandRefCounts(src, arch);

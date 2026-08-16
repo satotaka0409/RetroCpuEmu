@@ -59,6 +59,17 @@ export class Mn1613LabelTable {
   }
 
   /**
+   * グローバル（CDB `G`）ラベルだけ返す。
+   * @param wordAddr ワードアドレス
+   * @returns グローバルラベル名。無ければ undefined
+   */
+  lookupGlobal(wordAddr: number): string | undefined {
+    const e = this.byAddr.get(wordAddr & 0xffff);
+    if (!e || e.scope !== "G") return undefined;
+    return e.name;
+  }
+
+  /**
    * 登録件数。
    * @returns ユニークなアドレス数
    */

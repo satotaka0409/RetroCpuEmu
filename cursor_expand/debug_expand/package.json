@@ -65,7 +65,7 @@
     "compile": "tsc -p tsconfig.build.json",
     "watch": "tsc -watch -p tsconfig.build.json",
     "lint": "tsc -p ./ --noEmit",
-    "test": "node --require tsx/cjs --test src/**/*.test.ts",
+    "test": "node --require tsx/cjs --test src/load/*.test.ts src/panel/*.test.ts src/net/*.test.ts src/disasm/mn1613/*.test.ts",
     "package": "vsce package"
   },
   "devDependencies": {

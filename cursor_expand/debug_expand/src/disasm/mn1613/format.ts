@@ -57,7 +57,7 @@ function addrText(
   labels: Mn1613LabelTable | undefined,
   width: 8 | 16,
 ): string {
-  const name = labels?.lookup(wordAddr & 0xffff);
+  const name = labels?.lookupGlobal(wordAddr & 0xffff);
   if (name) return name;
   return width === 8 ? hex8(wordAddr) : hex16(wordAddr);
 }
@@ -75,7 +75,7 @@ function immText(
   labels: Mn1613LabelTable | undefined,
 ): string {
   if (bits === 16) {
-    const name = labels?.lookup(v & 0xffff);
+    const name = labels?.lookupGlobal(v & 0xffff);
     if (name) return `#${name}`;
     return `#${hex16(v)}`;
   }

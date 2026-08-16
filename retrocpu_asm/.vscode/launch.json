@@ -32,8 +32,8 @@
       "program": "${workspaceFolder}/src/tests/assembler.test.ts",
       "args": [
         "${workspaceFolder}/src/tests/assembler.error.test.ts",
-        "${workspaceFolder}/src/tests/mn1610_instructions.test.ts",
-        "${workspaceFolder}/src/tests/mn1613_instructions.test.ts"
+        "${workspaceFolder}/src/tests/mn1613/mn1610_instructions.test.ts",
+        "${workspaceFolder}/src/tests/mn1613/mn1613_instructions.test.ts"
       ],
       "cwd": "${workspaceFolder}",
       "sourceMaps": true,

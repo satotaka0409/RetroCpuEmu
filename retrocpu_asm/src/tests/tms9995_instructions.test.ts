@@ -9,7 +9,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { assemble } from "../main/assembler";
 import { writeRel } from "../main/relWriter";
-import { TMS9995_OPS } from "../main/encoder_tms9995";
+import { TMS9995_OPS } from "../main/tms9995/tms9995_encode";
 
 function asmWords(src: string): number[] {
   return assemble(`        .org 0\n${src}\n`, "tms9995").words.map(

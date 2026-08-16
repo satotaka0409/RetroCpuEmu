@@ -25,6 +25,10 @@
       "path": "./retrocpu_asm",
     },
     {
+      "name": "tutorial",
+      "path": "./tutrial",
+    },
+    {
       "name": "cursor rules",
       "path": "./.cursor/rules",
     },

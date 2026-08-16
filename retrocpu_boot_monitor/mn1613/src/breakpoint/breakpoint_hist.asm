@@ -12,6 +12,7 @@
 
 	.area	_CODE		(REL,CON)
 
+	; @unwarning
 	.global g_bp_hist_append
 	.global g_hshk_mem_map
 	.global g_hshk_get_time

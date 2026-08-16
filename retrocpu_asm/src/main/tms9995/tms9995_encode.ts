@@ -6,8 +6,8 @@
  * 構文は sdas 風（TI の `*R` / `@addr` / `>xxxx` は使わない）。
  */
 
-import { evalExpr } from "./expression";
-import type { ParsedLine, SymbolTable } from "./types";
+import { evalExpr } from "../expression";
+import type { ParsedLine, SymbolTable } from "../types";
 
 /** 汎用アドレス（Ts/Td） */
 export interface TmsGeneralAddr {

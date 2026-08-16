@@ -14,10 +14,20 @@ import {
   HSHK_IO_MAX_BYTES,
   INT_CAUSE_CODE,
   RESPONSE_CODE,
+  setHshkReq1,
   u32be,
   waitEna0Check,
   waitCondition,
 } from "./handshake_type";
+
+/** IO→CPU 送信の開始オプション */
+export type HandshakeSendOptions = {
+  /**
+   * REQ_1 でレベル2割り込みを起こすか。既定 true。
+   * CPU→IO の status 応答は false（BIOS が REQ_1 をポーリングする）。
+   */
+  raiseIrq?: boolean;
+};
 
 export class IoControlHandshake {
   /**
@@ -34,9 +44,10 @@ export class IoControlHandshake {
   /**
    * IO→CPU 方向へ 1 フレーム送る（開始 → データ転送 → 完了）。
    * @param data 送信バイト列
+   * @param options raiseIrq=false で INT2 なし（CPU→IO 応答）
    */
-  async send(data: Uint8Array): Promise<void> {
-    await this.initiateSend();
+  async send(data: Uint8Array, options?: HandshakeSendOptions): Promise<void> {
+    await this.initiateSend(options);
     await this.transferBytesToCpu(data);
     await this.finalizeSend();
   }
@@ -293,13 +304,15 @@ export class IoControlHandshake {
   /**
    * IO→CPU 送信を開始する。
    * ENA=0 を確認し、割り込み要因を HANDSHAKE にして REQ_1 で CPU へ依頼する。
+   * @param options raiseIrq=false なら REQ_1 のみ（INT2 なし）
    */
-  private async initiateSend(): Promise<void> {
+  private async initiateSend(options?: HandshakeSendOptions): Promise<void> {
+    const raiseIrq = options?.raiseIrq !== false;
     await waitEna0Check(() => this.bus.HSHK_ENA === 0);
     await this.wait(() => this.bus.INTERRUPT_BUSY === 0);
     this.bus.HSHK_DENA = 0;
     this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
-    this.bus.HSHK_REQ_1 = 1;
+    setHshkReq1(this.bus, 1, raiseIrq);
     await this.wait(() => this.bus.HSHK_ENA === 1);
     this.bus.HSHK_REQ_1 = 0;
   }

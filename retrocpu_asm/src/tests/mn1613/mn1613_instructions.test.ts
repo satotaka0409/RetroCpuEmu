@@ -5,12 +5,12 @@
  * MN1610 互換命令は mn1610_instructions.test.ts でカバー済み。
  *
  * 実行方法:
- *   node --require tsx/cjs --test src/tests/mn1613_instructions.test.ts
+ *   node --require tsx/cjs --test src/tests/mn1613/mn1613_instructions.test.ts
  */
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { assemble } from "../main/assembler";
+import { assemble } from "../../main/assembler";
 
 // ─── ヘルパー ─────────────────────────────────────────────────────────────────
 

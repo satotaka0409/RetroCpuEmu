@@ -7,6 +7,33 @@
 
 import type { CpuIoSignals } from "../../cpuboard/mn1613/mn1613ioport";
 
+/**
+ * REQ_1 を立てても INT2 を起こさない印（CPU→IO の応答）。
+ * BIOS は `g_hshk_wait_req1_1` でポーリングする。INT2 を上げると
+ * ハンドシェイク IRQ が status バイトをコマンドとして奪い、LCD 18h などが進まない。
+ */
+export const HSHK_REQ1_NO_IRQ = Symbol("HSHK_REQ1_NO_IRQ");
+
+/**
+ * HSHK_REQ_1 をセットする。
+ * @param bus ハンドシェイクバス
+ * @param value 0 または 1
+ * @param raiseIrq false なら INT2 を起こさない（CPU→IO 応答）
+ */
+export function setHshkReq1(
+  bus: CpuIoSignals,
+  value: 0 | 1,
+  raiseIrq = true,
+): void {
+  const ext = bus as CpuIoSignals & { [HSHK_REQ1_NO_IRQ]?: boolean };
+  ext[HSHK_REQ1_NO_IRQ] = !raiseIrq;
+  try {
+    bus.HSHK_REQ_1 = value;
+  } finally {
+    ext[HSHK_REQ1_NO_IRQ] = false;
+  }
+}
+
 /** CpuIoSignals の初期値を生成する */
 export function createHandshakeBus(): CpuIoSignals {
   return {

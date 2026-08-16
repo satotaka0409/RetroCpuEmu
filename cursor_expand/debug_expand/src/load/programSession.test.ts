@@ -28,16 +28,62 @@ describe("loadIntelHex + ProgramSession", () => {
     assert.equal(s.entryWord, 0x108);
   });
 
-  test("CDB の main があればエントリ優先", () => {
+  test("g_main が無ければ HEX 最小アドレス（main は使わない）", () => {
     const hex = wordsToIntelHex(0x0108, [0x2000]);
     const cdb = "L:G$main$0$0:0220\n"; // byte 0x220 = word 0x110
     const s = new ProgramSession();
     s.loadHex(hex, "t.ihx");
-    // put something at main too so mem is valid
     s.memory[0x220] = 0x20;
     s.memory[0x221] = 0x00;
     s.loadCdb(cdb, "t.cdb");
+    assert.equal(s.entryWord, 0x108);
+  });
+
+  test("g_main があれば HEX 最小よりそのアドレスを使う", () => {
+    const hex = wordsToIntelHex(0x0100, [0x2000, 0x2000, 0x2000, 0x2000]);
+    const s = new ProgramSession();
+    s.loadHex(hex, "t.ihx");
+    s.memory[0x220] = 0x20;
+    s.memory[0x221] = 0x00;
+    s.loadCdb("L:G$g_main$0$0:0220\n", "t.cdb");
     assert.equal(s.entryWord, 0x110);
+    const st = s.toViewState();
+    assert.equal(st.disasm[0]!.addr, "00110");
+    assert.equal(st.disasm[0]!.label, "g_main");
+  });
+
+  test("グローバルラベルがある番地は label を付ける（F は付けない）", () => {
+    const hex = wordsToIntelHex(0x0108, [0x2000, 0x2000]);
+    const s = new ProgramSession();
+    s.loadHex(hex, "t.ihx");
+    s.loadCdb(
+      "L:G$g_main$0$0:0210\nL:F$l_skip$0$0:0212\n",
+      "t.cdb",
+    );
+    const lines = s.buildDisasm(0x108, 4);
+    assert.equal(lines[0]!.label, "g_main");
+    assert.equal(lines[0]!.addr, "00108");
+    assert.equal(lines[0]!.text, "H");
+    assert.equal(lines[1]!.addr, "00109");
+    assert.equal(lines[1]!.label, undefined);
+  });
+
+  test("buildDisasm は endWord まで窓全体を出す", () => {
+    const hex = wordsToIntelHex(0x0108, [0x2000, 0x2000, 0x2000, 0x2000]);
+    const s = new ProgramSession();
+    s.loadHex(hex, "t.ihx");
+    const lines = s.buildDisasm(0x108, 100, 0x10b, 0x109);
+    assert.equal(lines.length, 4);
+    assert.equal(lines[0]!.addr, "00108");
+    assert.equal(lines[3]!.addr, "0010B");
+    assert.equal(lines[1]!.current, true);
+    assert.equal(lines[0]!.current, false);
+  });
+
+  test("patchBytes は 13h 窓を重ね書きする", () => {
+    const s = new ProgramSession();
+    s.patchBytes(0x0108 * 2, Uint8Array.from([0x20, 0x00]));
+    assert.equal(s.readWord(0x108), 0x2000);
   });
 
   test("toViewState は逆アセンブル行を出す", () => {
@@ -47,7 +93,7 @@ describe("loadIntelHex + ProgramSession", () => {
     const st = s.toViewState();
     assert.ok(st.disasm.length >= 1);
     assert.match(st.disasm[0]!.text, /^H\b/);
-    assert.equal(st.disasm[0]!.addr, "0108");
+    assert.equal(st.disasm[0]!.addr, "00108");
     assert.equal(st.current.IC, "0108");
     assert.equal(st.memDump[0]!.addr, "00000");
     assert.equal(st.memDump[0]!.words[0], "0000");

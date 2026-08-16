@@ -164,16 +164,30 @@ function sepBy1P<T, S>(item: Parser<T>, sep: Parser<S>): Parser<T[]> {
 
 /**
  * 行末のセミコロン／スラッシュコメントを除去する。
+ * `'A'` / `"HELLO"` の中の `;` や `//` はコメントにしない。
  * @param line - 入力1行
  * @return コメント除去後の文字列
  */
-function stripComment(line: string): string {
-  const semi: number = line.indexOf(";");
-  const hash: number = line.indexOf("//");
-  let cut: number = line.length;
-  if (semi >= 0) cut = Math.min(cut, semi);
-  if (hash >= 0) cut = Math.min(cut, hash);
-  return line.slice(0, cut);
+export function stripLineComment(line: string): string {
+  let i = 0;
+  let quote: "'" | '"' | null = null;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      i += 1;
+      continue;
+    }
+    if (ch === ";") return line.slice(0, i);
+    if (ch === "/" && line[i + 1] === "/") return line.slice(0, i);
+    i += 1;
+  }
+  return line;
 }
 
 const ws0: Parser<string> = regexP(/^[ \t]*/, "whitespace");
@@ -194,6 +208,7 @@ function parseLabelDecl(input: string, index: number): ParseResult<string> {
 
 /**
  * コンマ区切りを考慮して1オペランドを解析する。
+ * `'A'` / `"HELLO WORLD"` の中のコンマは区切りにしない。
  * @param input - 解析対象文字列
  * @param index - 開始位置
  * @return 1つ分のオペランド文字列
@@ -205,6 +220,13 @@ function parseOperand(input: string, index: number): ParseResult<string> {
 
   while (i < input.length) {
     const ch: string = input[i];
+    if ((ch === "'" || ch === '"') && bracket === 0 && paren === 0) {
+      const q = ch;
+      i += 1;
+      while (i < input.length && input[i] !== q) i += 1;
+      if (i < input.length) i += 1;
+      continue;
+    }
     if (ch === "[") bracket += 1;
     else if (ch === "]") bracket -= 1;
     else if (ch === "(") paren += 1;
@@ -352,7 +374,7 @@ export function parseSource(text: string): {
     const lineNo: number = i + 1;
     sourceLines.push({ lineNo, text: raw });
 
-    const stripped: string = stripComment(raw);
+    const stripped: string = stripLineComment(raw);
     const body: string = stripped.trim();
     if (!body) {
       parsed.push({ lineNo, text: raw, args: [] });

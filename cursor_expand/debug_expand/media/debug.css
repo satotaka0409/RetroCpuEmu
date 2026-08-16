@@ -90,7 +90,7 @@ button.active {
     minmax(160px, 1fr)
     minmax(200px, 1.1fr);
   grid-template-areas:
-    "regs disasm source"
+    "regs disasm disasm"
     "mem  break  break";
   gap: var(--gap);
   padding: var(--gap);
@@ -102,9 +102,6 @@ button.active {
 .pane-disasm {
   grid-area: disasm;
 }
-.pane-source {
-  grid-area: source;
-}
 .pane-break {
   grid-area: break;
 }
@@ -114,7 +111,6 @@ button.active {
 
 .pane-regs,
 .pane-disasm,
-.pane-source,
 .pane-break,
 .pane-mem {
   display: flex;
@@ -162,7 +158,11 @@ button.active {
 }
 
 .line.disasm {
-  grid-template-columns: 18px 52px 90px 1fr;
+  grid-template-columns: 18px 5.6ch minmax(10ch, 16ch) 90px 1fr;
+}
+
+.line.disasm .text {
+  padding-left: 10px;
 }
 
 .line.mem {
@@ -193,6 +193,12 @@ button.active {
 
 .addr {
   color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
+
+.sym {
+  color: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .addr.phys {
@@ -398,7 +404,7 @@ button.active {
     grid-template-rows: auto auto auto;
     grid-template-areas:
       "regs regs"
-      "disasm source"
+      "disasm disasm"
       "mem break";
     height: auto;
     overflow: auto;
@@ -410,8 +416,7 @@ button.active {
   }
 
   .pane-regs,
-  .pane-disasm,
-  .pane-source {
+  .pane-disasm {
     min-height: 220px;
   }
 }

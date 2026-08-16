@@ -8,6 +8,7 @@ import { createSevenSegment, setSevenSegmentPattern } from "./seven_segment";
 import { createLed, setLedOn, type LedColor } from "./led";
 import { mountHexKeyboard } from "./hex_keyboard";
 import { mountLcd1602, type Lcd1602View } from "./lcd1602";
+import { BeepPlayer } from "./beep_player";
 import { FN_KEY_LABELS } from "../shared/fn_keys";
 import type { EmuApi, EmuSnapshotWire } from "../shared/emu_api";
 
@@ -22,6 +23,7 @@ const addrEls: HTMLElement[] = [];
 const dataEls: HTMLElement[] = [];
 const bulletEls: HTMLSpanElement[] = [];
 let lcdView: Lcd1602View | null = null;
+const beepPlayer = new BeepPlayer();
 
 /**
  * 砲弾 LED 1 個分の要素（ラベル + LED）を作る。
@@ -144,7 +146,10 @@ function initDom(): void {
 
   mountHexKeyboard(kbRoot, {
     onHexClick: (v) => window.emuApi.keyHex(v),
-    onFunctionClick: (fn) => window.emuApi.keyFn(fn),
+    onFunctionClick: (fn) => {
+      beepPlayer.unlock();
+      window.emuApi.keyFn(fn);
+    },
     onFunctionLongPress: (fn) => {
       if (fn === "F0") window.emuApi.keyAdsLongPress();
     },
@@ -178,4 +183,10 @@ function renderSnapshot(snap: EmuSnapshotWire): void {
 
 initDom();
 window.emuApi.onSnapshot(renderSnapshot);
+window.emuApi.onBeep((beep) => {
+  beepPlayer.apply(beep);
+});
+window.addEventListener("pointerdown", () => {
+  beepPlayer.unlock();
+});
 void window.emuApi.getSnapshot().then(renderSnapshot);

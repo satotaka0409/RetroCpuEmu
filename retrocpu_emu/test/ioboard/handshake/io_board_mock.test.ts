@@ -9,12 +9,15 @@ import {
   CMD_CPU_TO_IO,
   MODE,
   RESPONSE_CODE,
+  setHshkReq1,
 } from "../../../src/shared/handshake/handshake_type";
 import {
   createDefaultCpuToIoHandlers,
+  createIoBoardCommandState,
   createIoBoardHandshakeMock,
   IoBoardHandshakeMock,
 } from "../../../src/ioboard/handshake/io_board_mock";
+import { getLcdWire, resetLcdConsole } from "../../../src/ioboard/lcd_console";
 import {
   IoTimeCounter,
   IO_TIME_TICK_NS,
@@ -77,6 +80,13 @@ describe("IoBoardHandshakeMock", () => {
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
   });
 
+  it("CPU→IO 応答の REQ_1 は INT2 を起こさない", () => {
+    setHshkReq1(mock.bus, 1, false);
+    expect(mock.bus.HSHK_REQ_1).toBe(1);
+    expect(getPins().IRQ2).toBe(false);
+    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+  });
+
   it("フリーモード時のみ hex key が OK", () => {
     mock.setHexKeys([0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]);
 
@@ -117,5 +127,21 @@ describe("IoBoardHandshakeMock", () => {
     );
     expect(off[0]).toBe(RESPONSE_CODE.OK);
     expect(mock.state.undefLed).toBe(false);
+  });
+
+  it("18h で共有 LCD の表示が更新される", () => {
+    resetLcdConsole();
+    const frame = new Uint8Array(20);
+    frame[0] = CMD_CPU_TO_IO.LCD_TEXT;
+    frame[1] = 0;
+    frame[2] = 0;
+    frame[3] = 5;
+    const text = "HELLO";
+    for (let i = 0; i < text.length; i++) frame[4 + i] = text.charCodeAt(i);
+    const d = new CpuToIoCommandDispatcher(
+      createDefaultCpuToIoHandlers(createIoBoardCommandState()),
+    );
+    expect(d.dispatch(frame)[0]).toBe(RESPONSE_CODE.OK);
+    expect(getLcdWire().lines[0].startsWith("HELLO")).toBe(true);
   });
 });

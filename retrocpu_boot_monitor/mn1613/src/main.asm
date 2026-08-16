@@ -41,8 +41,7 @@ GL_RND_DEFAULT_SEED	.equ	0x1234
 ; リセットベクタ
 ; MN1613 はIO RD 0番地から読み込んだアドレス +2->STR +3->IC に設定してスタートする
 g_reset_vector:
-	.dw     0
-	.dw     0
+	bd     	g_main_loop
 	.dw	0b0000000000000000	; STR 割り込み禁止
 	.dw	g_main
 

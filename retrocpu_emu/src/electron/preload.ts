@@ -3,7 +3,7 @@
  */
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { EmuSnapshotWire } from "../shared/emu_api";
+import type { BeepWire, EmuSnapshotWire } from "../shared/emu_api";
 
 contextBridge.exposeInMainWorld("emuApi", {
   onSnapshot(callback: (snap: EmuSnapshotWire) => void): () => void {
@@ -20,6 +20,20 @@ contextBridge.exposeInMainWorld("emuApi", {
       ipcRenderer.removeListener("emu:snapshot", handler);
     };
   },
+  onBeep(callback: (beep: BeepWire) => void): () => void {
+    /**
+     * IPC から 19h の周波数・長さを取り出してコールバックへ渡す。
+     * @param _event IPC イベント（未使用）
+     * @param beep 受信した BEEP パラメータ
+     */
+    const handler = (_event: IpcRendererEvent, beep: BeepWire) => {
+      callback(beep);
+    };
+    ipcRenderer.on("emu:beep", handler);
+    return () => {
+      ipcRenderer.removeListener("emu:beep", handler);
+    };
+  },
   getSnapshot(): Promise<EmuSnapshotWire> {
     return ipcRenderer.invoke("emu:getSnapshot");
   },
@@ -32,7 +46,12 @@ contextBridge.exposeInMainWorld("emuApi", {
   keyAdsLongPress(): void {
     ipcRenderer.send("emu:keyAdsLongPress");
   },
-  loadIntelHex(hex: string): Promise<{ bytesWritten: number }> {
+  loadIntelHex(hex: string): Promise<{
+    bytesWritten: number;
+    minAddr: number;
+    maxAddr: number;
+    chunks: number;
+  }> {
     return ipcRenderer.invoke("emu:loadIntelHex", hex);
   },
 });

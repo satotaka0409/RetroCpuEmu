@@ -9,6 +9,7 @@ import { Worker, MessageChannel } from "node:worker_threads";
 import path from "node:path";
 import { createSharedBoard, type SharedBoard } from "../shared/shared_board";
 import type { EmuSnapshot } from "../shared/emu_types";
+import type { BeepWire } from "../shared/emu_api";
 import { getLogger } from "../log/logger";
 
 export type EmuHostOptions = {
@@ -23,22 +24,32 @@ export type EmuHostOptions = {
 };
 
 type Listener = (snap: EmuSnapshot) => void;
+type BeepListener = (beep: BeepWire) => void;
 
 const log = getLogger("host");
 
 let hexReqId = 1;
+
+/** Intel HEX DMA の結果 */
+type HexLoadResult = {
+  bytesWritten: number;
+  minAddr: number;
+  maxAddr: number;
+  chunks: number;
+};
 
 export class EmuHost {
   private board: SharedBoard;
   private cpu: Worker | null = null;
   private io: Worker | null = null;
   private listeners = new Set<Listener>();
+  private beepListeners = new Set<BeepListener>();
   private latest: EmuSnapshot | null = null;
   private readonly opts: EmuHostOptions;
   private hexWaiters = new Map<
     number,
     {
-      resolve: (r: { bytesWritten: number }) => void;
+      resolve: (r: HexLoadResult) => void;
       reject: (e: Error) => void;
     }
   >();
@@ -130,6 +141,18 @@ export class EmuHost {
   }
 
   /**
+   * ハンドシェイク 19h（BEEP）を購読する。
+   * @param listener 周波数・長さを受け取る
+   * @returns 購読解除する関数
+   */
+  subscribeBeep(listener: BeepListener): () => void {
+    this.beepListeners.add(listener);
+    return () => {
+      this.beepListeners.delete(listener);
+    };
+  }
+
+  /**
    * 16進キー押下を IO Worker へ送る。
    * @param digit "0"〜"F"
    */
@@ -158,7 +181,7 @@ export class EmuHost {
    * @param hex Intel HEX テキスト
    * @returns 書き込んだバイト数
    */
-  loadIntelHex(hex: string): Promise<{ bytesWritten: number }> {
+  loadIntelHex(hex: string): Promise<HexLoadResult> {
     if (!this.io) return Promise.reject(new Error("IO worker not started"));
     const id = hexReqId++;
     log.info("Intel HEX ロードを依頼", { id, hexLength: hex.length });
@@ -175,6 +198,14 @@ export class EmuHost {
   private notify(snap: EmuSnapshot): void {
     this.latest = snap;
     for (const cb of this.listeners) cb(snap);
+  }
+
+  /**
+   * 19h を購読者へ配る。
+   * @param beep 周波数 Hz と長さ ms
+   */
+  private notifyBeep(beep: BeepWire): void {
+    for (const cb of this.beepListeners) cb(beep);
   }
 
   /**
@@ -218,13 +249,23 @@ export class EmuHost {
       (msg: {
         type: string;
         snapshot?: EmuSnapshot;
+        frequencyHz?: number;
+        durationMs?: number;
         id?: number;
         ok?: boolean;
         bytesWritten?: number;
+        minAddr?: number;
+        maxAddr?: number;
+        chunks?: number;
         error?: string;
       }) => {
         if (msg?.type === "io:snapshot" && msg.snapshot) {
           this.notify(msg.snapshot);
+        } else if (msg?.type === "io:beep") {
+          this.notifyBeep({
+            frequencyHz: msg.frequencyHz ?? 0,
+            durationMs: msg.durationMs ?? 0,
+          });
         } else if (msg?.type === "mem:loadIntelHex:result" && msg.id != null) {
           const w = this.hexWaiters.get(msg.id);
           if (!w) return;
@@ -234,7 +275,12 @@ export class EmuHost {
               id: msg.id,
               bytesWritten: msg.bytesWritten ?? 0,
             });
-            w.resolve({ bytesWritten: msg.bytesWritten ?? 0 });
+            w.resolve({
+              bytesWritten: msg.bytesWritten ?? 0,
+              minAddr: msg.minAddr ?? 0,
+              maxAddr: msg.maxAddr ?? -1,
+              chunks: msg.chunks ?? 0,
+            });
           } else {
             log.error("Intel HEX ロード失敗", { id: msg.id, err: msg.error });
             w.reject(new Error(msg.error ?? "HEX load failed"));

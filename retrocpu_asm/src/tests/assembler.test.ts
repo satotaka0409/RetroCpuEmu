@@ -29,6 +29,44 @@ function assemble(sourceText: string, cpuType: CpuType = "mn1613") {
 
 // ─── 式評価 ──────────────────────────────────────────────────────────────────
 
+describe("evalExpr: 文字リテラル", () => {
+  const empty = new Map<string, number>();
+
+  test("'A' は ASCII 0x41", () => {
+    assert.equal(evalExpr("'A'", empty, false), 0x41);
+  });
+
+  test("空白と演算", () => {
+    assert.equal(evalExpr("' '", empty, false), 0x20);
+    assert.equal(evalExpr("'A' + 1", empty, false), 0x42);
+  });
+
+  test("閉じない文字リテラルはエラー", () => {
+    assert.throws(() => evalExpr("'A", empty, false), /Invalid character literal/);
+  });
+});
+
+describe("assembler: ASCII .dw", () => {
+  test(".dw 'H' は 0x0048", () => {
+    const r = assemble("        .org 0\n        .dw 'H'\n");
+    assert.equal(r.words[0]!.value, 0x48);
+  });
+
+  test('.dw "HELLO WORLD" は 1 文字 1 ワード', () => {
+    const r = assemble('        .org 0\n        .dw "HELLO WORLD"\n');
+    const expect = [..."HELLO WORLD"].map((c) => c.charCodeAt(0));
+    assert.deepEqual(
+      r.words.map((w) => w.value),
+      expect,
+    );
+  });
+
+  test("MVI 即値に #'0' が使える", () => {
+    const r = assemble("        .org 0\n        MVI R0, #'0'\n");
+    assert.equal(r.words[0]!.value, 0x0830);
+  });
+});
+
 describe("evalExpr: リテラル", () => {
   const empty = new Map<string, number>();
 

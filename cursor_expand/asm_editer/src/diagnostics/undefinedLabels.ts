@@ -50,6 +50,8 @@ export class AsmDiagnostics {
     }
     this.index.indexDocument(document);
     const arch = detectArchitecture(document.fileName, document.getText());
+    // 未使用 `.global` はワークスペース索引のオペランド参照で判定する。
+    // 定義ファイル自身に BALD が無くても、他 .asm の参照があれば警告しない。
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (let lineNo = 0; lineNo < document.lineCount; lineNo += 1) {

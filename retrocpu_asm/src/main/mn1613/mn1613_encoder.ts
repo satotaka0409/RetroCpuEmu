@@ -1,6 +1,10 @@
-import { evalExpr } from "./expression";
-import { encodeTms9995Instruction } from "./encoder_tms9995";
-import type { CpuType, ParsedLine, SymbolTable } from "./types";
+/**
+ * MN1610 / MN1613 命令エンコーダ。
+ * TMS9995 は `tms9995/tms9995_encode.ts`。
+ */
+
+import { evalExpr } from "../expression";
+import type { CpuType, ParsedLine, SymbolTable } from "../types";
 
 // ─── レジスタマップ ────────────────────────────────────────────────────────────
 
@@ -818,12 +822,8 @@ export function encodeInstruction(
   pcWord: number,
   symbols: SymbolTable,
   allowUndefined: boolean,
-  cpuType: CpuType = "mn1613",
+  cpuType: Exclude<CpuType, "tms9995"> = "mn1613",
 ): number[] {
-  if (cpuType === "tms9995") {
-    return encodeTms9995Instruction(line, pcWord, symbols, allowUndefined);
-  }
-
   if (!line.op) throw new Error(`Line ${line.lineNo}: missing opcode`);
   const op = line.op.toUpperCase();
 

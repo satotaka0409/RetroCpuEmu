@@ -4,12 +4,12 @@
  * MN1610.md のビットパターン仕様に基づき、すべての命令語のエンコードを検証する。
  *
  * 実行方法:
- *   node --require tsx/cjs --test src/mn1610_instructions.test.ts
+ *   node --require tsx/cjs --test src/tests/mn1613/mn1610_instructions.test.ts
  */
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { assemble } from "../main/assembler";
+import { assemble } from "../../main/assembler";
 
 // ─── ヘルパー ─────────────────────────────────────────────────────────────────
 

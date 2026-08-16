@@ -65,7 +65,10 @@ export type SlotBreakHist = {
 
 /** 逆アセンブル 1 行 */
 export type DisasmLine = {
+  /** ワードアドレス（物理 16 進 5 桁） */
   addr: string;
+  /** その番地のグローバルラベル。無ければ省略 */
+  label?: string;
   bytes: string;
   text: string;
   current?: boolean;
@@ -81,9 +84,6 @@ export type MemDumpRow = {
 /** デバッグ画面の状態 */
 export type DebugViewState = {
   title: string;
-  sourcePath: string;
-  sourceLines: string[];
-  sourceFocusLine: number;
   disasm: DisasmLine[];
   memDump: MemDumpRow[];
   /** 表示の基準（スクロール／ジャンプ先）物理ワード */
@@ -94,6 +94,12 @@ export type DebugViewState = {
   memCacheHi: number;
   /** ダンプ取得の状態（未接続／handshake OK など） */
   memNote: string;
+  /** 逆アセンブル表示の基準物理ワード */
+  disasmStart: number;
+  /** 逆アセンブル取得済み窓の先頭物理ワード */
+  disasmCacheLo: number;
+  /** 逆アセンブル取得済み窓の末尾物理ワード（含む） */
+  disasmCacheHi: number;
   bpSlots: BpSlotView[];
   current: RegisterSnapshot;
   slotHistory: SlotBreakHist[];
@@ -343,29 +349,17 @@ export function createMockDebugState(): DebugViewState {
   const win = memFetchRange(memStart);
   return {
     title: "MN1613 Debug",
-    sourcePath: "sample.asm",
-    sourceFocusLine: 4,
-    sourceLines: [
-      "\t.cpu\tmn1613",
-      "\t.area\t_CODE\t(REL,CON)",
-      "gl_main:",
-      "\tmvwi\tR0, #0x1000",
-      "\tai\tR0, #1\t\t; @cp sample_ai",
-      "\tst\tR0, *0x40",
-      "\tbald\tgl_main",
-      "\th",
-    ],
     disasm: [
       {
-        addr: "1800",
+        addr: "01800",
         bytes: "7807 1000",
         text: "MVWI R0, #0x1000",
         bp: true,
       },
-      { addr: "1802", bytes: "4801", text: "AI R0, #1", current: true },
-      { addr: "1803", bytes: "8040", text: "ST R0, *0x40" },
-      { addr: "1804", bytes: "2617 1800", text: "BALD 0x1800" },
-      { addr: "1806", bytes: "2000", text: "H" },
+      { addr: "01802", bytes: "4801", text: "AI R0, #1", current: true },
+      { addr: "01803", bytes: "8040", text: "ST R0, *0x40" },
+      { addr: "01804", bytes: "2617 1800", text: "BALD 0x1800" },
+      { addr: "01806", bytes: "2000", text: "H" },
     ],
     memDump: makeMemDumpRows(
       win.lo,
@@ -376,6 +370,9 @@ export function createMockDebugState(): DebugViewState {
     memCacheLo: win.lo,
     memCacheHi: win.hi,
     memNote: "IO 未接続 — retrocpu_emu を起動するとハンドシェイク 13h で読みます",
+    disasmStart: memStart,
+    disasmCacheLo: win.lo,
+    disasmCacheHi: win.hi,
     bpSlots,
     current,
     slotHistory,

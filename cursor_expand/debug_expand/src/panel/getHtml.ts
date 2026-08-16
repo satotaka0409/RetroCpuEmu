@@ -54,13 +54,8 @@ export function getDebugHtml(
     </aside>
 
     <section class="pane-disasm" aria-label="逆アセンブラ">
-      <div class="pane-head">逆アセンブラ</div>
+      <div class="pane-head">逆アセンブラ（±800h をハンドシェイク取得／端で再取得）</div>
       <div class="code-scroll" id="disasm"></div>
-    </section>
-
-    <section class="pane-source" aria-label="アセンブラソース">
-      <div class="pane-head" id="sourceHead">アセンブラソース</div>
-      <div class="code-scroll" id="source"></div>
     </section>
 
     <section class="pane-mem" aria-label="メモリダンプ">

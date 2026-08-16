@@ -172,7 +172,8 @@ export class CpuHandshakeAgent {
       const response = await this.options.forward(frame);
       this.options.onTransaction?.(frame[0] ?? 0, frame, response);
       if (response.length > 0) {
-        await this.io.send(response);
+        // BIOS は wait_req1_1 で応答を取る。INT2 を上げると status をコマンドと誤認する。
+        await this.io.send(response, { raiseIrq: false });
       }
       return response;
     });

@@ -1,4 +1,5 @@
 import {
+  asciiCodesFromStringArg,
   evalExpr,
   matchAbsAddrReloc,
   matchPage0StarReloc,
@@ -9,11 +10,11 @@ import {
   MN1613_ONLY_OPS,
   TWO_WORD_OPS,
   u16,
-} from "./encoder";
+} from "./mn1613/mn1613_encoder";
 import {
   encodeTms9995Instruction,
   tms9995InstructionSize,
-} from "./encoder_tms9995";
+} from "./tms9995/tms9995_encode";
 import { expandMacros } from "./macros";
 import { parseSource } from "./parser";
 import { resolveCpuType } from "./cpuType";
@@ -201,10 +202,39 @@ function directiveSize(line: ParsedLine, cpuType: CpuType): number {
   if (!line.op) return 0;
   const op: string = line.op.toUpperCase();
   if (op === ".WORD" || op === ".DW" || op === "DW") {
-    const words = line.args.length;
+    const words = expandWordDirectiveArgs(line.args, line.lineNo).length;
     return cpuType === "tms9995" ? words * 2 : words;
   }
   return 0;
+}
+
+/**
+ * `.dw` / `.word` のオペランドを 1 ワードずつにする。
+ * 二重引用符は 1 文字 1 ワード（ASCII）。`'H'` はそのまま式として残す。
+ * @param args - 解析済みオペランド
+ * @param lineNo - 行番号（エラー用）
+ * @returns 1 ワード分の式（数値または `'H'` など）
+ */
+function expandWordDirectiveArgs(
+  args: readonly string[],
+  lineNo: number,
+): string[] {
+  const out: string[] = [];
+  for (const arg of args) {
+    let codes: number[] | null;
+    try {
+      codes = asciiCodesFromStringArg(arg);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Line ${lineNo}: ${msg}`);
+    }
+    if (codes) {
+      for (const c of codes) out.push(String(c));
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
 }
 
 /**
@@ -515,7 +545,7 @@ function pass2(
           `Line ${line.lineNo}: ${areas.current} cannot have initial values (use .ds)`,
         );
       }
-      for (const arg of line.args) {
+      for (const arg of expandWordDirectiveArgs(line.args, line.lineNo)) {
         const diff = matchWordDiffReloc(arg, symbolInfos);
         if (diff) {
           throw new Error(

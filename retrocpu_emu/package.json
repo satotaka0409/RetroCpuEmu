@@ -6,6 +6,7 @@
   "main": "dist/electron/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "postinstall": "node node_modules/electron/install.js",
     "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "dev": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "vitest run",

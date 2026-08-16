@@ -38,7 +38,7 @@
       "options": [
         {
           "label": "全件 (正常系 + 異常系 + 全命令)",
-          "value": "node --require tsx/cjs --test src/tests/assembler.test.ts src/tests/assembler.error.test.ts src/tests/mn1610_instructions.test.ts src/tests/mn1613_instructions.test.ts"
+          "value": "node --require tsx/cjs --test src/tests/assembler.test.ts src/tests/assembler.error.test.ts src/tests/mn1613/mn1610_instructions.test.ts src/tests/mn1613/mn1613_instructions.test.ts"
         },
         {
           "label": "正常系のみ",
@@ -50,7 +50,7 @@
         },
         {
           "label": "MN1610 全命令",
-          "value": "node --require tsx/cjs --test src/tests/mn1610_instructions.test.ts"
+          "value": "node --require tsx/cjs --test src/tests/mn1613/mn1610_instructions.test.ts"
         }
       ]
     }
