@@ -114,12 +114,18 @@ export interface CpuToIoHandlers {
 
   /**
    * ブレイク通知 (cmd=0x1A): 比較器ヒットで CPU がモニタへ戻るとき。
-   * kind: 0=命令 / 1=メモリ / 2=IO。slot: 比較器 0–7。
-   * addr: 監視アドレス（バイト、32bit ビッグエンディアン）。
+   * HandShake.mdc の 1Ah ヘッダをそのまま渡す。
    */
   onBreakNotify(info: {
+    /** 互換用: flags から導いた区分（0=命令 / 1=MEM / 2=IO） */
     kind: number;
     slot: number;
+    /** 10h 表の flags（Bit0=IO, Bit1=RD, Bit2=WR, Bit3-5=条件, Bit7=履歴） */
+    flags: number;
+    /** 10h 表の count（ブレイクまでのカウント値） */
+    breakCount: number;
+    /** 履歴件数（0-16） */
+    historyCount: number;
     addr: number;
   }): number;
 
@@ -181,8 +187,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.TIME_GET]: 1,
   /** 未定義命令LED: cmd(1) + Bit0(1) = 2バイト */
   [CMD_CPU_TO_IO.UNDEF_LED]: 2,
-  /** ブレイク通知: cmd(1) + 区分(1) + 設定番号(1) + addr32(4) = 7バイト */
-  [CMD_CPU_TO_IO.BREAK_NOTIFY]: 7,
+  /** ブレイク通知: cmd(1)+slot(1)+件数(1)+flags(1)+count(1)+addr32(4)+件数(1)+pad(1)=11バイト */
+  [CMD_CPU_TO_IO.BREAK_NOTIFY]: 11,
   /** LCD制御: cmd(1) + kind(1) + argA(1) + argB(1) + argC(1) = 5バイト */
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
@@ -429,20 +435,30 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * ブレイク通知 (0x1A)
-   * 区分 0–2、スロット 0–7。応答: 1バイト (OK / NG)
+   * スロット 0–7。応答: 1バイト (OK / NG)
    */
   private _handleBreakNotify(frame: Uint8Array): Uint8Array {
-    const kind = frame[0x01]! & 0xff;
-    const slot = frame[0x02]! & 0xff;
-    if (kind > 2 || slot > 7) {
+    const slot = frame[0x01]! & 0xff;
+    if (slot > 7) {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
+    const historyCount = frame[0x02]! & 0xff;
+    const flags = frame[0x03]! & 0xff;
+    const breakCount = frame[0x04]! & 0xff;
     const addr =
-      ((frame[0x03]! & 0xff) << 24) |
-      ((frame[0x04]! & 0xff) << 16) |
-      ((frame[0x05]! & 0xff) << 8) |
-      (frame[0x06]! & 0xff);
-    const result = this.handlers.onBreakNotify({ kind, slot, addr });
+      ((frame[0x05]! & 0xff) << 24) |
+      ((frame[0x06]! & 0xff) << 16) |
+      ((frame[0x07]! & 0xff) << 8) |
+      (frame[0x08]! & 0xff);
+    const kind = (flags & 0x40) !== 0 ? 0 : (flags & 0x01) !== 0 ? 2 : 1;
+    const result = this.handlers.onBreakNotify({
+      kind,
+      slot,
+      flags,
+      breakCount,
+      historyCount,
+      addr,
+    });
     return new Uint8Array([result & 0xff]);
   }
 

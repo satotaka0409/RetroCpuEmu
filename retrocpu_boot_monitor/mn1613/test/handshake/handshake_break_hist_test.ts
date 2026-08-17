@@ -80,7 +80,11 @@ async function callHandler(
 
 test("17h スロット 8 はヘッダ 0 のあと NG", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x08, 0x00]), 9);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x08, 0x00]),
+      9,
+    );
     expect(Array.from(reply)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
@@ -95,7 +99,11 @@ test("17h 履歴未設定は件数 0 で 02h", async () => {
       ]),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x00, 0x00]), 9);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      9,
+    );
     expect(reply[0]).toBe(0);
     expect(reply[1]).toBe(0x02);
     expect(reply[2]).toBe(0x42);
@@ -115,7 +123,12 @@ test("17h 履歴設定で件数 0 なら OK", async () => {
       ]),
       1,
     );
-    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x00, 0x00]), 9);
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      9,
+    );
+    expect(reply.length).toBe(9);
     expect(reply[0]).toBe(0);
     expect(reply[1]).toBe(0);
     expect(reply[2]).toBe(0xc2);
@@ -279,6 +292,41 @@ test("17h オーバフロー済みはステータス Bit0 を立てる", async (
     expect(reply[0]).toBe(1);
     expect(reply[1]).toBe(0x01);
     expect((reply[8]! << 8) | reply[9]!).toBe(0x00aa);
+    expect(reply[reply.length - 1]).toBe(0x00);
+  });
+});
+
+test("17h 履歴 16 件を新しい順で返す", async () => {
+  await withCase(async (s, mock) => {
+    await callHandler(
+      mock,
+      Uint8Array.from([
+        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+      ]),
+      1,
+    );
+    const meta = s.wordAddr("GL_BP_HIST_META");
+    s.writeWord(meta, 16);
+    s.writeWord(meta + 1, 16);
+    s.writeWord(meta + 2, 0);
+    for (let i = 0; i < 16; i += 1) {
+      plantEntry(s, 0, i, 0x0100 + i);
+    }
+
+    const entrySize = 66;
+    const reply = await callHandler(
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + entrySize * 16 + 1,
+    );
+
+    expect(reply.length).toBe(8 + entrySize * 16 + 1);
+    expect(reply[0]).toBe(16);
+    expect(reply[1]).toBe(0);
+    expect((reply[8]! << 8) | reply[9]!).toBe(0x010f);
+    expect((reply[8 + entrySize * 15]! << 8) | reply[9 + entrySize * 15]!).toBe(
+      0x0100,
+    );
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });

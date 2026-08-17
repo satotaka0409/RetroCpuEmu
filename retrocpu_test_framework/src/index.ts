@@ -29,6 +29,8 @@ export {
 export {
   attachHandshakeMock,
   createInertTimerScheduler,
+  isIoToCpuRequestAsserted,
+  waitForIoToCpuRequest,
   withFrameworkIoMockDefaults,
 } from "./handshake_mock.js";
 export type {

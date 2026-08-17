@@ -216,7 +216,7 @@ L:__CP$uart_initialized$0001:812A
 | :---------------------------- | :------------------------------------------ |
 | `CDB symbol not found`        | `.global` でない / リンク対象漏れ           |
 | `did not return to stub`      | `RET`/`RETL` と `callMode` の不一致         |
-| `handshake ENA0 check failed` | IO->CPU で `REQ_1===1` 前に `call`          |
+| `handshake ENA0 check failed` | IO->CPU で `IN_REQ===1` 前に `call`          |
 | `timeout`                     | `ioMock` 未設定、またはフレーム長不一致     |
 | `Intel HEX がありません`      | `hexFile` 未ビルド／パスミス（先に Makefile） |
 

@@ -205,7 +205,7 @@ export class CpuHandshakeAgent {
     return new Promise((resolve) => {
       /** 条件を満たせば resolve、まだなら次のポーリングを予約する */
       const check = (): void => {
-        if (this.abortServe || this.bus.HSHK_REQ_0 === 1) {
+        if (this.abortServe || this.bus.HSHK_OUT_REQ === 1) {
           resolve();
           return;
         }

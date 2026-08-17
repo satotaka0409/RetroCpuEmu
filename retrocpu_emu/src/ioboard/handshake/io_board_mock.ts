@@ -26,7 +26,7 @@ import {
   CMD_IO_TO_CPU,
   createHandshakeBus,
   DEFAULT_TIMEOUT_MS,
-  HSHK_REQ1_NO_IRQ,
+  HSHK_IN_REQ_NO_IRQ,
   intCauseForTimer,
   MODE,
   RESPONSE_CODE,
@@ -68,7 +68,14 @@ export type IoBoardMockState = {
   undefLed: boolean;
   addrBreakNo: number;
   /** 直近のブレイク通知（1Ah）。未受信は null */
-  lastBreakNotify: { kind: number; slot: number; addr: number } | null;
+  lastBreakNotify: {
+    kind: number;
+    slot: number;
+    flags: number;
+    breakCount: number;
+    historyCount: number;
+    addr: number;
+  } | null;
   /** 直近のステップ通知（1Bh）。未受信は null */
   lastStepNotify: {
     addr: number;
@@ -94,7 +101,7 @@ export type IoBoardMockOptions = {
   timeoutMs?: number;
   /** 既定ハンドラの一部だけ差し替え */
   handlers?: Partial<CpuToIoHandlers>;
-  /** HSHK_REQ_1 を IRQ2 + pending に接続（既定 true） */
+  /** HSHK_IN_REQ を IRQ2 + pending に接続（既定 true） */
   syncIrq2?: boolean;
   /** ログ最大件数（既定 64） */
   maxLog?: number;
@@ -236,6 +243,9 @@ export function createDefaultCpuToIoHandlers(
       state.lastBreakNotify = {
         kind: info.kind & 0xff,
         slot: info.slot & 0xff,
+        flags: info.flags & 0xff,
+        breakCount: info.breakCount & 0xff,
+        historyCount: info.historyCount & 0xff,
         addr: info.addr >>> 0,
       };
       return RESPONSE_CODE.OK;
@@ -268,12 +278,12 @@ export function createDefaultCpuToIoHandlers(
 }
 
 /**
- * HSHK_REQ_1 の変化を IRQ2 に反映する。
+ * HSHK_IN_REQ の変化を IRQ2 に反映する。
  * run() は processInputPins を呼ばないため triggerInterrupt も併用する。
  */
 export function wireHshkReq1ToIrq2(bus: CpuIoSignals): () => void {
-  let req1: 0 | 1 = bus.HSHK_REQ_1;
-  Object.defineProperty(bus, "HSHK_REQ_1", {
+  let req1: 0 | 1 = bus.HSHK_IN_REQ;
+  Object.defineProperty(bus, "HSHK_IN_REQ", {
     configurable: true,
     enumerable: true,
     get(): 0 | 1 {
@@ -284,8 +294,8 @@ export function wireHshkReq1ToIrq2(bus: CpuIoSignals): () => void {
       if (next === req1) return;
       req1 = next;
       const noIrq = Boolean(
-        (this as CpuIoSignals & { [HSHK_REQ1_NO_IRQ]?: boolean })[
-          HSHK_REQ1_NO_IRQ
+        (this as CpuIoSignals & { [HSHK_IN_REQ_NO_IRQ]?: boolean })[
+          HSHK_IN_REQ_NO_IRQ
         ],
       );
       if (next === 1 && !noIrq) {
@@ -297,7 +307,7 @@ export function wireHshkReq1ToIrq2(bus: CpuIoSignals): () => void {
     },
   });
   return () => {
-    Object.defineProperty(bus, "HSHK_REQ_1", {
+    Object.defineProperty(bus, "HSHK_IN_REQ", {
       configurable: true,
       enumerable: true,
       writable: true,
@@ -641,7 +651,7 @@ export class IoBoardHandshakeMock {
       try {
         // 短いスライスで REQ_0 / stop を待ち、stop() がタイムアウト一杯待たないようにする
         await waitCondition(
-          () => this.abortServe || this.bus.HSHK_REQ_0 === 1,
+          () => this.abortServe || this.bus.HSHK_OUT_REQ === 1,
           100,
         );
         if (this.abortServe) return;

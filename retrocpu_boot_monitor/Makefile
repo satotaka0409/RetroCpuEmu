@@ -22,6 +22,11 @@ TOOLS_DIR     := $(MONITOR_DIR)/tools
 
 # --- SDCC（sdld。ihx に必須） ---
 SDCC_SRC_DIR  ?= $(HOME)/sdcc-mn1613/sdcc/build/sdcc
+ifeq ("$(wildcard $(SDCC_SRC_DIR)/sdas/linksrc/Makefile)","")
+ifneq ("$(wildcard $(HOME)/sdcc-mn1613/sdcc/sdcc/sdas/linksrc/Makefile)","")
+SDCC_SRC_DIR := $(HOME)/sdcc-mn1613/sdcc/sdcc
+endif
+endif
 SDCC_BIN_DIR  ?= $(SDCC_SRC_DIR)/bin
 CMAKE_DIR     := $(BUILD_DIR)/cmake
 
@@ -33,7 +38,6 @@ SDLD_LINK_CLI := $(RETROCPU_ASM_DIR)/dist/main/sdldLinkCli.js
 # --- ツール ---
 export PATH := $(SDCC_BIN_DIR):$(PATH)
 export SDCC_BIN_DIR
-SDASMN1613    := $(SDCC_BIN_DIR)/sdasmn1613
 SDLD          := $(SDCC_BIN_DIR)/sdld
 export SDLD
 
@@ -120,12 +124,11 @@ test:
 # -------------------------------------------------------
 # 1. SDCC 環境（sdld。ihx の前提）
 # -------------------------------------------------------
-sdcc-setup: $(SDASMN1613) $(SDLD)
+sdcc-setup: $(SDLD)
 	@echo "SDCC tools ready:"
-	@echo "  $(SDASMN1613)"
 	@echo "  $(SDLD)"
 
-$(SDASMN1613) $(SDLD):
+$(SDLD):
 	@if command -v cmake >/dev/null 2>&1; then \
 		mkdir -p $(CMAKE_DIR); \
 		cmake -S $(MONITOR_DIR) -B $(CMAKE_DIR) \
@@ -134,10 +137,8 @@ $(SDASMN1613) $(SDLD):
 		cmake --build $(CMAKE_DIR) --target sdcc_mn1613_tools; \
 	else \
 		echo "cmake not found; building SDCC tools via make directly"; \
-		$(MAKE) -C $(SDCC_SRC_DIR)/sdas/asmn1613; \
 		$(MAKE) -C $(SDCC_SRC_DIR)/sdas/linksrc sdcc-ld8051; \
 	fi
-	@test -x $(SDASMN1613)
 	@test -x $(SDLD)
 
 # -------------------------------------------------------
@@ -245,6 +246,5 @@ clean:
 	rm -rf $(MONITOR_DIR)/mn1613/logs
 
 clean-sdcc: clean
-	@$(MAKE) -C $(SDCC_SRC_DIR)/sdas/asmn1613 clean 2>/dev/null || true
 	@$(MAKE) -C $(SDCC_SRC_DIR)/sdas/linksrc clean 2>/dev/null || true
 	@rm -f $(SDLD) 2>/dev/null || true

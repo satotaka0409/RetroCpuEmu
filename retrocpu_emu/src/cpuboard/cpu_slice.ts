@@ -23,14 +23,14 @@ export type CpuSlicePlan = {
  */
 export function handshakeBusyFromBus(bus: {
   HSHK_ENA: number;
-  HSHK_REQ_0: number;
-  HSHK_REQ_1: number;
+  HSHK_OUT_REQ: number;
+  HSHK_IN_REQ: number;
   INTERRUPT_BUSY: number;
 }): boolean {
   return (
     bus.HSHK_ENA === 1 ||
-    bus.HSHK_REQ_0 === 1 ||
-    bus.HSHK_REQ_1 === 1 ||
+    bus.HSHK_OUT_REQ === 1 ||
+    bus.HSHK_IN_REQ === 1 ||
     bus.INTERRUPT_BUSY === 1
   );
 }

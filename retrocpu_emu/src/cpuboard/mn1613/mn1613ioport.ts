@@ -23,17 +23,23 @@ export interface CpuIoSignals {
    */
   HSHK_ENA: 0 | 1;
 
-  /** データ有効（1バイト転送のトリガ。0→1 で送信開始、1→0 で終了） */
-  HSHK_DENA: 0 | 1;
+  /** CPU->IO データ有効（CPU 出力） */
+  HSHK_OUT_DENA: 0 | 1;
 
-  /** データ受信完了 */
-  HSHK_DACK: 0 | 1;
+  /** CPU->IO データ受信完了（IO 入力） */
+  HSHK_OUT_DACK: 0 | 1;
+
+  /** IO->CPU データ有効（IO 出力） */
+  HSHK_IN_DENA: 0 | 1;
+
+  /** IO->CPU データ受信完了（CPU 出力） */
+  HSHK_IN_DACK: 0 | 1;
 
   /** CPU→IO 割り込み要求 */
-  HSHK_REQ_0: 0 | 1;
+  HSHK_OUT_REQ: 0 | 1;
 
   /** IO→CPU 割り込み要求 */
-  HSHK_REQ_1: 0 | 1;
+  HSHK_IN_REQ: 0 | 1;
 
   /**
    * CPU→IO データ（ラッチ後の1バイト。シリアライズは CLK×8 でモデル化可）

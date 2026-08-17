@@ -14,7 +14,7 @@ import {
   HSHK_IO_MAX_BYTES,
   INT_CAUSE_CODE,
   RESPONSE_CODE,
-  setHshkReq1,
+  setHshkInReq,
   u32be,
   waitEna0Check,
   waitCondition,
@@ -23,8 +23,8 @@ import {
 /** IO→CPU 送信の開始オプション */
 export type HandshakeSendOptions = {
   /**
-   * REQ_1 でレベル2割り込みを起こすか。既定 true。
-   * CPU→IO の status 応答は false（BIOS が REQ_1 をポーリングする）。
+   * IN_REQ でレベル2割り込みを起こすか。既定 true。
+   * CPU→IO の status 応答は false（BIOS が IN_REQ をポーリングする）。
    */
   raiseIrq?: boolean;
 };
@@ -248,10 +248,10 @@ export class IoControlHandshake {
 
   /** CPU の REQ_0 を待って依頼を受理する（DACK=0 → ENA=1 → REQ_0=0 待ち） */
   private async waitForCpuRequest(): Promise<void> {
-    await this.wait(() => this.bus.HSHK_REQ_0 === 1);
-    this.bus.HSHK_DACK = 0;
+    await this.wait(() => this.bus.HSHK_OUT_REQ === 1);
+    this.bus.HSHK_OUT_DACK = 0;
     this.bus.HSHK_ENA = 1;
-    await this.wait(() => this.bus.HSHK_REQ_0 === 0);
+    await this.wait(() => this.bus.HSHK_OUT_REQ === 0);
   }
 
   /**
@@ -259,12 +259,12 @@ export class IoControlHandshake {
    * @returns [1バイト目, 2バイト目]
    */
   private async receiveUnitFromCpu(): Promise<[number, number]> {
-    await this.wait(() => this.bus.HSHK_DENA === 1);
-    const b0 = this.bus.HSHK_IN_DATA & 0xff;
-    this.bus.HSHK_DACK = 1;
-    await this.wait(() => this.bus.HSHK_DENA === 0);
-    const b1 = this.bus.HSHK_IN_DATA & 0xff;
-    this.bus.HSHK_DACK = 0;
+    await this.wait(() => this.bus.HSHK_OUT_DENA === 1);
+    const b0 = this.bus.HSHK_OUT_DATA & 0xff;
+    this.bus.HSHK_OUT_DACK = 1;
+    await this.wait(() => this.bus.HSHK_OUT_DENA === 0);
+    const b1 = this.bus.HSHK_OUT_DATA & 0xff;
+    this.bus.HSHK_OUT_DACK = 0;
     return [b0, b1];
   }
 
@@ -310,11 +310,11 @@ export class IoControlHandshake {
     const raiseIrq = options?.raiseIrq !== false;
     await waitEna0Check(() => this.bus.HSHK_ENA === 0);
     await this.wait(() => this.bus.INTERRUPT_BUSY === 0);
-    this.bus.HSHK_DENA = 0;
+    this.bus.HSHK_IN_DENA = 0;
     this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
-    setHshkReq1(this.bus, 1, raiseIrq);
+    setHshkInReq(this.bus, 1, raiseIrq);
     await this.wait(() => this.bus.HSHK_ENA === 1);
-    this.bus.HSHK_REQ_1 = 0;
+    this.bus.HSHK_IN_REQ = 0;
   }
 
   /**
@@ -323,12 +323,12 @@ export class IoControlHandshake {
    * @param b1 2バイト目
    */
   private async transferUnitToCpu(b0: number, b1: number): Promise<void> {
-    this.bus.HSHK_OUT_DATA = b0 & 0xff;
-    this.bus.HSHK_DENA = 1;
-    await this.wait(() => this.bus.HSHK_DACK === 1);
-    this.bus.HSHK_OUT_DATA = b1 & 0xff;
-    this.bus.HSHK_DENA = 0;
-    await this.wait(() => this.bus.HSHK_DACK === 0);
+    this.bus.HSHK_IN_DATA = b0 & 0xff;
+    this.bus.HSHK_IN_DENA = 1;
+    await this.wait(() => this.bus.HSHK_IN_DACK === 1);
+    this.bus.HSHK_IN_DATA = b1 & 0xff;
+    this.bus.HSHK_IN_DENA = 0;
+    await this.wait(() => this.bus.HSHK_IN_DACK === 0);
   }
 
   /**

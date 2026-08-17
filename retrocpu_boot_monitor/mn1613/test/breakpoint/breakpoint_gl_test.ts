@@ -227,11 +227,11 @@ test("命令ブレイク（通常）はフェッチで INT2 し 1Ah を送る", 
       await mock.stop();
     }
 
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 0,
-      slot: 0,
-      addr: WATCH_BYTE,
-    });
+    const notify1 = mock.state.lastBreakNotify;
+    if (notify1 == null) throw new Error("missing break notify");
+    expect(notify1.kind).toBe(0);
+    expect(notify1.slot).toBe(0);
+    expect(notify1.addr).toBe(WATCH_BYTE);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(0);
   });
 });
@@ -258,11 +258,11 @@ test("命令ブレイク（回数4・履歴）は 4 件残して 1Ah する", as
       await mock.stop();
     }
 
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 0,
-      slot: 0,
-      addr: WATCH_BYTE,
-    });
+    const notify2 = mock.state.lastBreakNotify;
+    if (notify2 == null) throw new Error("missing break notify");
+    expect(notify2.kind).toBe(0);
+    expect(notify2.slot).toBe(0);
+    expect(notify2.addr).toBe(WATCH_BYTE);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(HIST_COUNT);
     addrComparators.writePort(
       IO_PORT_BREAK_CTRL,
@@ -336,11 +336,11 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
       await mock.stop();
     }
 
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 0,
-      slot: 0,
-      addr: WATCH_BYTE,
-    });
+    const notify3 = mock.state.lastBreakNotify;
+    if (notify3 == null) throw new Error("missing break notify");
+    expect(notify3.kind).toBe(0);
+    expect(notify3.slot).toBe(0);
+    expect(notify3.addr).toBe(WATCH_BYTE);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
     const userIc = s.readWord(L2_IC_SAVE);
     expect(userIc).toBe(WATCH_WORD + 1);
@@ -388,4 +388,98 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
     expect(stepBreak.getEnable()).toBe(1);
     expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
   });
+});
+
+test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行い状態を確認", async () => {
+  for (let i = 0; i < 3; i += 1) {
+    await withCase(async (s, mock) => {
+      mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+
+      const callTagged = async (
+        tag: string,
+        toCpu: Uint8Array,
+        fromCpu: number,
+      ): Promise<Uint8Array> => {
+        try {
+          return await callHandler(mock, toCpu, fromCpu);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          throw new Error(`${tag}: ${msg}`);
+        }
+      };
+
+      const setReply = await callTagged(
+        "set break(10h)",
+        breakSetFrame(0, FLAGS_INST_RD_HIST, 0, WATCH_BYTE, 0),
+        1,
+      );
+      expect(Array.from(setReply)).toEqual([0x00]);
+
+      // START 0x1800 のテストプログラム
+      s.writeWord(WATCH_WORD, OP_EOR_R0);
+      s.writeWord(WATCH_WORD + 1, OP_B_SELF);
+      setState({
+        STR: STR_IRQ_ENABLE,
+        SP: IDLE_SP,
+        CSBR: 0,
+        SSBR: 0,
+        IISR: 0,
+        R: {
+          0: 0x1234,
+          1: 0x5678,
+          2: BASE_REGS.R2,
+          3: BASE_REGS.R3,
+          4: BASE_REGS.R4,
+        },
+      });
+
+      armCpldFetchBreak(0, WATCH_WORD);
+      mock.start();
+      try {
+        const status = await run(WATCH_WORD, s.maxCycles);
+        expect(status).toBe("halted");
+      } finally {
+        await mock.stop();
+      }
+
+      const notify = mock.state.lastBreakNotify;
+      if (notify == null) throw new Error("missing break notify");
+      expect(notify.kind).toBe(0);
+      expect(notify.slot).toBe(0);
+      expect(notify.addr).toBe(WATCH_BYTE);
+
+      addrComparators.writePort(
+        IO_PORT_BREAK_CTRL,
+        encodeBreakCtrl(0, false, false, BREAK_RDWR_RD),
+      );
+      const hist = await callTagged(
+        "get hist(17h)",
+        Uint8Array.from([0x17, 0x00, 0x00]),
+        8 + HIST_ENTRY_BYTES + 1,
+      );
+
+      const ent = 8;
+      const userIc = s.readWord(L2_IC_SAVE);
+      expect(userIc).toBe(WATCH_WORD + 1);
+      expect(be16(hist, ent + 8)).toBe(OP_EOR_R0);
+      expect(be16(hist, ent + 18)).toBe(BASE_REGS.R3);
+      expect(be16(hist, ent + 26)).toBe(userIc);
+
+      // ステップ復帰（18h 方式1）を 3 回実行し、毎回 ARM/CPLD 設定を確認する。
+      for (let n = 0; n < 3; n += 1) {
+        const resume = await callTagged(
+          `step resume(18h,1) #${n + 1}`,
+          Uint8Array.from([0x18, 1]),
+          1,
+        );
+        expect(Array.from(resume)).toEqual([0x00]);
+        expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
+
+        await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
+        expect(stepBreak.getTriggerWord()).toBe(0x2006);
+        expect(stepBreak.getEnable()).toBe(1);
+        expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+      }
+    });
+  }
 });

@@ -7,7 +7,16 @@ import { CodeTestIoMock } from "../../retrocpu_emu/src/code_test/io_mock.js";
 import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/code_test/types.js";
 import type { IoBoardHandshakeMock } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
 import type { IoBoardMockOptions } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
-import type { IoTimerHandle, IoTimerScheduler } from "../../retrocpu_emu/src/ioboard/timer/io_timer.js";
+import type {
+  IoTimerHandle,
+  IoTimerScheduler,
+} from "../../retrocpu_emu/src/ioboard/timer/io_timer.js";
+
+type LegacyReqBus = {
+  HSHK_IN_REQ: 0 | 1;
+  HSHK_ENA: 0 | 1;
+  HSHK_REQ_1?: 0 | 1;
+};
 
 /**
  * タイマー満了を起こさないスケジューラ（12h 設定の検証専用）。
@@ -66,6 +75,37 @@ export function attachHandshakeMock(
     throw new Error("attachHandshakeMock: handshake mock was not created");
   }
   return mock.handshake;
+}
+
+/**
+ * IO→CPU 要求がアサート中かを判定する（新旧シグナル名互換）。
+ * - 新名: HSHK_IN_REQ=1
+ * - 旧名: HSHK_REQ_1=1
+ * - 受理済み互換: ENA=1（REQ パルスを見逃した後でも受理状態を拾う）
+ */
+export function isIoToCpuRequestAsserted(mock: IoBoardHandshakeMock): boolean {
+  const bus = mock.bus as LegacyReqBus;
+  if (bus.HSHK_IN_REQ === 1) return true;
+  if (bus.HSHK_REQ_1 === 1) return true;
+  return bus.HSHK_ENA === 1;
+}
+
+/**
+ * IO→CPU 要求が来るまで待つ（新旧シグナル名互換）。
+ * @param mock ハンドシェイクモック
+ * @param timeoutMs 待機上限 ms（既定 2000）
+ */
+export async function waitForIoToCpuRequest(
+  mock: IoBoardHandshakeMock,
+  timeoutMs = 2000,
+): Promise<void> {
+  const t0 = Date.now();
+  while (!isIoToCpuRequestAsserted(mock)) {
+    if (Date.now() - t0 > timeoutMs) {
+      throw new Error("timeout waiting IO->CPU request");
+    }
+    await new Promise((r) => setTimeout(r, 1));
+  }
 }
 
 export type { IoBoardHandshakeMock, IoBoardMockOptions, CodeTestIoMockEntry };

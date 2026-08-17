@@ -85,6 +85,9 @@ export const STR_M1 = 0x0200;
 /** M2（割り込みマスク level2）: MN1610 bit7 */
 export const STR_M2 = 0x0100;
 
+/** IISR 未定義命令フラグ（LSB 側 bit15） */
+export const IISR_UNDEF = 0x0001;
+
 // ─────────────────────────────────────────────
 // CPU レジスタ
 // ─────────────────────────────────────────────
@@ -723,7 +726,8 @@ function _rdPhys(phys: number): number {
   _addClocks(CPU_CLK_PER_ACCESS);
   const p = phys & 0x3ffff;
   const b = p * 2;
-  const v = b + 1 >= _memView.byteLength ? 0xffff : _memView.getUint16(b, false);
+  const v =
+    b + 1 >= _memView.byteLength ? 0xffff : _memView.getUint16(b, false);
   addrComparators.probe({ addr: p, io: false, write: false });
   return v;
 }
@@ -1151,7 +1155,7 @@ function _handleIRQ(): void {
 function _trapUndefinedInsn(): void {
   // 未定義命令は IISR の未定義通知（bit15）を立てる。
   cpuRegister.IISR |= 0x8000;
-  cpuRegister.IISR |= 0x0001;
+  cpuRegister.IISR |= IISR_UNDEF;
   _acceptIrq(0);
 }
 
@@ -1387,10 +1391,8 @@ function _getHWReg(hhh: number): number {
  */
 function _setHWReg(hhh: number, v: number): void {
   if (hhh === 6) {
-    // IISR の bit15（未定義通知）は sticky として保持し、
-    // seth 側では bit0 だけを更新する（未定義フラグクリアは bit0 を 0 にする想定）。
-    const msb = cpuRegister.IISR & 0x8000;
-    cpuRegister.IISR = msb | (v & 0x0001);
+    // IISR は SETH で全ビット書き換え可能とする（未定義通知の明示クリアを許可）。
+    cpuRegister.IISR = v & 0xffff;
   }
 }
 
@@ -1424,8 +1426,8 @@ function _executeOne(): void {
       else {
         _push(cpuRegister.IC);
         cpuRegister.IC = ea;
-      } // BAL: SSBR スタックに IC 積んで分岐
-    } else if (rrr === 6) {
+      } // BAL
+    } else if (mmm === 7) {
       const cur = _rdC(ea);
       const res = isHi ? (cur + 1) & 0xffff : (cur - 1) & 0xffff;
       _wrC(ea, res);
@@ -1439,549 +1441,556 @@ function _executeOne(): void {
       } // ST
     }
   } else {
-  switch (op) {
-    // ── 0x00: 未定義 → レベル0内部割り込み ─────────────────────────────
-    case 0x00:
-      _trapUndefinedInsn();
-      break;
+    switch (op) {
+      // ── 0x00: 未定義 → レベル0内部割り込み ─────────────────────────────
+      case 0x00:
+        _trapUndefinedInsn();
+        break;
 
-    // ── 0x01: MVI / LB / LS / STB / STS / CPYB / CPYS / SETB / SETS ─
-    case 0x01: {
-      if (rrr !== 7) {
-        // MVI R, imm8: 下位 8bit をロード（上位は不変）
-        _sw(rrr, (_gr(rrr) & 0xff00) | lo);
-      } else {
-        const bit7 = (lo >>> 7) & 1; // 1=STB/STS/CPYB/CPYS  0=LB/LS/SETB/SETS
-        const bBits = (lo >>> 4) & 7; // bits[6:4] = bbb or ppp
-        const bit3 = (lo >>> 3) & 1; // 1=LS/STS/CPYS/SETS  0=LB/STB/CPYB/SETB
-        const bLo = lo & 7; // bits[2:0] = ddd/sss or 7=2語命令
-        if (bLo === 7) {
-          const ad16 = _fetch();
-          if (bit7 === 0 && bit3 === 0) {
-            if (bBits !== 0) _setSegReg(bBits, _rdC(ad16) & 0xf);
-          } // LB
-          else if (bit7 === 0 && bit3 === 1) {
-            _setSpecReg(bBits, _rdC(ad16));
-          } // LS
-          else if (bit7 === 1 && bit3 === 0) {
-            _wrC(ad16, _getSegReg(bBits));
-          } // STB
-          else {
-            _wrC(ad16, _getSpecReg(bBits));
-          } // STS
+      // ── 0x01: MVI / LB / LS / STB / STS / CPYB / CPYS / SETB / SETS ─
+      case 0x01: {
+        if (rrr !== 7) {
+          // MVI R, imm8: 下位 8bit をロード（上位は不変）
+          _sw(rrr, (_gr(rrr) & 0xff00) | lo);
         } else {
-          if (bit7 === 1 && bit3 === 0) {
-            _sw(bLo, _getSegReg(bBits));
-          } // CPYB
-          else if (bit7 === 1 && bit3 === 1) {
-            _sw(bLo, _getSpecReg(bBits));
-          } // CPYS
-          else if (bit7 === 0 && bit3 === 0) {
-            if (bBits !== 0) _setSegReg(bBits, _gr(bLo) & 0xf);
-          } // SETB
-          else {
-            _setSpecReg(bBits, _gr(bLo));
-          } // SETS
-        }
-      }
-      break;
-    }
-
-    // ── 0x02: WT / PSHM / POPM / TSET / TRST ─────────────────────────
-    case 0x02: {
-      if (rrr !== 7) {
-        _doIoWrite(lo, _gr(rrr)); // WT Rs, imm8_io
-      } else if (lo === 0x0f) {
-        for (let i = 0; i <= 4; i++) _push(cpuRegister.R[i]); // PSHM
-      } else if (lo === 0x07) {
-        for (let i = 4; i >= 0; i--) cpuRegister.R[i] = _pop(); // POPM
-      } else {
-        const ad16 = _fetch();
-        const kkkk = (lo >>> 4) & 0xf;
-        const sss = lo & 7;
-        const mem = _rdC(ad16);
-        const rs = _gr(sss);
-        const test = mem & rs;
-        const res = lo & 8 ? mem | rs : mem & ~rs; // TSET : TRST
-        _wrC(ad16, res & 0xffff);
-        if (_skip(kkkk, test)) _skipNext();
-      }
-      break;
-    }
-
-    // ── 0x03: RD / NEG / FIX / FLT ───────────────────────────────────
-    case 0x03: {
-      if (rrr !== 7) {
-        _sw(rrr, _doIoRead(lo) & 0xffff); // RD R, imm8_io
-      } else {
-        const kkkk = (lo >>> 4) & 0xf;
-        const bit3 = (lo >>> 3) & 1;
-        const bit2 = (lo >>> 2) & 1;
-        if (bit2 === 1) {
-          if (bit3 === 0) {
-            // FIX R0, DR0: 浮動小数点 → int16
-            const v = Math.trunc(_fpDecode());
-            const ov = v > 32767 || v < -32768;
-            _setE(false);
-            _setOVF(ov);
-            cpuRegister.R[0] = ov ? 0 : v & 0xffff;
-            if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
+          const bit7 = (lo >>> 7) & 1; // 1=STB/STS/CPYB/CPYS  0=LB/LS/SETB/SETS
+          const bBits = (lo >>> 4) & 7; // bits[6:4] = bbb or ppp
+          const bit3 = (lo >>> 3) & 1; // 1=LS/STS/CPYS/SETS  0=LB/STB/CPYB/SETB
+          const bLo = lo & 7; // bits[2:0] = ddd/sss or 7=2語命令
+          if (bLo === 7) {
+            const ad16 = _fetch();
+            if (bit7 === 0 && bit3 === 0) {
+              if (bBits !== 0) _setSegReg(bBits, _rdC(ad16) & 0xf);
+            } // LB
+            else if (bit7 === 0 && bit3 === 1) {
+              _setSpecReg(bBits, _rdC(ad16));
+            } // LS
+            else if (bit7 === 1 && bit3 === 0) {
+              _wrC(ad16, _getSegReg(bBits));
+            } // STB
+            else {
+              _wrC(ad16, _getSpecReg(bBits));
+            } // STS
           } else {
-            // FLT DR0, R0: int16 → 浮動小数点
-            const s16 =
-              cpuRegister.R[0] < 0x8000
-                ? cpuRegister.R[0]
-                : cpuRegister.R[0] - 0x10000;
-            _fpEncode(s16);
-            _setE(false);
-            if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
+            if (bit7 === 1 && bit3 === 0) {
+              _sw(bLo, _getSegReg(bBits));
+            } // CPYB
+            else if (bit7 === 1 && bit3 === 1) {
+              _sw(bLo, _getSpecReg(bBits));
+            } // CPYS
+            else if (bit7 === 0 && bit3 === 0) {
+              if (bBits !== 0) _setSegReg(bBits, _gr(bLo) & 0xf);
+            } // SETB
+            else {
+              _setSpecReg(bBits, _gr(bLo));
+            } // SETS
           }
-        } else {
-          // NEG Rd: Rd ← -(Rd) [- E if c=0]
-          const ddd = lo & 7;
-          const carry = bit3 === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
-          const r1 = _sub(0, _gr(ddd));
-          const r2 = _sub(r1, carry);
-          _sw(ddd, r2);
-          if (_skip(kkkk, r2)) _skipNext();
         }
+        break;
       }
-      break;
-    }
 
-    // ── 0x04: 大型グループ ────────────────────────────────────────────
-    case 0x04:
-      _exec04(rrr, lo);
-      break;
+      // ── 0x02: WT / PSHM / POPM / TSET / TRST ─────────────────────────
+      case 0x02: {
+        if (rrr !== 7) {
+          _doIoWrite(lo, _gr(rrr)); // WT Rs, imm8_io
+        } else if (lo === 0x0f) {
+          for (let i = 0; i <= 4; i++) _push(cpuRegister.R[i]); // PSHM
+        } else if (lo === 0x07) {
+          for (let i = 4; i >= 0; i--) cpuRegister.R[i] = _pop(); // POPM
+        } else {
+          const ad16 = _fetch();
+          const kkkk = (lo >>> 4) & 0xf;
+          const sss = lo & 7;
+          const mem = _rdC(ad16);
+          const rs = _gr(sss);
+          const test = mem & rs;
+          const res = lo & 8 ? mem | rs : mem & ~rs; // TSET : TRST
+          _wrC(ad16, res & 0xffff);
+          if (_skip(kkkk, test)) _skipNext();
+        }
+        break;
+      }
 
-    // ── 0x05: TBIT ────────────────────────────────────────────────────
-    case 0x05: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const bitN = lo & 0xf; // ビット番号（MSB=0）
-      const mask = 1 << (15 - bitN);
-      if (_skip(kkkk, _gr(rrr) & mask)) _skipNext();
-      break;
-    }
+      // ── 0x03: RD / NEG / FIX / FLT ───────────────────────────────────
+      case 0x03: {
+        if (rrr !== 7) {
+          _sw(rrr, _doIoRead(lo) & 0xffff); // RD R, imm8_io
+        } else {
+          const kkkk = (lo >>> 4) & 0xf;
+          const bit3 = (lo >>> 3) & 1;
+          const bit2 = (lo >>> 2) & 1;
+          if (bit2 === 1) {
+            if (bit3 === 0) {
+              // FIX R0, DR0: 浮動小数点 → int16
+              const v = Math.trunc(_fpDecode());
+              const ov = v > 32767 || v < -32768;
+              _setE(false);
+              _setOVF(ov);
+              cpuRegister.R[0] = ov ? 0 : v & 0xffff;
+              if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
+            } else {
+              // FLT DR0, R0: int16 → 浮動小数点
+              const s16 =
+                cpuRegister.R[0] < 0x8000
+                  ? cpuRegister.R[0]
+                  : cpuRegister.R[0] - 0x10000;
+              _fpEncode(s16);
+              _setE(false);
+              if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
+            }
+          } else {
+            // NEG Rd: Rd ← -(Rd) [- E if c=0]
+            const ddd = lo & 7;
+            const carry = bit3 === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
+            const r1 = _sub(0, _gr(ddd));
+            const r2 = _sub(r1, carry);
+            _sw(ddd, r2);
+            if (_skip(kkkk, r2)) _skipNext();
+          }
+        }
+        break;
+      }
 
-    // ── 0x06: RBIT ────────────────────────────────────────────────────
-    case 0x06: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const mask = 1 << (15 - (lo & 0xf));
-      const res = _gr(rrr) & ~mask & 0xffff;
-      _sw(rrr, res);
-      if (_skip(kkkk, res)) _skipNext();
-      break;
-    }
+      // ── 0x04: 大型グループ ────────────────────────────────────────────
+      case 0x04:
+        _exec04(rrr, lo);
+        break;
 
-    // ── 0x07: SBIT / SRBT / DEBP / BLK / RETL / SETH / CPYH ─────────
-    case 0x07: {
-      if (rrr !== 7) {
-        // SBIT R, #N, skip
+      // ── 0x05: TBIT ────────────────────────────────────────────────────
+      case 0x05: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const bitN = lo & 0xf; // ビット番号（MSB=0）
+        const mask = 1 << (15 - bitN);
+        if (_skip(kkkk, _gr(rrr) & mask)) _skipNext();
+        break;
+      }
+
+      // ── 0x06: RBIT ────────────────────────────────────────────────────
+      case 0x06: {
         const kkkk = (lo >>> 4) & 0xf;
         const mask = 1 << (15 - (lo & 0xf));
-        const res = (_gr(rrr) | mask) & 0xffff;
+        const res = _gr(rrr) & ~mask & 0xffff;
         _sw(rrr, res);
         if (_skip(kkkk, res)) _skipNext();
-      } else if (lo === 0x07) {
-        // RETL: CSBR と IC を SSBR スタックから復元
-        cpuRegister.CSBR = _pop() & 0xf;
-        cpuRegister.IC = _pop();
-      } else if (lo === 0x17) {
-        // BLK: R0 語分を TSR0:R1(ソース) → TSR1:R2(デスティネーション) へ転送
-        // 仕様: 「R1とTSR0で指定されるアドレスから R2とTSR1で指定されるアドレスへ」
-        while (cpuRegister.R[0] !== 0) {
-          _wrB(
-            cpuRegister.R[2],
-            _rdB(cpuRegister.R[1], cpuRegister.TSR0),
-            cpuRegister.TSR1,
+        break;
+      }
+
+      // ── 0x07: SBIT / SRBT / DEBP / BLK / RETL / SETH / CPYH ─────────
+      case 0x07: {
+        if (rrr !== 7) {
+          // SBIT R, #N, skip
+          const kkkk = (lo >>> 4) & 0xf;
+          const mask = 1 << (15 - (lo & 0xf));
+          const res = (_gr(rrr) | mask) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext();
+        } else if (lo === 0x07) {
+          // RETL: CSBR と IC を SSBR スタックから復元
+          cpuRegister.CSBR = _pop() & 0xf;
+          cpuRegister.IC = _pop();
+        } else if (lo === 0x17) {
+          // BLK: R0 語分を TSR0:R1(ソース) → TSR1:R2(デスティネーション) へ転送
+          // 仕様: 「R1とTSR0で指定されるアドレスから R2とTSR1で指定されるアドレスへ」
+          while (cpuRegister.R[0] !== 0) {
+            _wrB(
+              cpuRegister.R[2],
+              _rdB(cpuRegister.R[1], cpuRegister.TSR0),
+              cpuRegister.TSR1,
+            );
+            cpuRegister.R[1] = (cpuRegister.R[1] + 1) & 0xffff;
+            cpuRegister.R[2] = (cpuRegister.R[2] + 1) & 0xffff;
+            cpuRegister.R[0] = (cpuRegister.R[0] - 1) & 0xffff;
+          }
+        } else if (lo >>> 4 === 0x7 && (lo & 8) === 0) {
+          // SRBT R0, Rs: MSB から最初の 1ビットを検索
+          const sss = lo & 7;
+          let v = _gr(sss);
+          let pos = 0x10;
+          for (let b = 15; b >= 0; b--) {
+            if ((v >>> b) & 1) {
+              pos = 15 - b;
+              v &= ~(1 << b);
+              break;
+            }
+          }
+          cpuRegister.R[0] = pos;
+          _sw(sss, v & 0xffff);
+        } else if (lo >>> 4 === 0xf && (lo & 8) === 0) {
+          // DEBP Rd, R0: R0 下位 4bit のビット番号でビットセット
+          const ddd2 = lo & 7;
+          _sw(
+            ddd2,
+            (_gr(ddd2) | (1 << (15 - (cpuRegister.R[0] & 0xf)))) & 0xffff,
           );
-          cpuRegister.R[1] = (cpuRegister.R[1] + 1) & 0xffff;
-          cpuRegister.R[2] = (cpuRegister.R[2] + 1) & 0xffff;
-          cpuRegister.R[0] = (cpuRegister.R[0] - 1) & 0xffff;
+        } else {
+          // SETH / CPYH
+          const bit7 = (lo >>> 7) & 1;
+          const hhh = (lo >>> 4) & 7;
+          const rdSrc = lo & 7;
+          if (bit7)
+            _sw(rdSrc, _getHWReg(hhh)); // CPYH
+          else _setHWReg(hhh, _gr(rdSrc)); // SETH
         }
-      } else if (lo >>> 4 === 0x7 && (lo & 8) === 0) {
-        // SRBT R0, Rs: MSB から最初の 1ビットを検索
-        const sss = lo & 7;
-        let v = _gr(sss);
-        let pos = 0x10;
-        for (let b = 15; b >= 0; b--) {
-          if ((v >>> b) & 1) {
-            pos = 15 - b;
-            v &= ~(1 << b);
-            break;
-          }
-        }
-        cpuRegister.R[0] = pos;
-        _sw(sss, v & 0xffff);
-      } else if (lo >>> 4 === 0xf && (lo & 8) === 0) {
-        // DEBP Rd, R0: R0 下位 4bit のビット番号でビットセット
-        const ddd2 = lo & 7;
-        _sw(
-          ddd2,
-          (_gr(ddd2) | (1 << (15 - (cpuRegister.R[0] & 0xf)))) & 0xffff,
-        );
-      } else {
-        // SETH / CPYH
-        const bit7 = (lo >>> 7) & 1;
-        const hhh = (lo >>> 4) & 7;
-        const rdSrc = lo & 7;
-        if (bit7 === 1)
-          _sw(rdSrc, _getHWReg(hhh)); // CPYH
-        else _setHWReg(hhh, _gr(rdSrc)); // SETH
+        break;
       }
-      break;
-    }
 
-    // ── 0x08: SI / SD ─────────────────────────────────────────────────
-    case 0x08: {
-      const kkkk = (lo >>> 4) & 0xf;
-      if (rrr === 7 && lo & 4) {
-        // SD DR0, (Ri) [, C]
-        const c = (lo >>> 3) & 1;
-        const ii = lo & 3;
-        const ea = _ri(ii);
-        const mh = _rdC(ea);
-        const ml = _rdC((ea + 1) & 0xffff);
-        const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
-        const d =
-          cpuRegister.R[0] * 65536 + cpuRegister.R[1] - (mh * 65536 + ml) - e0;
-        _setE(d < 0);
-        _setOVF(false);
-        const du = d < 0 ? d + 0x100000000 : d;
-        cpuRegister.R[0] = (du >>> 16) & 0xffff;
-        cpuRegister.R[1] = du & 0xffff;
-        if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
-      } else {
-        // SI R, #imm4（フラグ変化なし、スキップ条件は結果で評価: MN1610 仕様）
-        const dddd = lo & 0xf;
-        const siRes = (_gr(rrr) - dddd) & 0xffff;
-        _sw(rrr, siRes);
-        if (_skip(kkkk, siRes)) _skipNext();
-      }
-      break;
-    }
-
-    // ── 0x09: AI / AD ─────────────────────────────────────────────────
-    case 0x09: {
-      const kkkk = (lo >>> 4) & 0xf;
-      if (rrr === 7 && lo & 4) {
-        // AD DR0, (Ri) [, C]
-        const c = (lo >>> 3) & 1;
-        const ii = lo & 3;
-        const ea = _ri(ii);
-        const mh = _rdC(ea);
-        const ml = _rdC((ea + 1) & 0xffff);
-        const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
-        const d =
-          cpuRegister.R[0] * 65536 + cpuRegister.R[1] + (mh * 65536 + ml) + e0;
-        _setE(d > 0xffffffff);
-        _setOVF(false);
-        const du = d >>> 0;
-        cpuRegister.R[0] = (du >>> 16) & 0xffff;
-        cpuRegister.R[1] = du & 0xffff;
-        if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
-      } else {
-        // AI R, #imm4（フラグ変化なし、スキップ条件は結果で評価）
-        const aiRes = (_gr(rrr) + (lo & 0xf)) & 0xffff;
-        _sw(rrr, aiRes);
-        if (_skip(kkkk, aiRes)) _skipNext();
-      }
-      break;
-    }
-
-    // ── 0x0A: C / CB / CWR / CWI / CBR / CBI / DAS ───────────────────
-    case 0x0a: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (lo & 4) {
-          // DAS R0, (Ri) [, C]
-          const c = b3;
-          const ii = b10;
-          const m = _rdC(_ri(ii));
+      // ── 0x08: SI / SD ─────────────────────────────────────────────────
+      case 0x08: {
+        const kkkk = (lo >>> 4) & 0xf;
+        if (rrr === 7 && lo & 4) {
+          // SD DR0, (Ri) [, C]
+          const c = (lo >>> 3) & 1;
+          const ii = lo & 3;
+          const ea = _ri(ii);
+          const mh = _rdC(ea);
+          const ml = _rdC((ea + 1) & 0xffff);
           const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
-          let res = cpuRegister.R[0] - m - e0;
-          _setE(res < 0);
-          if ((cpuRegister.R[0] & 0xf) - (m & 0xf) - e0 < 0) res -= 0x06;
-          if (((cpuRegister.R[0] >>> 4) & 0xf) - ((m >>> 4) & 0xf) < 0)
-            res -= 0x60;
-          cpuRegister.R[0] = res & 0xffff;
-          if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
-        } else if (b32 === 2) {
-          const res = _sub(cpuRegister.R[0], _rdC(_ri(b10)));
-          if (_skip(kkkk, res)) _skipNext(); // CWR
-        } else {
-          const res = _sub(cpuRegister.R[0] & 0xff, _rdC(_ri(b10)) & 0xff);
-          if (_skip(kkkk, res)) _skipNext(); // CBR
-        }
-      } else if (b3 === 1 && (lo & 7) === 7) {
-        const imm = _fetch();
-        if (_skip(kkkk, _sub(_gr(rrr), imm))) _skipNext(); // CWI
-      } else if (b3 === 0 && (lo & 7) === 7) {
-        const imm = _fetch();
-        if (_skip(kkkk, _sub(_gr(rrr) & 0xff, imm & 0xff))) _skipNext(); // CBI
-      } else if (b3 === 1) {
-        if (_skip(kkkk, _sub(_gr(rrr), _gr(lo & 7)))) _skipNext(); // C
-      } else {
-        if (_skip(kkkk, _sub(_gr(rrr) & 0xff, _gr(lo & 7) & 0xff))) _skipNext(); // CB
-      }
-      break;
-    }
-
-    // ── 0x0B: A / S / AWR / SWR / AWI / SWI / DAA ────────────────────
-    case 0x0b: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (lo & 4) {
-          // DAA R0, (Ri) [, C]
-          const c = b3;
-          const ii = b10;
-          const m = _rdC(_ri(ii));
-          const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
-          let res = cpuRegister.R[0] + m + e0;
-          _setE(res > 0xffff);
-          if ((cpuRegister.R[0] & 0xf) + (m & 0xf) + e0 > 9) res += 0x06;
-          if (((res >>> 8) & 0xff) > 0x99) res += 0x0600;
-          cpuRegister.R[0] = res & 0xffff;
-          if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
-        } else if (b32 === 2) {
-          const res = _add(cpuRegister.R[0], _rdC(_ri(b10)));
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // AWR
-        } else if (b32 === 0) {
-          const res = _sub(cpuRegister.R[0], _rdC(_ri(b10)));
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // SWR
-        } else if (b3 === 1 && (lo & 7) === 7) {
-          const res = _add(cpuRegister.IC, _fetch());
-          cpuRegister.IC = res;
-          if (_skip(kkkk, res)) _skipNext(); // AWI IC
-        } else {
-          const res = _sub(cpuRegister.IC, _fetch());
-          cpuRegister.IC = res;
-          if (_skip(kkkk, res)) _skipNext(); // SWI IC
-        }
-      } else if (b3 === 1 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = _add(_gr(rrr), imm);
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // AWI
-      } else if (b3 === 0 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = _sub(_gr(rrr), imm);
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // SWI
-      } else if (b3 === 1) {
-        const res = _add(_gr(rrr), _gr(lo & 7));
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // A
-      } else {
-        const res = _sub(_gr(rrr), _gr(lo & 7));
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // S
-      }
-      break;
-    }
-
-    // ── 0x0C: OR / EOR / ORR / ORI / EORR / EORI / FM / FD ──────────
-    case 0x0c: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (b32 === 3) {
-          // FM DR0, (Ri)
-          _fpEncode(_fpDecode() * _fpDecodeAt(_ri(b10)));
-          _fpFinish(kkkk);
-        } else if (b32 === 1) {
-          // FD DR0, (Ri)
-          const me = _fpDecodeAt(_ri(b10));
-          if (me === 0) {
-            _setOVF(true);
-            _setE(false);
-            if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
-          } else {
-            _fpEncode(_fpDecode() / me);
-            _fpFinish(kkkk);
-          }
-        } else if (b32 === 2) {
-          const res = (cpuRegister.R[0] | _rdC(_ri(b10))) & 0xffff;
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // ORR
-        } else {
-          const res = (cpuRegister.R[0] ^ _rdC(_ri(b10))) & 0xffff;
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // EORR
-        }
-      } else if (b3 === 1 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = (_gr(rrr) | imm) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // ORI
-      } else if (b3 === 0 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = (_gr(rrr) ^ imm) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // EORI
-      } else if (b3 === 1) {
-        const res = (_gr(rrr) | _gr(lo & 7)) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // OR
-      } else {
-        const res = (_gr(rrr) ^ _gr(lo & 7)) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // EOR
-      }
-      break;
-    }
-
-    // ── 0x0D: AND / LAD / ANDR / ANDI / LADR / LADI / FA / FS ────────
-    case 0x0d: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (b32 === 3) {
-          // FA DR0, (Ri)
-          _fpEncode(_fpDecode() + _fpDecodeAt(_ri(b10)));
-          _fpFinish(kkkk);
-        } else if (b32 === 1) {
-          // FS DR0, (Ri)
-          _fpEncode(_fpDecode() - _fpDecodeAt(_ri(b10)));
-          _fpFinish(kkkk);
-        } else if (b32 === 2) {
-          const res = cpuRegister.R[0] & _rdC(_ri(b10)) & 0xffff;
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // ANDR
-        } else {
-          const res = _ladResult(cpuRegister.R[0], _rdC(_ri(b10)));
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // LADR
-        }
-      } else if (b3 === 1 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = _gr(rrr) & imm & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // ANDI
-      } else if (b3 === 0 && (lo & 7) === 7) {
-        const imm = _fetch();
-        const res = _ladResult(_gr(rrr), imm);
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // LADI
-      } else if (b3 === 1) {
-        const res = _gr(rrr) & _gr(lo & 7) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // AND
-      } else {
-        const res = _ladResult(_gr(rrr), _gr(lo & 7));
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // LAD
-      }
-      break;
-    }
-
-    // ── 0x0E: BSWP / DSWP / BSWR / DSWR / D ──────────────────────────
-    case 0x0e: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (b32 === 3) {
-          // D DR0, (Ri): 符号なし 32bit ÷ 16bit → 商 R0 / 剰余 R1
-          const div = _rdC(_ri(b10));
-          _setE(false);
-          if (div === 0) {
-            _setOVF(true);
-            break;
-          }
-          const n32 = ((cpuRegister.R[0] << 16) | cpuRegister.R[1]) >>> 0;
-          const q = Math.floor(n32 / div);
-          const r = n32 % div;
-          if (q > 0xffff) {
-            _setOVF(true);
-            break;
-          }
+          const d =
+            cpuRegister.R[0] * 65536 +
+            cpuRegister.R[1] -
+            (mh * 65536 + ml) -
+            e0;
+          _setE(d < 0);
           _setOVF(false);
-          cpuRegister.R[0] = q & 0xffff;
-          cpuRegister.R[1] = r & 0xffff;
-          if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
-        } else if (b32 === 2) {
-          const v = _rdC(_ri(b10));
-          const res = ((v & 0xff) << 8) | (v >>> 8); // BSWR
-          cpuRegister.R[0] = res & 0xffff;
-          if (_skip(kkkk, res)) _skipNext();
-        } else {
-          const res = _dswp(_rdC(_ri(b10)));
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // DSWR
-        }
-      } else if (b3 === 1) {
-        const v = _gr(lo & 7);
-        const res = (((v & 0xff) << 8) | (v >>> 8)) & 0xffff;
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // BSWP
-      } else {
-        const res = _dswp(_gr(lo & 7));
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // DSWP
-      }
-      break;
-    }
-
-    // ── 0x0F: MV / MVB / MVWR / MVWI / MVBR / M ──────────────────────
-    case 0x0f: {
-      const kkkk = (lo >>> 4) & 0xf;
-      const b32 = (lo >>> 2) & 3;
-      const b10 = lo & 3;
-      const b3 = (lo >>> 3) & 1;
-      if (rrr === 7) {
-        if (b32 === 3) {
-          // M DR0, (Ri): 符号なし 16bit × 16bit → 32bit
-          const p = cpuRegister.R[0] * _rdC(_ri(b10));
-          _setOVF(false);
-          _setE(false);
-          cpuRegister.R[0] = (p >>> 16) & 0xffff;
-          cpuRegister.R[1] = p & 0xffff;
+          const du = d < 0 ? d + 0x100000000 : d;
+          cpuRegister.R[0] = (du >>> 16) & 0xffff;
+          cpuRegister.R[1] = du & 0xffff;
           if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
-        } else if (b32 === 2) {
-          const res = _rdC(_ri(b10));
-          cpuRegister.R[0] = res;
-          if (_skip(kkkk, res)) _skipNext(); // MVWR
-        } else if (b3 === 0 && (lo & 7) === 7) {
-          cpuRegister.IC = _fetch(); // MVWI IC, imm16（JMP 相当）
         } else {
-          const res = (cpuRegister.R[0] & 0xff00) | (_rdC(_ri(b10)) & 0xff); // MVBR
-          cpuRegister.R[0] = res;
+          // SI R, #imm4（フラグ変化なし、スキップ条件は結果で評価: MN1610 仕様）
+          const dddd = lo & 0xf;
+          const siRes = (_gr(rrr) - dddd) & 0xffff;
+          _sw(rrr, siRes);
+          if (_skip(kkkk, siRes)) _skipNext();
+        }
+        break;
+      }
+
+      // ── 0x09: AI / AD ─────────────────────────────────────────────────
+      case 0x09: {
+        const kkkk = (lo >>> 4) & 0xf;
+        if (rrr === 7 && lo & 4) {
+          // AD DR0, (Ri) [, C]
+          const c = (lo >>> 3) & 1;
+          const ii = lo & 3;
+          const ea = _ri(ii);
+          const mh = _rdC(ea);
+          const ml = _rdC((ea + 1) & 0xffff);
+          const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
+          const d =
+            cpuRegister.R[0] * 65536 +
+            cpuRegister.R[1] +
+            (mh * 65536 + ml) +
+            e0;
+          _setE(d > 0xffffffff);
+          _setOVF(false);
+          const du = d >>> 0;
+          cpuRegister.R[0] = (du >>> 16) & 0xffff;
+          cpuRegister.R[1] = du & 0xffff;
+          if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
+        } else {
+          // AI R, #imm4（フラグ変化なし、スキップ条件は結果で評価）
+          const aiRes = (_gr(rrr) + (lo & 0xf)) & 0xffff;
+          _sw(rrr, aiRes);
+          if (_skip(kkkk, aiRes)) _skipNext();
+        }
+        break;
+      }
+
+      // ── 0x0A: C / CB / CWR / CWI / CBR / CBI / DAS ───────────────────
+      case 0x0a: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (lo & 4) {
+            // DAS R0, (Ri) [, C]
+            const c = b3;
+            const ii = b10;
+            const m = _rdC(_ri(ii));
+            const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
+            let res = cpuRegister.R[0] - m - e0;
+            _setE(res < 0);
+            if ((cpuRegister.R[0] & 0xf) - (m & 0xf) - e0 < 0) res -= 0x06;
+            if (((cpuRegister.R[0] >>> 4) & 0xf) - ((m >>> 4) & 0xf) < 0)
+              res -= 0x60;
+            cpuRegister.R[0] = res & 0xffff;
+            if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
+          } else if (b32 === 2) {
+            const res = _sub(cpuRegister.R[0], _rdC(_ri(b10)));
+            if (_skip(kkkk, res)) _skipNext(); // CWR
+          } else {
+            const res = _sub(cpuRegister.R[0] & 0xff, _rdC(_ri(b10)) & 0xff);
+            if (_skip(kkkk, res)) _skipNext(); // CBR
+          }
+        } else if (b3 === 1 && (lo & 7) === 7) {
+          const imm = _fetch();
+          if (_skip(kkkk, _sub(_gr(rrr), imm))) _skipNext(); // CWI
+        } else if (b3 === 0 && (lo & 7) === 7) {
+          const imm = _fetch();
+          if (_skip(kkkk, _sub(_gr(rrr) & 0xff, imm & 0xff))) _skipNext(); // CBI
+        } else if (b3 === 1) {
+          if (_skip(kkkk, _sub(_gr(rrr), _gr(lo & 7)))) _skipNext(); // C
+        } else {
+          if (_skip(kkkk, _sub(_gr(rrr) & 0xff, _gr(lo & 7) & 0xff)))
+            _skipNext(); // CB
+        }
+        break;
+      }
+
+      // ── 0x0B: A / S / AWR / SWR / AWI / SWI / DAA ────────────────────
+      case 0x0b: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (lo & 4) {
+            // DAA R0, (Ri) [, C]
+            const c = b3;
+            const ii = b10;
+            const m = _rdC(_ri(ii));
+            const e0 = c === 0 ? (cpuRegister.STR & STR_E ? 1 : 0) : 0;
+            let res = cpuRegister.R[0] + m + e0;
+            _setE(res > 0xffff);
+            if ((cpuRegister.R[0] & 0xf) + (m & 0xf) + e0 > 9) res += 0x06;
+            if (((res >>> 8) & 0xff) > 0x99) res += 0x0600;
+            cpuRegister.R[0] = res & 0xffff;
+            if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
+          } else if (b32 === 2) {
+            const res = _add(cpuRegister.R[0], _rdC(_ri(b10)));
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // AWR
+          } else if (b32 === 0) {
+            const res = _sub(cpuRegister.R[0], _rdC(_ri(b10)));
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // SWR
+          } else if (b3 === 1 && (lo & 7) === 7) {
+            const res = _add(cpuRegister.IC, _fetch());
+            cpuRegister.IC = res;
+            if (_skip(kkkk, res)) _skipNext(); // AWI IC
+          } else {
+            const res = _sub(cpuRegister.IC, _fetch());
+            cpuRegister.IC = res;
+            if (_skip(kkkk, res)) _skipNext(); // SWI IC
+          }
+        } else if (b3 === 1 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = _add(_gr(rrr), imm);
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // AWI
+        } else if (b3 === 0 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = _sub(_gr(rrr), imm);
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // SWI
+        } else if (b3 === 1) {
+          const res = _add(_gr(rrr), _gr(lo & 7));
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // A
+        } else {
+          const res = _sub(_gr(rrr), _gr(lo & 7));
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // S
+        }
+        break;
+      }
+
+      // ── 0x0C: OR / EOR / ORR / ORI / EORR / EORI / FM / FD ──────────
+      case 0x0c: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (b32 === 3) {
+            // FM DR0, (Ri)
+            _fpEncode(_fpDecode() * _fpDecodeAt(_ri(b10)));
+            _fpFinish(kkkk);
+          } else if (b32 === 1) {
+            // FD DR0, (Ri)
+            const me = _fpDecodeAt(_ri(b10));
+            if (me === 0) {
+              _setOVF(true);
+              _setE(false);
+              if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
+            } else {
+              _fpEncode(_fpDecode() / me);
+              _fpFinish(kkkk);
+            }
+          } else if (b32 === 2) {
+            const res = (cpuRegister.R[0] | _rdC(_ri(b10))) & 0xffff;
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // ORR
+          } else {
+            const res = (cpuRegister.R[0] ^ _rdC(_ri(b10))) & 0xffff;
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // EORR
+          }
+        } else if (b3 === 1 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = (_gr(rrr) | imm) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // ORI
+        } else if (b3 === 0 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = (_gr(rrr) ^ imm) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // EORI
+        } else if (b3 === 1) {
+          const res = (_gr(rrr) | _gr(lo & 7)) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // OR
+        } else {
+          const res = (_gr(rrr) ^ _gr(lo & 7)) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // EOR
+        }
+        break;
+      }
+
+      // ── 0x0D: AND / LAD / ANDR / ANDI / LADR / LADI / FA / FS ────────
+      case 0x0d: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (b32 === 3) {
+            // FA DR0, (Ri)
+            _fpEncode(_fpDecode() + _fpDecodeAt(_ri(b10)));
+            _fpFinish(kkkk);
+          } else if (b32 === 1) {
+            // FS DR0, (Ri)
+            _fpEncode(_fpDecode() - _fpDecodeAt(_ri(b10)));
+            _fpFinish(kkkk);
+          } else if (b32 === 2) {
+            const res = cpuRegister.R[0] & _rdC(_ri(b10)) & 0xffff;
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // ANDR
+          } else {
+            const res = _ladResult(cpuRegister.R[0], _rdC(_ri(b10)));
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // LADR
+          }
+        } else if (b3 === 1 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = _gr(rrr) & imm & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // ANDI
+        } else if (b3 === 0 && (lo & 7) === 7) {
+          const imm = _fetch();
+          const res = _ladResult(_gr(rrr), imm);
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // LADI
+        } else if (b3 === 1) {
+          const res = _gr(rrr) & _gr(lo & 7) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // AND
+        } else {
+          const res = _ladResult(_gr(rrr), _gr(lo & 7));
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // LAD
+        }
+        break;
+      }
+
+      // ── 0x0E: BSWP / DSWP / BSWR / DSWR / D ──────────────────────────
+      case 0x0e: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (b32 === 3) {
+            // D DR0, (Ri): 符号なし 32bit ÷ 16bit → 商 R0 / 剰余 R1
+            const div = _rdC(_ri(b10));
+            _setE(false);
+            if (div === 0) {
+              _setOVF(true);
+              break;
+            }
+            const n32 = ((cpuRegister.R[0] << 16) | cpuRegister.R[1]) >>> 0;
+            const q = Math.floor(n32 / div);
+            const r = n32 % div;
+            if (q > 0xffff) {
+              _setOVF(true);
+              break;
+            }
+            _setOVF(false);
+            cpuRegister.R[0] = q & 0xffff;
+            cpuRegister.R[1] = r & 0xffff;
+            if (_skip(kkkk, cpuRegister.R[0])) _skipNext();
+          } else if (b32 === 2) {
+            const v = _rdC(_ri(b10));
+            const res = ((v & 0xff) << 8) | (v >>> 8); // BSWR
+            cpuRegister.R[0] = res & 0xffff;
+            if (_skip(kkkk, res)) _skipNext();
+          } else {
+            const res = _dswp(_rdC(_ri(b10)));
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // DSWR
+          }
+        } else if (b3 === 1) {
+          const v = _gr(lo & 7);
+          const res = (((v & 0xff) << 8) | (v >>> 8)) & 0xffff;
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // BSWP
+        } else {
+          const res = _dswp(_gr(lo & 7));
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // DSWP
+        }
+        break;
+      }
+
+      // ── 0x0F: MV / MVB / MVWR / MVWI / MVBR / M ──────────────────────
+      case 0x0f: {
+        const kkkk = (lo >>> 4) & 0xf;
+        const b32 = (lo >>> 2) & 3;
+        const b10 = lo & 3;
+        const b3 = (lo >>> 3) & 1;
+        if (rrr === 7) {
+          if (b32 === 3) {
+            // M DR0, (Ri): 符号なし 16bit × 16bit → 32bit
+            const p = cpuRegister.R[0] * _rdC(_ri(b10));
+            _setOVF(false);
+            _setE(false);
+            cpuRegister.R[0] = (p >>> 16) & 0xffff;
+            cpuRegister.R[1] = p & 0xffff;
+            if (_skip(kkkk, cpuRegister.R[0] | cpuRegister.R[1])) _skipNext();
+          } else if (b32 === 2) {
+            const res = _rdC(_ri(b10));
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext(); // MVWR
+          } else if (b3 === 0 && (lo & 7) === 7) {
+            cpuRegister.IC = _fetch(); // MVWI IC, imm16（JMP 相当）
+          } else {
+            const res = (cpuRegister.R[0] & 0xff00) | (_rdC(_ri(b10)) & 0xff); // MVBR
+            cpuRegister.R[0] = res;
+            if (_skip(kkkk, res)) _skipNext();
+          }
+        } else if ((lo & 7) === 7 && b3 === 0) {
+          const imm = _fetch();
+          _sw(rrr, imm);
+          if (_skip(kkkk, imm)) _skipNext(); // MVWI
+        } else if (b3 === 1) {
+          const res = _gr(lo & 7);
+          _sw(rrr, res);
+          if (_skip(kkkk, res)) _skipNext(); // MV
+        } else {
+          const res = (_gr(rrr) & 0xff00) | (_gr(lo & 7) & 0xff); // MVB
+          _sw(rrr, res);
           if (_skip(kkkk, res)) _skipNext();
         }
-      } else if ((lo & 7) === 7 && b3 === 0) {
-        const imm = _fetch();
-        _sw(rrr, imm);
-        if (_skip(kkkk, imm)) _skipNext(); // MVWI
-      } else if (b3 === 1) {
-        const res = _gr(lo & 7);
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext(); // MV
-      } else {
-        const res = (_gr(rrr) & 0xff00) | (_gr(lo & 7) & 0xff); // MVB
-        _sw(rrr, res);
-        if (_skip(kkkk, res)) _skipNext();
+        break;
       }
-      break;
-    }
 
-    default:
-      _trapUndefinedInsn();
-      break;
-  }
+      default:
+        _trapUndefinedInsn();
+        break;
+    }
   }
   _onAfterExecute?.(getState());
 }

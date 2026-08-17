@@ -9,7 +9,7 @@ import {
   CMD_CPU_TO_IO,
   MODE,
   RESPONSE_CODE,
-  setHshkReq1,
+  setHshkInReq,
 } from "../../../src/shared/handshake/handshake_type";
 import {
   createDefaultCpuToIoHandlers,
@@ -74,15 +74,15 @@ describe("IoBoardHandshakeMock", () => {
     expect(mock.state.lastBeep).toEqual({ frequencyHz: 440, durationMs: 100 });
   });
 
-  it("HSHK_REQ_1 → IRQ2 / pending が立つ", () => {
-    mock.bus.HSHK_REQ_1 = 1;
+  it("HSHK_IN_REQ → IRQ2 / pending が立つ", () => {
+    mock.bus.HSHK_IN_REQ = 1;
     expect(getPins().IRQ2).toBe(true);
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
   });
 
-  it("CPU→IO 応答の REQ_1 は INT2 を起こさない", () => {
-    setHshkReq1(mock.bus, 1, false);
-    expect(mock.bus.HSHK_REQ_1).toBe(1);
+  it("CPU→IO 応答の IN_REQ は INT2 を起こさない", () => {
+    setHshkInReq(mock.bus, 1, false);
+    expect(mock.bus.HSHK_IN_REQ).toBe(1);
     expect(getPins().IRQ2).toBe(false);
     expect(getPendingIrq() & IRQ2_BIT).toBe(0);
   });

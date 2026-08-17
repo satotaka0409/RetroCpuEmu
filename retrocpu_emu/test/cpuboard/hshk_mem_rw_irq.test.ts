@@ -1,5 +1,5 @@
 /**
- * 製品経路: HALT 中の HSHK_REQ_1 → IRQ2 → INT2 ハンドラで 13h/14h。
+ * 製品経路: HALT 中の HSHK_IN_REQ → IRQ2 → INT2 ハンドラで 13h/14h。
  * CPU Worker と同じスライス（handshakeBusy なら 1024 命令＋ yield）。
  * 根拠: ioboard.mdc / HandShake.mdc / cpu_slice.ts
  */

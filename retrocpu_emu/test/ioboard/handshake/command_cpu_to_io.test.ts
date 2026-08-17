@@ -70,8 +70,8 @@ describe("CPU_FRAME_SIZE", () => {
   it("未定義命令LED は 2 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED]).toBe(2);
   });
-  it("ブレイク通知は 7 バイト、ステップ通知は 59 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(7);
+  it("ブレイク通知は 11 バイト、ステップ通知は 59 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(11);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(59);
   });
   it("LCD制御は 5 バイト、文字列表示は 20 バイト", () => {
@@ -331,7 +331,9 @@ describe("CpuToIoCommandDispatcher — 時刻取得(0x11)", () => {
       timestamp: ts,
       status: RESPONSE_CODE.OK,
     });
-    const response = dispatcher.dispatch(new Uint8Array([CMD_CPU_TO_IO.TIME_GET]));
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.TIME_GET]),
+    );
     expect(handlers.getTime).toHaveBeenCalledOnce();
     expect(response.length).toBe(9);
     expect([...response.slice(0, 8)]).toEqual([...ts]);
@@ -382,40 +384,139 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
   it("1Ah を onBreakNotify へ渡し OK を返す", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
-      1,
       3,
+      4,
+      0xc2,
+      9,
       0x00,
       0x00,
       0x30,
       0x00,
+      4,
+      0,
     ]);
     const response = dispatcher.dispatch(frame);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith({
-      kind: 1,
+      kind: 0,
       slot: 3,
+      flags: 0xc2,
+      breakCount: 9,
+      historyCount: 4,
       addr: 0x00003000,
     });
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("区分 3（旧ステップ）は NG", () => {
+  it("historyCount=16（満杯）をそのまま通知できる", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
+      7,
+      16,
+      0x82,
+      0,
+      0x00,
+      0x00,
+      0x40,
+      0x00,
+      16,
+      0,
+    ]);
+    const response = dispatcher.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith({
+      kind: 1,
+      slot: 7,
+      flags: 0x82,
+      breakCount: 0,
+      historyCount: 16,
+      addr: 0x00004000,
+    });
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
+
+  it("履歴件数はヘッダ位置(02h)を優先し、末尾の重複値(09h)に影響されない", () => {
+    const frame = new Uint8Array([
+      CMD_CPU_TO_IO.BREAK_NOTIFY,
+      2,
+      16,
+      0xc2,
       3,
+      0x00,
+      0x00,
+      0x30,
+      0x00,
+      0,
       0xff,
+    ]);
+    dispatcher.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        historyCount: 16,
+      }),
+    );
+  });
+
+  it("スロット 8 は NG", () => {
+    const frame = new Uint8Array([
+      CMD_CPU_TO_IO.BREAK_NOTIFY,
+      8,
+      0,
+      0,
+      0,
       0x00,
       0x00,
       0x18,
       0x00,
+      0,
+      0,
     ]);
     const response = dispatcher.dispatch(frame);
     expect(handlers.onBreakNotify).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);
   });
 
-  it("区分やスロットが範囲外なら NG", () => {
+  it("kind は flags から導出する（MEM/IO）", () => {
+    dispatcher.dispatch(
+      new Uint8Array([
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        0,
+        0,
+        0x00,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+      ]),
+    );
+    expect(handlers.onBreakNotify).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 1, historyCount: 0 }),
+    );
+
+    dispatcher.dispatch(
+      new Uint8Array([
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        1,
+        0,
+        0x01,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+      ]),
+    );
+    expect(handlers.onBreakNotify).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 2, historyCount: 0 }),
+    );
+  });
+
+  it("フレーム不足は NG", () => {
     const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.BREAK_NOTIFY, 4, 0, 0, 0, 0, 0]),
+      new Uint8Array([CMD_CPU_TO_IO.BREAK_NOTIFY, 0, 0, 0, 0]),
     );
     expect(handlers.onBreakNotify).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);

@@ -6,7 +6,7 @@
  */
 
 export type IoBoardHooks = {
-  /** CPU→IO 割り込み要求（HSHK_REQ_0 相当）がアサートされた */
+  /** CPU→IO 割り込み要求（HSHK_OUT_REQ 相当）がアサートされた */
   onCpuToIoRequest?: () => void;
   /** キーボード走査など */
   onKeyboardPoll?: () => void;

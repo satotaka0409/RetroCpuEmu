@@ -8,46 +8,77 @@
 import type { CpuIoSignals } from "../../cpuboard/mn1613/mn1613ioport";
 
 /**
- * REQ_1 を立てても INT2 を起こさない印（CPU→IO の応答）。
+ * IN_REQ を立てても INT2 を起こさない印（CPU→IO の応答）。
  * BIOS は `g_hshk_wait_req1_1` でポーリングする。INT2 を上げると
  * ハンドシェイク IRQ が status バイトをコマンドとして奪い、LCD 18h などが進まない。
  */
-export const HSHK_REQ1_NO_IRQ = Symbol("HSHK_REQ1_NO_IRQ");
+export const HSHK_IN_REQ_NO_IRQ = Symbol("HSHK_IN_REQ_NO_IRQ");
 
 /**
- * HSHK_REQ_1 をセットする。
+ * HSHK_IN_REQ をセットする。
  * @param bus ハンドシェイクバス
  * @param value 0 または 1
  * @param raiseIrq false なら INT2 を起こさない（CPU→IO 応答）
  */
-export function setHshkReq1(
+export function setHshkInReq(
   bus: CpuIoSignals,
   value: 0 | 1,
   raiseIrq = true,
 ): void {
-  const ext = bus as CpuIoSignals & { [HSHK_REQ1_NO_IRQ]?: boolean };
-  ext[HSHK_REQ1_NO_IRQ] = !raiseIrq;
+  const ext = bus as CpuIoSignals & { [HSHK_IN_REQ_NO_IRQ]?: boolean };
+  ext[HSHK_IN_REQ_NO_IRQ] = !raiseIrq;
   try {
-    bus.HSHK_REQ_1 = value;
+    bus.HSHK_IN_REQ = value;
   } finally {
-    ext[HSHK_REQ1_NO_IRQ] = false;
+    ext[HSHK_IN_REQ_NO_IRQ] = false;
   }
 }
 
 /** CpuIoSignals の初期値を生成する */
 export function createHandshakeBus(): CpuIoSignals {
-  return {
+  const bus: CpuIoSignals & {
+    HSHK_REQ_0?: 0 | 1;
+    HSHK_REQ_1?: 0 | 1;
+  } = {
     INTERRUPT_BUSY: 0,
     INT_CAUSE: 0,
     HSHK_ENA: 0,
-    HSHK_DENA: 0,
-    HSHK_DACK: 0,
+    HSHK_OUT_DENA: 0,
+    HSHK_OUT_DACK: 0,
+    HSHK_IN_DENA: 0,
+    HSHK_IN_DACK: 0,
     HSHK_IN_DATA: 0,
     HSHK_OUT_DATA: 0,
-    HSHK_REQ_0: 0,
-    HSHK_REQ_1: 0,
+    HSHK_OUT_REQ: 0,
+    HSHK_IN_REQ: 0,
     CLK: 0,
   };
+
+  // 旧テスト資産互換: REQ_0/REQ_1 を OUT_REQ/IN_REQ へ透過マップする。
+  Object.defineProperties(bus, {
+    HSHK_REQ_0: {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return bus.HSHK_OUT_REQ;
+      },
+      set(v: number) {
+        bus.HSHK_OUT_REQ = v ? 1 : 0;
+      },
+    },
+    HSHK_REQ_1: {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return bus.HSHK_IN_REQ;
+      },
+      set(v: number) {
+        bus.HSHK_IN_REQ = v ? 1 : 0;
+      },
+    },
+  });
+
+  return bus;
 }
 
 // ─────────────────────────────────────────────

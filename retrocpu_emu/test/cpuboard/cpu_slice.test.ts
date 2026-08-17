@@ -25,8 +25,8 @@ describe("cpuSlicePlan", () => {
 describe("handshakeBusyFromBus", () => {
   const idle = {
     HSHK_ENA: 0,
-    HSHK_REQ_0: 0,
-    HSHK_REQ_1: 0,
+    HSHK_OUT_REQ: 0,
+    HSHK_IN_REQ: 0,
     INTERRUPT_BUSY: 0,
   };
 
@@ -36,8 +36,8 @@ describe("handshakeBusyFromBus", () => {
 
   it("ENA / REQ_0 / REQ_1 / INTERRUPT_BUSY のいずれかで忙しい", () => {
     expect(handshakeBusyFromBus({ ...idle, HSHK_ENA: 1 })).toBe(true);
-    expect(handshakeBusyFromBus({ ...idle, HSHK_REQ_0: 1 })).toBe(true);
-    expect(handshakeBusyFromBus({ ...idle, HSHK_REQ_1: 1 })).toBe(true);
+    expect(handshakeBusyFromBus({ ...idle, HSHK_OUT_REQ: 1 })).toBe(true);
+    expect(handshakeBusyFromBus({ ...idle, HSHK_IN_REQ: 1 })).toBe(true);
     expect(handshakeBusyFromBus({ ...idle, INTERRUPT_BUSY: 1 })).toBe(true);
   });
 });

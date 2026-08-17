@@ -53,6 +53,10 @@ const HIST_ENTRY_WORDS = 33;
 const HIST_SLOT_WORDS = 16 * HIST_ENTRY_WORDS;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const SAMPLE_TIME_WORDS = [0x0123, 0x4567, 0x89ab, 0xcdef] as const;
+const OP_B_SELF = 0xcfff;
+const HIST_ENTRY_BYTES = 66;
+const FLAGS_INST = 0x40;
+const FLAGS_IO = 0x01;
 
 /**
  * handshake + 0033/0034 ポート固定の設定を作る。
@@ -126,6 +130,56 @@ async function withCase(
 }
 
 /**
+ * IO が HSHK_REQ_1 を上げるまで待つ。
+ * @param mock IO モック
+ * @param timeoutMs 上限 ms
+ */
+async function waitReq1(
+  mock: IoBoardHandshakeMock,
+  timeoutMs = 2000,
+): Promise<void> {
+  const t0 = Date.now();
+  while (mock.bus.HSHK_REQ_1 !== 1) {
+    if (Date.now() - t0 > timeoutMs) {
+      throw new Error("timeout waiting HSHK_REQ_1");
+    }
+    await new Promise((r) => setTimeout(r, 1));
+  }
+}
+
+/**
+ * ハンドシェイク IRQ ハンドラと IO→CPU 交換を並行する。
+ * @param s セッション
+ * @param mock IO モック
+ * @param toCpu IO→CPU フレーム
+ * @param fromCpu CPU→IO 待ちバイト数
+ * @returns CPU→IO 応答
+ */
+async function callHandler(
+  s: Mn1613AsmSession,
+  mock: IoBoardHandshakeMock,
+  toCpu: Uint8Array,
+  fromCpu: number,
+): Promise<Uint8Array> {
+  const io = mock.exchangeWithCpu(toCpu, fromCpu);
+  await waitReq1(mock);
+  await s.call("g_handshake_interrupt_handler", {
+    registers: { ...BASE_REGS, STR: 0 },
+  });
+  return io;
+}
+
+/**
+ * ビッグエンディアン 16bit をバッファから読む。
+ * @param buf バイト列
+ * @param off 先頭オフセット
+ * @returns 16bit
+ */
+function be16(buf: Uint8Array, off: number): number {
+  return ((buf[off]! << 8) | buf[off + 1]!) & 0xffff;
+}
+
+/**
  * ユーザースロット表へ 6 ワードを書く。
  * @param s セッション
  * @param slot 0–7
@@ -166,18 +220,48 @@ test("スロット 0 無効はスルー", async () => {
 test("スロット 0 有効・回数 0 は 1Ah を送り R0=1", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
     writeSlot(s, 0, [1, 0, 0, 0, WATCH_BYTE, 0]);
-    await Promise.all([
-      s.call("g_breakpoint_interrupt_handler", {
+    mock.start();
+    try {
+      await s.call("g_breakpoint_interrupt_handler", {
         registers: { ...BASE_REGS },
-      }),
-      mock.handleOneRequest(),
-    ]);
+      });
+    } finally {
+      await mock.stop();
+    }
     s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 1,
-      slot: 0,
-      addr: WATCH_BYTE,
-    });
+    const notify1 = mock.state.lastBreakNotify;
+    if (notify1 == null) throw new Error("missing break notify");
+    expect(notify1.kind).toBe(1);
+    expect(notify1.slot).toBe(0);
+    expect(notify1.historyCount).toBe(0);
+    expect(notify1.addr).toBe(WATCH_BYTE);
+  });
+});
+
+test("履歴満杯（16件）で停止すると 1Ah の履歴件数は 16", async () => {
+  await withCase(sessionSlot0, async (s, mock) => {
+    writeSlot(s, 0, [1, FLAGS_HIST, 0, 0, WATCH_BYTE, 0]);
+    const meta = s.wordAddr("GL_BP_HIST_META");
+    s.writeWord(meta, 16);
+    s.writeWord(meta + 1, 0);
+    s.writeWord(meta + 2, 1);
+
+    mock.start();
+    try {
+      await s.call("g_breakpoint_interrupt_handler", {
+        registers: { ...BASE_REGS },
+      });
+    } finally {
+      await mock.stop();
+    }
+
+    s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
+    const notify = mock.state.lastBreakNotify;
+    if (notify == null) throw new Error("missing break notify");
+    expect(notify.slot).toBe(0);
+    expect(notify.flags).toBe(FLAGS_HIST);
+    expect(notify.historyCount).toBe(16);
+    expect(notify.addr).toBe(WATCH_BYTE);
   });
 });
 
@@ -209,18 +293,20 @@ test("回数 2 の 1 回目はデクリメントして継続", async () => {
 test("スロット 6 もユーザ比較器として 1Ah", async () => {
   await withCase(sessionSlot6, async (s, mock) => {
     writeSlot(s, 6, [1, 0, 0, 0, WATCH_BYTE, 0]);
-    await Promise.all([
-      s.call("g_breakpoint_interrupt_handler", {
+    mock.start();
+    try {
+      await s.call("g_breakpoint_interrupt_handler", {
         registers: { ...BASE_REGS },
-      }),
-      mock.handleOneRequest(),
-    ]);
+      });
+    } finally {
+      await mock.stop();
+    }
     s.expectRegisters({ R0: 1, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 1,
-      slot: 6,
-      addr: WATCH_BYTE,
-    });
+    const notify2 = mock.state.lastBreakNotify;
+    if (notify2 == null) throw new Error("missing break notify");
+    expect(notify2.kind).toBe(1);
+    expect(notify2.slot).toBe(6);
+    expect(notify2.addr).toBe(WATCH_BYTE);
   });
 });
 
@@ -352,17 +438,228 @@ test("INT2 要因3 で停止すると main_loop の H に入る", async () => {
     });
     mock.bus.INT_CAUSE = 3;
     triggerInterrupt(2);
-    const [status] = await Promise.all([
-      run(IDLE, s.maxCycles),
-      mock.handleOneRequest(),
-    ]);
+    mock.start();
+    let status = "";
+    try {
+      status = await run(IDLE, s.maxCycles);
+    } finally {
+      await mock.stop();
+    }
     expect(status).toBe("halted");
-    expect(mock.state.lastBreakNotify).toEqual({
-      kind: 1,
-      slot: 0,
-      addr: WATCH_BYTE,
-    });
+    const notify3 = mock.state.lastBreakNotify;
+    if (notify3 == null) throw new Error("missing break notify");
+    expect(notify3.kind).toBe(1);
+    expect(notify3.slot).toBe(0);
+    expect(notify3.addr).toBe(WATCH_BYTE);
     const ic = getState().IC & 0xffff;
     expect(s.readWord((ic - 1) & 0xffff)).toBe(OP_H);
+  });
+});
+
+test("START 0x1800: 命令ブレイクで停止しレジスタ値を確認", async () => {
+  await withCase(sessionSlot0, async (s, mock) => {
+    const testRegs = {
+      0: 0x1111,
+      1: 0x2222,
+      2: 0x1234,
+      3: BASE_REGS.R3,
+      4: BASE_REGS.R4,
+    } as const;
+    const flags = FLAGS_INST | FLAGS_RD | FLAGS_HIST;
+    writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
+    mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+    s.writeWord(WATCH_WORD, OP_B_SELF);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: 0xff00,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+      R: testRegs,
+    });
+    mock.bus.INT_CAUSE = 3;
+    triggerInterrupt(2);
+    mock.start();
+    try {
+      const status = await run(WATCH_WORD, s.maxCycles);
+      expect(status).toBe("halted");
+    } finally {
+      await mock.stop();
+    }
+
+    const notify = mock.state.lastBreakNotify;
+    if (notify == null) throw new Error("missing break notify");
+    expect(notify.kind).toBe(0);
+    expect(notify.slot).toBe(0);
+    expect(notify.addr).toBe(WATCH_BYTE);
+
+    const hist = await callHandler(
+      s,
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + HIST_ENTRY_BYTES + 1,
+    );
+    const ent = 8;
+    expect(hist[0]).toBe(1);
+    expect(hist[2]).toBe(flags);
+    expect(be16(hist, ent + 10)).toBe(0);
+    expect(be16(hist, ent + 18)).toBe(testRegs[3]);
+    expect(be16(hist, ent + 20)).toBe((0xff00 - 8) & 0xffff);
+    expect(be16(hist, ent + 22)).toBe(0xff00);
+  });
+});
+
+test("START 0x1800: MEM WRITEブレイクで停止しレジスタ値と前回書き込み値を確認", async () => {
+  await withCase(sessionPrev, async (s, mock) => {
+    const testRegs = {
+      0: 0xaaaa,
+      1: 0xbbbb,
+      2: 0xcccc,
+      3: BASE_REGS.R3,
+      4: BASE_REGS.R4,
+    } as const;
+    const flags = FLAGS_WR | FLAGS_HIST;
+    writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
+    mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+    s.writeWord(WATCH_WORD, AFTER_WR);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: 0xff00,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+      R: testRegs,
+    });
+    mock.bus.INT_CAUSE = 3;
+    triggerInterrupt(2);
+    mock.start();
+    try {
+      const status = await run(WATCH_WORD, s.maxCycles);
+      expect(status).toBe("halted");
+    } finally {
+      await mock.stop();
+    }
+
+    const notify = mock.state.lastBreakNotify;
+    if (notify == null) throw new Error("missing break notify");
+    expect(notify.kind).toBe(1);
+    expect(notify.slot).toBe(0);
+    expect(notify.addr).toBe(WATCH_BYTE);
+
+    const hist = await callHandler(
+      s,
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + HIST_ENTRY_BYTES + 1,
+    );
+    const ent = 8;
+    expect(hist[0]).toBe(1);
+    expect(hist[2]).toBe(flags);
+    expect(be16(hist, ent + 10)).toBe(PREV_WR);
+    expect(be16(hist, ent + 18)).toBe(testRegs[3]);
+  });
+});
+
+test("START 0x1800: IO READブレイクで停止しレジスタ値を確認", async () => {
+  await withCase(sessionSlot0, async (s, mock) => {
+    const testRegs = {
+      0: 0x1357,
+      1: 0x2468,
+      2: 0xabcd,
+      3: BASE_REGS.R3,
+      4: BASE_REGS.R4,
+    } as const;
+    const flags = FLAGS_IO | FLAGS_RD | FLAGS_HIST;
+    writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
+    mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+    s.writeWord(WATCH_WORD, OP_B_SELF);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: 0xff00,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+      R: testRegs,
+    });
+    mock.bus.INT_CAUSE = 3;
+    triggerInterrupt(2);
+    mock.start();
+    try {
+      const status = await run(WATCH_WORD, s.maxCycles);
+      expect(status).toBe("halted");
+    } finally {
+      await mock.stop();
+    }
+
+    const notify = mock.state.lastBreakNotify;
+    if (notify == null) throw new Error("missing break notify");
+    expect(notify.kind).toBe(2);
+    expect(notify.slot).toBe(0);
+    expect(notify.addr).toBe(WATCH_BYTE);
+
+    const hist = await callHandler(
+      s,
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + HIST_ENTRY_BYTES + 1,
+    );
+    const ent = 8;
+    expect(hist[0]).toBe(1);
+    expect(hist[2]).toBe(flags);
+    expect(be16(hist, ent + 10)).toBe(0);
+    expect(be16(hist, ent + 18)).toBe(testRegs[3]);
+    expect(be16(hist, ent + 20)).toBe((0xff00 - 8) & 0xffff);
+    expect(be16(hist, ent + 22)).toBe(0xff00);
+  });
+});
+
+test("START 0x1800: IO WRITEブレイクで停止しレジスタ値と前回書き込み値を確認", async () => {
+  await withCase(sessionPrev, async (s, mock) => {
+    const testRegs = {
+      0: 0x0f0f,
+      1: 0xf0f0,
+      2: 0x55aa,
+      3: BASE_REGS.R3,
+      4: BASE_REGS.R4,
+    } as const;
+    const flags = FLAGS_IO | FLAGS_WR | FLAGS_HIST;
+    writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
+    mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
+    s.writeWord(WATCH_WORD, AFTER_WR);
+    setState({
+      STR: STR_IRQ_ENABLE,
+      SP: 0xff00,
+      CSBR: 0,
+      SSBR: 0,
+      IISR: 0,
+      R: testRegs,
+    });
+    mock.bus.INT_CAUSE = 3;
+    triggerInterrupt(2);
+    mock.start();
+    try {
+      const status = await run(WATCH_WORD, s.maxCycles);
+      expect(status).toBe("halted");
+    } finally {
+      await mock.stop();
+    }
+
+    const notify = mock.state.lastBreakNotify;
+    if (notify == null) throw new Error("missing break notify");
+    expect(notify.kind).toBe(2);
+    expect(notify.slot).toBe(0);
+    expect(notify.addr).toBe(WATCH_BYTE);
+
+    const hist = await callHandler(
+      s,
+      mock,
+      Uint8Array.from([0x17, 0x00, 0x00]),
+      8 + HIST_ENTRY_BYTES + 1,
+    );
+    const ent = 8;
+    expect(hist[0]).toBe(1);
+    expect(hist[2]).toBe(flags);
+    expect(be16(hist, ent + 10)).toBe(PREV_WR);
+    expect(be16(hist, ent + 18)).toBe(testRegs[3]);
   });
 });

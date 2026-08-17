@@ -67,6 +67,21 @@ npm start          # ビルド後 Electron 起動
 # または Cursor: 「レトロマイコンエミュ Debug」
 ```
 
+引数に json ファイルを指定することができる
+json ファイルが指定された場合は、IOボード設定エリアの設定値を読み込んで、設定してから起動する
+
+```jsonc:mn1613.json
+{
+  "clock": "0", // 0:1/1 1:1/2 2:1/4 3:1/8
+  "cpu": "1", // 1:MN1613 2:TMS9995 3:Z8002 4:MC68332
+  "address_addcount": "1", // 1:1ずつ増減 2:2ずつ増減
+  "reset_vector": "0x0108", // リセットベクター
+  "sevenseg_adddress_digit": "5", // MN1613:0x05 TMS9995:0x04 Z8002:0x04 MC68332:0x06
+  "sevenseg_data_digit": "4", // MN1613:0x04 TMS9995:0x04 Z8002:0x04 MC68332:0x04
+  "emulate_port": "29000", // エミュレータのIOボード 受付ポート番号
+}
+```
+
 > Cursor / VS Code の統合ターミナルでは `ELECTRON_RUN_AS_NODE=1` が渡り、Electron API が無効になることがある。`npm start` / launch.json では解除済み。手動起動時は `env -u ELECTRON_RUN_AS_NODE electron .` を使う。
 
 ## エミュレータのCPU入力ピンの取り扱い方

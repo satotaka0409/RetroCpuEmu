@@ -122,7 +122,7 @@ function raiseStepBreakIrq(): void {
 
 /**
  * CPU の RD/WT コールバックを IO ボードポートに接続する。
- * 既存のハンドシェイク bridge があれば 0x20〜0x24 を委譲する。
+ * 既存のハンドシェイク bridge があれば 0x20〜0x25 を委譲する。
  * 0030〜0034 は CPLD 比較器。一致時は INT2・要因 3。
  * 0036〜0037 はステップ。ヒット時は INT2・要因 4。
  */
@@ -151,9 +151,10 @@ export function attachIoBoardPorts(): void {
       hshk &&
       (p === HSHK_IO_PORT.INTERRUPT_BUSY ||
         p === HSHK_IO_PORT.INT_CAUSE ||
-        p === HSHK_IO_PORT.HSHK_CTRL ||
-        p === HSHK_IO_PORT.HSHK_IN_DATA ||
-        p === HSHK_IO_PORT.HSHK_OUT_DATA)
+        p === HSHK_IO_PORT.HSHK_OUT_CTRL ||
+        p === HSHK_IO_PORT.HSHK_IN_CTRL ||
+        p === HSHK_IO_PORT.HSHK_OUT_DATA ||
+        p === HSHK_IO_PORT.HSHK_IN_DATA)
     ) {
       return hshk.read(p);
     }

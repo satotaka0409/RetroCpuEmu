@@ -55,7 +55,7 @@ export function handshakeHandlerWordAddr(cdbPath?: string): number {
 }
 
 /**
- * IO が HSHK_REQ_1 を上げるまで待つ。
+ * IO が HSHK_IN_REQ を上げるまで待つ。
  * @param bus ハンドシェイクバス
  * @param timeoutMs 上限 ms
  */
@@ -64,9 +64,9 @@ export async function waitReq1(
   timeoutMs = 5000,
 ): Promise<void> {
   const t0 = Date.now();
-  while (bus.HSHK_REQ_1 !== 1) {
+  while (bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
-      throw new Error("timeout waiting HSHK_REQ_1");
+      throw new Error("timeout waiting HSHK_IN_REQ");
     }
     await new Promise((r) => setTimeout(r, 0));
   }
@@ -134,7 +134,7 @@ export function startHandshakeHandlerLoop(
     while (alive) {
       if (
         !busy &&
-        bus.HSHK_REQ_1 === 1 &&
+        bus.HSHK_IN_REQ === 1 &&
         getExecStatus() === "halted"
       ) {
         busy = true;

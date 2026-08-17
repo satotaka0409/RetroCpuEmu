@@ -31,8 +31,8 @@
 ;      WRITE 以外／命令は PREV=0000h。IO の AFTER は 0。リング 16、メタは _WORK。
 ;   7. 停止するとき 1Ah を CPU→IO で送り、OK/NG 1B を IO→CPU で受ける。
 ;
-; 1Ah 線上（送信 7B → 受信 1B status）:
-;   1Ah, 区分(0=命令/1=MEM/2=IO), スロット 0–7, addr32 BE
+; 1Ah 線上（送信 11B → 受信 1B status）:
+;   1Ah, slot, 履歴件数, flags, count, addr32 BE, 履歴件数, 0(pad)
 ;   ステップ通知は 1Bh（このハンドラでは出さない）。
 ;   応答は IO→CPU なので、待ちの前に INTERRUPT_BUSY を 0 にする。
 ;   BUSY=1 のままだと IO が応答を保留し、互いに待ち合う。
@@ -66,6 +66,7 @@
 	.global g_hshk_finalize_recv
 	.global g_hshk_mem_map
 	.global g_bp_hist_append
+	.global GL_BP_HIST_META
 
 ; 入口スナップ（si #BP_FR のあと X0=SP）。+1 が HSHK_BP_SNAP_* の 0
 BP_FR			.equ	HSHK_BP_SNAP_WORDS
@@ -267,9 +268,8 @@ l_bp_count_left:
 	bd	l_bp_cont
 
 ; --- 1Ah ブレイク通知。失敗しても HALT（R0=1）---
-; 入口: R2=区分、R3=スロット、X1=表
+; 入口: R3=スロット、X1=表
 ; 積む順: kind → slot → 表。SP+1=表、SP+2=slot、SP+3=kind
-; X0≡R3 なので、表を読むときは先に R4 へ取り、あとで R3 に slot を入れる
 l_bp_notify:
 	push	R2
 	push	R3
@@ -282,36 +282,101 @@ l_bp_nt_cmd:
 	mvwi	R0, #HSHK_CMD_BREAK_NOTIFY
 	bald	g_hshk_send_byte
 	cwi	R0, #HSHK_OK, NZ
-	b	l_bp_nt_kind
-	bd	l_bp_notify_fail
-l_bp_nt_kind:
-	mv	X0, SP
-	l	R0, 3(X0)		; 区分
-	andi	R0, #0x00ff
-	bald	g_hshk_send_byte
-	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_nt_slot
 	bd	l_bp_notify_fail
 l_bp_nt_slot:
 	mv	X0, SP
-	l	R0, 2(X0)		; スロット
+	l	R0, 2(X0)		; slot
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_hc
+	bd	l_bp_notify_fail
+
+; 履歴件数（Bit7 履歴有効時のみ。最大 16。無効なら 0）
+l_bp_nt_hc:
+	mv	X0, SP
+	l	R4, 1(X0)		; 表
+	l	R1, 2(X0)		; slot
+	mv	X1, R4
+	eor	R2, R2
+	l	R0, HSHK_AB_W_FLAGS(X1)
+	andi	R0, #HSHK_AB_F_HIST, NZ
+	b	l_bp_nt_hc_zero
+	b	l_bp_nt_hc_calc
+l_bp_nt_hc_zero:
+	eor	R2, R2
+	b	l_bp_nt_hc_send
+l_bp_nt_hc_calc:
+	mv	R0, R1
+	sl	R0, RE
+	a	R0, R1			; slot*3
+	mvwi	X1, #GL_BP_HIST_META
+	a	X1, R0
+	l	R2, HSHK_BH_MW_COUNT(X1)
+	andi	R2, #0x00ff
+	cwi	R2, #HSHK_BH_DEPTH, M
+	b	l_bp_nt_hc_clamp
+	b	l_bp_nt_hc_send
+l_bp_nt_hc_clamp:
+	mvi	R2, #HSHK_BH_DEPTH
+l_bp_nt_hc_send:
+	mv	X0, SP
+	st	R2, 3(X0)		; 後段で再送するので保存
+	mv	R0, R2
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_flags
+	bd	l_bp_notify_fail
+
+l_bp_nt_flags:
+	mv	X0, SP
+	l	R4, 1(X0)
+	l	R0, HSHK_AB_W_FLAGS(X1)
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_cnt
+	bd	l_bp_notify_fail
+
+l_bp_nt_cnt:
+	mv	X0, SP
+	l	R4, 1(X0)
+	l	R0, HSHK_AB_W_COUNT(X1)
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
 	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_nt_addr
 	bd	l_bp_notify_fail
+
 l_bp_nt_addr:
 	mv	X0, SP
-	l	R4, 1(X0)		; 表（X0=SP のあいだに読む）
-	l	R3, 2(X0)		; スロット
+	l	R4, 1(X0)
 	l	R0, 3(X1)		; addr 上位 16bit
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_nt_tbl2
 	bd	l_bp_notify_fail
 l_bp_nt_tbl2:
+	mv	X0, SP
+	l	R4, 1(X0)
 	l	R0, 4(X1)		; addr 下位 16bit
 	bald	g_hshk_send_word
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_hc2
+	bd	l_bp_notify_fail
+l_bp_nt_hc2:
+	mv	X0, SP
+	l	R0, 3(X0)
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_pad
+	bd	l_bp_notify_fail
+l_bp_nt_pad:
+	eor	R0, R0
+	bald	g_hshk_send_byte
 	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_send_fin
 	bd	l_bp_notify_fail

@@ -84,7 +84,7 @@ export type CodeTestIoMockEntry =
       type: "handshake";
       /** 各信号待ちのタイムアウト ms（既定は IO モック側） */
       timeoutMs?: number;
-      /** HSHK_REQ_1 を IRQ2 に連動（既定 false。コードテストはポーリング想定） */
+      /** HSHK_IN_REQ を IRQ2 に連動（既定 false。コードテストはポーリング想定） */
       syncIrq2?: boolean;
       /** true なら CPU→IO 受信ループを start() する（既定 false） */
       start?: boolean;

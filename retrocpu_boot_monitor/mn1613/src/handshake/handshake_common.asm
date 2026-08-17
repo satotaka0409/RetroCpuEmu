@@ -99,65 +99,65 @@ l_hshk_ena_cont:
 	ret
 
 ; -------------------------------------------------------
-; HSHK_DACK が期待値になるまで待つ
-; @param R0 - 期待値（0 または HSHK_DACK_BIT）
+; HSHK_OUT_DACK が期待値になるまで待つ
+; @param R0 - 期待値（0 または HSHK_OUT_DACK_BIT）
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
-l_hshk_wait_dack:
+l_hshk_wait_out_dack:
 	push	R2
 	mv	R2, R0
 	mvwi	R1, #HSHK_WAIT_MAX
-l_hshk_dack_lp:
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_DACK_BIT
+l_hshk_out_dack_lp:
+	rd	R0, HSHK_IN_CTRL
+	andi	R0, #HSHK_OUT_DACK_BIT
 	c	R0, R2, Z
-	b	l_hshk_dack_cont
+	b	l_hshk_out_dack_cont
 	mvwi	R0, #HSHK_OK
 	pop	R2
 	ret
-l_hshk_dack_cont:
+l_hshk_out_dack_cont:
 	si	R1, #1, Z
-	b	l_hshk_dack_lp
+	b	l_hshk_out_dack_lp
 	mvwi	R0, #HSHK_NG
 	pop	R2
 	ret
 
 ; -------------------------------------------------------
-; HSHK_DENA が期待値になるまで待つ
-; @param R0 - 期待値（0 または HSHK_DENA_BIT）
+; HSHK_IN_DENA が期待値になるまで待つ
+; @param R0 - 期待値（0 または HSHK_IN_DENA_BIT）
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
-l_hshk_wait_dena:
+l_hshk_wait_in_dena:
 	push	R2
 	mv	R2, R0
 	mvwi	R1, #HSHK_WAIT_MAX
-l_hshk_dena_lp:
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_DENA_BIT
+l_hshk_in_dena_lp:
+	rd	R0, HSHK_IN_CTRL
+	andi	R0, #HSHK_IN_DENA_BIT
 	c	R0, R2, Z
-	b	l_hshk_dena_cont
+	b	l_hshk_in_dena_cont
 	mvwi	R0, #HSHK_OK
 	pop	R2
 	ret
-l_hshk_dena_cont:
+l_hshk_in_dena_cont:
 	si	R1, #1, Z
-	b	l_hshk_dena_lp
+	b	l_hshk_in_dena_lp
 	mvwi	R0, #HSHK_NG
 	pop	R2
 	ret
 
 ; -------------------------------------------------------
-; HSHK_REQ_1 == 0 になるまで待つ
+; HSHK_IN_REQ == 0 になるまで待つ
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 l_hshk_wait_req1_0:
 	mvwi	R1, #HSHK_WAIT_MAX
 l_hshk_req1_lp:
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_REQ1_BIT, Z
+	rd	R0, HSHK_IN_CTRL
+	andi	R0, #HSHK_IN_REQ_BIT, Z
 	b	l_hshk_req1_cont
 	mvwi	R0, #HSHK_OK
 	ret
@@ -168,7 +168,7 @@ l_hshk_req1_cont:
 	ret
 
 ; -------------------------------------------------------
-; HSHK_REQ_1 == 1 になるまで待つ
+; HSHK_IN_REQ == 1 になるまで待つ
 ; @note 割り込みを使わず IO→CPU 依頼を待つ（BIOS の応答受信）
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
@@ -176,8 +176,8 @@ l_hshk_req1_cont:
 g_hshk_wait_req1_1:
 	mvwi	R1, #HSHK_WAIT_MAX
 l_hshk_req1s_lp:
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_REQ1_BIT, Z
+	rd	R0, HSHK_IN_CTRL
+	andi	R0, #HSHK_IN_REQ_BIT, Z
 	b	l_hshk_req1s_ok
 	si	R1, #1, Z
 	b	l_hshk_req1s_lp
@@ -226,10 +226,10 @@ g_hshk_initiate_send:
 
 	bald	l_hshk_pair_reset
 
-	mvwi	R0, #HSHK_DENA_BIT
+	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 
-	mvwi	R0, #HSHK_REQ0_BIT
+	mvwi	R0, #HSHK_OUT_REQ_BIT
 	bald	l_hshk_ctrl_set
 
 	mvwi	R0, #HSHK_ENA_BIT
@@ -239,13 +239,13 @@ g_hshk_initiate_send:
 	c	R1, R0, Z
 	b	l_hshk_init_send_fail
 
-	mvwi	R0, #HSHK_REQ0_BIT
+	mvwi	R0, #HSHK_OUT_REQ_BIT
 	bald	l_hshk_ctrl_clr
 
 	mvwi	R0, #HSHK_OK
 	ret
 l_hshk_init_send_fail:
-	mvwi	R0, #HSHK_REQ0_BIT
+	mvwi	R0, #HSHK_OUT_REQ_BIT
 	bald	l_hshk_ctrl_clr
 	mvwi	R0, #HSHK_NG
 	ret
@@ -269,11 +269,11 @@ l_hshk_flush_send:
 	mv	R0, R0, NZ
 	b	l_hshk_fs_even
 	eor	R0, R0
-	wt	R0, HSHK_IN_DATA
-	mvwi	R0, #HSHK_DENA_BIT
+	wt	R0, HSHK_OUT_DATA
+	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 	eor	R0, R0
-	bald	l_hshk_wait_dack
+	bald	l_hshk_wait_out_dack
 	mv	R1, R0
 	l	R0, *GL_HSHK_PAIR
 	andi	R0, #HSHK_PAIR_RECV
@@ -300,10 +300,10 @@ l_hshk_flush_recv:
 	mv	R0, R0, NZ
 	b	l_hshk_fr_even
 	eor	R0, R0
-	bald	l_hshk_wait_dena
+	bald	l_hshk_wait_in_dena
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_fr_fail
-	mvwi	R0, #HSHK_DACK_BIT
+	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_clr
 	l	R0, *GL_HSHK_PAIR
 	andi	R0, #HSHK_PAIR_SEND
@@ -337,11 +337,11 @@ g_hshk_send_byte:
 	mv	R0, R0, Z
 	b	l_hshk_send_2
 	mv	R0, R3
-	wt	R0, HSHK_IN_DATA
-	mvwi	R0, #HSHK_DENA_BIT
+	wt	R0, HSHK_OUT_DATA
+	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_set
-	mvwi	R0, #HSHK_DACK_BIT
-	bald	l_hshk_wait_dack
+	mvwi	R0, #HSHK_OUT_DACK_BIT
+	bald	l_hshk_wait_out_dack
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z
@@ -355,11 +355,11 @@ g_hshk_send_byte:
 	ret
 l_hshk_send_2:
 	mv	R0, R3
-	wt	R0, HSHK_IN_DATA
-	mvwi	R0, #HSHK_DENA_BIT
+	wt	R0, HSHK_OUT_DATA
+	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 	eor	R0, R0
-	bald	l_hshk_wait_dack
+	bald	l_hshk_wait_out_dack
 	mv	R1, R0
 	l	R0, *GL_HSHK_PAIR
 	andi	R0, #HSHK_PAIR_RECV
@@ -370,7 +370,7 @@ l_hshk_send_2:
 	pop	R3
 	ret
 l_hshk_send_fail:
-	mvwi	R0, #HSHK_DENA_BIT
+	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 	eor	R0, R0
 	st	R0, *GL_HSHK_PAIR
@@ -415,7 +415,7 @@ g_hshk_finalize_send:
 ; -------------------------------------------------------
 g_hshk_accept_request:
 	bald	l_hshk_pair_reset
-	mvwi	R0, #HSHK_DACK_BIT
+	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_clr
 
 	mvwi	R0, #HSHK_ENA_BIT
@@ -449,14 +449,14 @@ g_hshk_recv_byte:
 	andi	R0, #HSHK_PAIR_RECV
 	mv	R0, R0, Z
 	b	l_hshk_recv_2
-	mvwi	R0, #HSHK_DENA_BIT
-	bald	l_hshk_wait_dena
+	mvwi	R0, #HSHK_IN_DENA_BIT
+	bald	l_hshk_wait_in_dena
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_recv_fail
-	rd	R0, HSHK_OUT_DATA
+	rd	R0, HSHK_IN_DATA
 	andi	R0, #0x00ff
 	mv	R3, R0
-	mvwi	R0, #HSHK_DACK_BIT
+	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_set
 	l	R0, *GL_HSHK_PAIR
 	mvwi	R1, #HSHK_PAIR_RECV
@@ -468,13 +468,13 @@ g_hshk_recv_byte:
 	ret
 l_hshk_recv_2:
 	eor	R0, R0
-	bald	l_hshk_wait_dena
+	bald	l_hshk_wait_in_dena
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_recv_fail
-	rd	R0, HSHK_OUT_DATA
+	rd	R0, HSHK_IN_DATA
 	andi	R0, #0x00ff
 	mv	R3, R0
-	mvwi	R0, #HSHK_DACK_BIT
+	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_clr
 	l	R0, *GL_HSHK_PAIR
 	andi	R0, #HSHK_PAIR_SEND
@@ -484,7 +484,7 @@ l_hshk_recv_2:
 	pop	R3
 	ret
 l_hshk_recv_fail:
-	mvwi	R0, #HSHK_DACK_BIT
+	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_clr
 	eor	R0, R0
 	st	R0, *GL_HSHK_PAIR
