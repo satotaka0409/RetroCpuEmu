@@ -170,13 +170,13 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
 /**
  * 状態を持つ既定 CpuToIoHandlers（モニター相手のモック挙動）。
  * @param state 更新対象のモック状態
- * @param timers タイマー設定 (12h) を実際に反映する IO ボードタイマー（番号 0/1 の 2 本）。
+ * @param timer タイマー設定 (12h) を実際に反映する IO ボードタイマー（1 本）。
  *   省略した場合は設定値を state に記録するだけで割り込みは発生しない
  * @param timeSource 時刻取得 (11h) の 64bit タイマー。省略時は state.timestamp（テスト差し込み用）
  */
 export function createDefaultCpuToIoHandlers(
   state: IoBoardMockState,
-  timers?: readonly IoTimer[],
+  timer?: IoTimer | null,
   timeSource?: IoTimeSource,
 ): CpuToIoHandlers {
   return {
@@ -221,10 +221,9 @@ export function createDefaultCpuToIoHandlers(
     },
     onTimerSet(params) {
       state.lastTimer = { ...params };
-      if (!timers) return RESPONSE_CODE.OK;
-      const target = timers[params.timerNo];
-      if (!target) return RESPONSE_CODE.NG;
-      return target.configure(params);
+      if (!timer) return RESPONSE_CODE.OK;
+      if (params.timerNo !== 0) return RESPONSE_CODE.NG;
+      return timer.configure(params);
     },
     getTime() {
       return {
@@ -322,10 +321,15 @@ export class IoBoardHandshakeMock {
   readonly state: IoBoardMockState;
   readonly io: IoControlHandshake;
   /**
-   * IO ボード側タイマー 2 本（ハンドシェイク 12h のタイマー番号 0 / 1）。
-   * 満了で INT_CAUSE=番号 のレベル 2 割り込みを上げる。
+   * IO ボード側タイマー 1 本（ハンドシェイク 12h のタイマー番号 0 のみ）。
+   * 満了で INT2_CAUSE=タイマーのレベル 2 割り込みを上げる。
    */
-  readonly timers: readonly [IoTimer, IoTimer];
+  readonly timer: IoTimer;
+
+  /** @deprecated timer を参照する */
+  get timers(): readonly [IoTimer] {
+    return [this.timer];
+  }
 
   private readonly dispatcher: CpuToIoCommandDispatcher;
   private readonly timeoutMs: number;
@@ -340,8 +344,8 @@ export class IoBoardHandshakeMock {
   private abortServe = false;
   /** handleOneRequest / sendToCpu の直列化 */
   private busLock: Promise<void> = Promise.resolve();
-  /** 配送待ちのタイマー番号（レベル線相当なので同一番号の回数は畳む） */
-  private readonly timerIrqPending = new Set<number>();
+  /** 配送待ちのタイマー割り込み（レベル線相当） */
+  private timerIrqPending = false;
   private timerIrqRetry: IoTimerHandle | null = null;
 
   /**
@@ -360,18 +364,12 @@ export class IoBoardHandshakeMock {
     this.bus = createHandshakeBus();
     this.state = createIoBoardCommandState();
     this.io = new IoControlHandshake(this.bus, this.timeoutMs);
-    this.timers = [
-      new IoTimer({
-        onExpire: () => this.requestTimerInterrupt(0),
-        scheduler: this.timerScheduler,
-      }),
-      new IoTimer({
-        onExpire: () => this.requestTimerInterrupt(1),
-        scheduler: this.timerScheduler,
-      }),
-    ];
+    this.timer = new IoTimer({
+      onExpire: () => this.requestTimerInterrupt(),
+      scheduler: this.timerScheduler,
+    });
 
-    const base = createDefaultCpuToIoHandlers(this.state, this.timers);
+    const base = createDefaultCpuToIoHandlers(this.state, this.timer);
     const handlers: CpuToIoHandlers = { ...base, ...options.handlers };
     this.dispatcher = new CpuToIoCommandDispatcher(handlers);
   }
@@ -397,10 +395,10 @@ export class IoBoardHandshakeMock {
     setPins({ IRQ2: false });
   }
 
-  /** タイマー 2 本を止め、配送待ちのタイマー割り込みも捨てる */
+  /** タイマーを止め、配送待ちのタイマー割り込みも捨てる */
   stopTimers(): void {
-    for (const t of this.timers) t.stop();
-    this.timerIrqPending.clear();
+    this.timer.stop();
+    this.timerIrqPending = false;
     if (this.timerIrqRetry !== null) {
       this.timerScheduler.clearTimeout(this.timerIrqRetry);
       this.timerIrqRetry = null;
@@ -410,32 +408,29 @@ export class IoBoardHandshakeMock {
   /**
    * タイマー満了 1 回分の割り込み配送を要求する。
    * 割り込み処理中／ハンドシェイク中は INT_CAUSE を壊さないよう配送を保留する。
-   * @param timerNo 満了したタイマー番号（0 または 1）
    */
-  private requestTimerInterrupt(timerNo: number): void {
-    this.timerIrqPending.add(timerNo);
+  private requestTimerInterrupt(): void {
+    this.timerIrqPending = true;
     this.flushTimerInterrupt();
   }
 
   /**
-   * 保留中のタイマー割り込みを 1 件配送する。
+   * 保留中のタイマー割り込みを配送する。
    * INTERRUPT_BUSY=1（CPU が割り込み処理中）または HSHK_ENA=1（転送中）の間は
    * INT_CAUSE の取り違えを避けるため配送せず、短い間隔で再試行する。
-   * 2 本同時に満了した場合も要因が混ざらないよう 1 件ずつ配送する。
    */
   private flushTimerInterrupt(): void {
-    if (this.timerIrqPending.size === 0) return;
+    if (!this.timerIrqPending) return;
     if (this.bus.INTERRUPT_BUSY === 1 || this.bus.HSHK_ENA === 1) {
       this.scheduleTimerIrqRetry();
       return;
     }
-    const timerNo = [...this.timerIrqPending][0]!;
-    this.timerIrqPending.delete(timerNo);
-    this.bus.INT_CAUSE = intCauseForTimer(timerNo);
+    this.timerIrqPending = false;
+    this.bus.INT_CAUSE = intCauseForTimer();
     setPins({ IRQ2: true });
     triggerInterrupt(2);
     setPins({ IRQ2: false });
-    if (this.timerIrqPending.size > 0) this.scheduleTimerIrqRetry();
+    if (this.timerIrqPending) this.scheduleTimerIrqRetry();
   }
 
   /** 配送の再試行を 1 件だけ予約する（既に予約済みなら何もしない） */

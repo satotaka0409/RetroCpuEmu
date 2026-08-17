@@ -36,6 +36,7 @@
 ; 各割り込みは2つまで処理を登録できる。
 ; 割り込みは INT0-3 まである。
 ; INT2は、ハンドシェイク、タイマー割り込みと兼用。
+; INT1は、比較器ブレイク、ステップ実行と兼用。
 ; INT3は、ソフトウェア割り込み用である。
 ;           0:INT0-0
 ;           1:INT0-1
@@ -109,26 +110,65 @@ l_int0_handler_normal_interrupt:
 	lpsw	0
 
 ; -------------------------------------------------------
-; INT1 割り込みハンドラー
+; INT1 割り込みハンドラー（要因 Bit0: 0=比較器ブレイク、1=ステップ）
 ; -------------------------------------------------------
 g_int1_handler:
 	pshm
-	; INT1 0 割り込みハンドラー
-	mvwi	X0, #GL_INT1_ADR
-	l	R0, 1(X0)
+	cpyb	R0, TSR0
+	cpyb	R1, TSR1
+	push	R0
+	push	R1
+	si	SP, #1
+	mv	X1, SP
+	mvwi	R0, #1
+	wt	R0, INTERRUPT_BUSY
+	rd	R0, INT_CAUSE
+	andi	R0, #INT1_CAUSE_MASK
+	st	R0, 1(X1)
+	push	X1
+	; 比較器ブレイク（Bit0=0）
+	l	R0, 1(X1)
 	or	R0, R0, Z
-	balr	(R3)
-	; INT1 1 割り込みハンドラー
-	mvwi	X0, #GL_INT1_ADR
-	ai	X0, #2
-	l	R0, 1(X0)
+	b	l_int1_try_step, NZ
+	bald	g_breakpoint_interrupt_handler
 	or	R0, R0, Z
-	balr	(R3)
+	b	l_int1_halt
+	b	l_int1_epilogue
+l_int1_try_step:
+	; ステップ実行（Bit0=1。比較器は使わない）
+	l	R0, 1(X1)
+	cbi	R0, #INT1_CAUSE_STEP, NZ
+	b	l_int1_epilogue
+	bald	g_step_interrupt_handler
+	or	R0, R0, Z
+	b	l_int1_halt
+l_int1_epilogue:
+	pop	X1
+	eor	R0, R0
+	wt	R0, INTERRUPT_BUSY
+	ai	SP, #1
+	pop	R1
+	pop	R0
+	setb	R1, TSR1
+	setb	R0, TSR0
+	; 18h ステップなら LPSW 1 の直前に CPLD を武装する
+	bald	g_step_arm_cpld
 	popm
 	lpsw	1
+l_int1_halt:
+	pop	X1
+	eor	R0, R0
+	wt	R0, INTERRUPT_BUSY
+	ai	SP, #1
+	pop	R1
+	pop	R0
+	setb	R1, TSR1
+	setb	R0, TSR0
+	popm
+	bd	g_main_loop
 
 ; -------------------------------------------------------
-; INT2 割り込みハンドラー（要因 0/1=タイマー、2=ハンドシェイク、3=比較器、4=ステップ）
+; INT2 割り込みハンドラー（要因 Bit1-2: 00=タイマー、01=ハンドシェイク）
 ; -------------------------------------------------------
 g_int2_handler:
 	pshm
@@ -144,57 +184,25 @@ g_int2_handler:
 	wt	R0, INTERRUPT_BUSY
 	; 割り込み要因を読み込み
 	rd	R0, INT_CAUSE
-	andi	R0, #0x07
+	andi	R0, #INT2_CAUSE_MASK
 	; 割り込み要因を格納
 	st	R0, 1(X1)
 	push	X1
-	; TIMER 0 : INT2 0 割り込みハンドラー
-	; 要因がタイマーではない場合はスキップ
-	or	R0, R0, Z
-	b	l_next_timer1
-	mvwi	X0, #GL_INT2_ADR
-	l	R0, 1(X0)
-	; アドレスが0の場合はスキップ
-	or	R0, R0, Z
-	balr	(R3)
-l_next_timer1:
-	pop	X1
-	push	X1
-	; TIMER 1 : INT2 1 割り込みハンドラー
+	; タイマー（Bit1-2=00）: INT2 0 割り込みハンドラー
 	l	R0, 1(X1)
-	cbi	R0, #1, Z
-	b	l_next_handshake
+	or	R0, R0, Z
+	b	l_next_handshake, NZ
 	mvwi	X0, #GL_INT2_ADR
-	ai	X0, #2
 	l	R0, 1(X0)
 	or	R0, R0, Z
 	balr	(R3)
 l_next_handshake:
 	pop	X1
 	push	X1
-	; ハンドシェイク割り込みハンドラー
+	; ハンドシェイク割り込み（Bit1-2=01）
 	l	R0, 1(X1)
-	cbi	R0, #2, NZ
+	cbi	R0, #INT2_CAUSE_HSHK, NZ
 	bald	g_handshake_interrupt_handler
-	pop	X1
-	push	X1
-	; ブレイクポイント割り込みハンドラー（要因 3）
-	l	R0, 1(X1)
-	cbi	R0, #INT_CAUSE_ADDR_BREAK, Z
-	b	l_int2_try_step
-	bald	g_breakpoint_interrupt_handler
-	or	R0, R0, Z
-	b	l_int2_halt
-	b	l_int2_epilogue
-l_int2_try_step:
-	; ステップ実行（要因 4。比較器は使わない）
-	l	R0, 1(X1)
-	cbi	R0, #INT_CAUSE_STEP, Z
-	b	l_int2_epilogue
-	bald	g_step_interrupt_handler
-	or	R0, R0, Z
-	b	l_int2_halt
-l_int2_epilogue:
 	pop	X1
 	; 割り込み処理実行中フラグをクリア
 	eor	R0, R0
@@ -205,21 +213,8 @@ l_int2_epilogue:
 	pop	R0
 	setb	R1, TSR1
 	setb	R0, TSR0
-	; 18h ステップなら LPSW 2 の直前に CPLD を武装する
-	bald	g_step_arm_cpld
 	popm
 	lpsw	2
-l_int2_halt:
-	pop	X1
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
-	ai	SP, #1
-	pop	R1
-	pop	R0
-	setb	R1, TSR1
-	setb	R0, TSR0
-	popm
-	bd	g_main_loop
 
 ; -------------------------------------------------------
 ; INT3 割り込みハンドラー

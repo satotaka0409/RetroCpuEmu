@@ -17,8 +17,6 @@
 LCD_CLEAR	.equ	0
 LCD_DISPLAY	.equ	2
 LCD_DISP_ON	.equ	1
-HELLO_MSG1_LEN	.equ	len(hello_msg1)
-HELLO_MSG2_LEN	.equ	len(hello_msg2)
 
 	.area	_CODE		(REL,CON)
 	.org	0x1800
@@ -39,12 +37,12 @@ g_user_main:
 	bald	g_bios_lcd_control
 
 	eor	R0, R0			; 行 0 / 列 0（Bit8-9=行, Bit0-7=列）
-	mvwi	R1, #HELLO_MSG1_LEN
+	mvwi	R1, #len(hello_msg1)
 	mvwi	R2, #hello_msg1
 	bald	g_bios_lcd_text
 
 	mvwi	R0, #0x100		; 行 1 / 列 0
-	mvwi	R1, #HELLO_MSG2_LEN
+	mvwi	R1, #len(hello_msg2)
 	mvwi	R2, #hello_msg2
 	bald	g_bios_lcd_text
 

@@ -289,14 +289,12 @@ describe("CpuToIoCommandDispatcher — タイマー設定(0x12)", () => {
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("onTimerSet に渡されるタイマー番号・周期・回数が正確", () => {
-    dispatcher.dispatch(
+  it("タイマー番号 1 は NG（ハンドラは呼ばない）", () => {
+    const response = dispatcher.dispatch(
       new Uint8Array([CMD_CPU_TO_IO.TIMER_SET, 0x01, 0x12, 0x34, 0xab, 0xcd]),
     );
-    const received = vi.mocked(handlers.onTimerSet).mock.calls[0][0];
-    expect(received.timerNo).toBe(1);
-    expect(received.periodMs).toBe(0x1234);
-    expect(received.count).toBe(0xabcd);
+    expect(response[0]).toBe(RESPONSE_CODE.NG);
+    expect(handlers.onTimerSet).not.toHaveBeenCalled();
   });
 
   it("count=0 は無限繰り返しとして正しく渡される", () => {
@@ -307,7 +305,7 @@ describe("CpuToIoCommandDispatcher — タイマー設定(0x12)", () => {
     expect(received.count).toBe(0);
   });
 
-  it("タイマー番号が 0/1 以外なら NG（ハンドラは呼ばない）", () => {
+  it("タイマー番号が 0 以外なら NG（ハンドラは呼ばない）", () => {
     const response = dispatcher.dispatch(
       new Uint8Array([CMD_CPU_TO_IO.TIMER_SET, 0x02, 0x00, 0x64, 0x00, 0x00]),
     );

@@ -1,5 +1,5 @@
 /**
- * g_breakpoint_interrupt_handler（INT2 / INT_CAUSE=3 → 1Ah）
+ * g_breakpoint_interrupt_handler（INT1 / INT1_CAUSE=0 → 1Ah）
  * 根拠: HandShake.mdc「ブレイク通知」/ breakpoint.mdc /
  * MN1613_CPUボードメモリ_IOマップ.mdc（0033/0034）
  */
@@ -425,7 +425,7 @@ for (const c of READ_MISMATCH) {
   });
 }
 
-test("INT2 要因3 で停止すると main_loop の H に入る", async () => {
+test("INT1 ブレイクで停止すると main_loop の H に入る", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
     writeSlot(s, 0, [1, 0, 0, 0, WATCH_BYTE, 0]);
     s.writeWord(IDLE, OP_H);
@@ -436,8 +436,8 @@ test("INT2 要因3 で停止すると main_loop の H に入る", async () => {
       SSBR: 0,
       IISR: 0,
     });
-    mock.bus.INT_CAUSE = 3;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 0;
+    triggerInterrupt(1);
     mock.start();
     let status = "";
     try {
@@ -477,8 +477,8 @@ test("START 0x1800: 命令ブレイクで停止しレジスタ値を確認", asy
       IISR: 0,
       R: testRegs,
     });
-    mock.bus.INT_CAUSE = 3;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 0;
+    triggerInterrupt(1);
     mock.start();
     try {
       const status = await run(WATCH_WORD, s.maxCycles);
@@ -530,8 +530,8 @@ test("START 0x1800: MEM WRITEブレイクで停止しレジスタ値と前回書
       IISR: 0,
       R: testRegs,
     });
-    mock.bus.INT_CAUSE = 3;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 0;
+    triggerInterrupt(1);
     mock.start();
     try {
       const status = await run(WATCH_WORD, s.maxCycles);
@@ -581,8 +581,8 @@ test("START 0x1800: IO READブレイクで停止しレジスタ値を確認", as
       IISR: 0,
       R: testRegs,
     });
-    mock.bus.INT_CAUSE = 3;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 0;
+    triggerInterrupt(1);
     mock.start();
     try {
       const status = await run(WATCH_WORD, s.maxCycles);
@@ -634,8 +634,8 @@ test("START 0x1800: IO WRITEブレイクで停止しレジスタ値と前回書�
       IISR: 0,
       R: testRegs,
     });
-    mock.bus.INT_CAUSE = 3;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 0;
+    triggerInterrupt(1);
     mock.start();
     try {
       const status = await run(WATCH_WORD, s.maxCycles);

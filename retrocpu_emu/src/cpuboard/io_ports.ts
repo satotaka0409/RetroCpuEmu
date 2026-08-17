@@ -73,9 +73,9 @@ export function attachHandshakeBus(bus: CpuIoSignals | null): void {
 }
 
 /**
- * 割り込み要因（IO:0021 Bit0-2）を IO ボード側から設定する。
- * ハンドシェイクバス接続時はバスへ、未接続時は内部ラッチへ書く。
- * @param cause INT_CAUSE_CODE の値（下位 3bit のみ有効）
+ * 割り込み要因（IO:0021）を IO ボード側から設定する。
+ * Bit0=INT1 要因、Bit1-2=INT2 要因。
+ * @param cause ポート値（下位 3bit のみ有効）
  */
 export function setIntCause(cause: number): void {
   _intCause = cause & 0x07;
@@ -103,28 +103,28 @@ export function isHandshakeActive(): boolean {
 }
 
 /**
- * アドレス比較一致時: INT_CAUSE=3（ADDR_BREAK）を載せ、レベル2割り込みを上げる。
- * 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc（要因番号 3）
+ * アドレス比較一致時: INT1_CAUSE=0 を載せ、レベル1割り込みを上げる。
+ * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
  */
 function raiseAddrBreakIrq(_slot: number): void {
   setIntCause(INT_CAUSE_CODE.ADDR_BREAK);
-  triggerInterrupt(2);
+  triggerInterrupt(1);
 }
 
 /**
- * ステップワンショット: INT_CAUSE=4（STEP）を載せ、レベル2割り込みを上げる。
- * 根拠: breakpoint.mdc（要因番号 4）
+ * ステップワンショット: INT1_CAUSE=1 を載せ、レベル1割り込みを上げる。
+ * 根拠: breakpoint.mdc
  */
 function raiseStepBreakIrq(): void {
   setIntCause(INT_CAUSE_CODE.STEP);
-  triggerInterrupt(2);
+  triggerInterrupt(1);
 }
 
 /**
  * CPU の RD/WT コールバックを IO ボードポートに接続する。
  * 既存のハンドシェイク bridge があれば 0x20〜0x25 を委譲する。
- * 0030〜0034 は CPLD 比較器。一致時は INT2・要因 3。
- * 0036〜0037 はステップ。ヒット時は INT2・要因 4。
+ * 0030〜0034 は CPLD 比較器。一致時は INT1・INT1_CAUSE=0。
+ * 0036〜0037 はステップ。ヒット時は INT1・INT1_CAUSE=1。
  */
 export function attachIoBoardPorts(): void {
   const hshk = _handshakeBus

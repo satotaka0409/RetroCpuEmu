@@ -172,59 +172,25 @@ test("g_set_int_adr で R1=R2=0 ならスロットをクリアする", async () 
   });
 });
 
-test("INT1 で登録ハンドラが BALR されカウンタが増える", async () => {
-  await withCase(async (s, mock) => {
-    writeIncRetlStub(s, HANDLER0, COUNTER0);
-    await setIntAdr(2, 0, HANDLER0); // INT1-0
-    await raiseAndRunToIdle(s, mock, 1);
-    expect(s.readWord(COUNTER0)).toBe(1);
-    expect(s.readWord(COUNTER1)).toBe(0);
-  });
-});
-
-test("INT1 の 2 スロットとも呼ばれる", async () => {
+test("INT2 要因タイマーは INT2-0 スロットだけ呼ぶ", async () => {
   await withCase(async (s, mock) => {
     writeIncRetlStub(s, HANDLER0, COUNTER0);
     writeIncRetlStub(s, HANDLER1, COUNTER1);
-    await setIntAdr(2, 0, HANDLER0);
-    await setIntAdr(3, 0, HANDLER1);
-    await raiseAndRunToIdle(s, mock, 1);
-    expect(s.readWord(COUNTER0)).toBe(1);
-    expect(s.readWord(COUNTER1)).toBe(1);
-  });
-});
-
-test("INT2 要因0はタイマー0スロットだけ呼ぶ", async () => {
-  await withCase(async (s, mock) => {
-    writeIncRetlStub(s, HANDLER0, COUNTER0);
-    writeIncRetlStub(s, HANDLER1, COUNTER1);
-    await setIntAdr(4, 0, HANDLER0); // INT2-0 = timer0
-    await setIntAdr(5, 0, HANDLER1); // INT2-1 = timer1
+    await setIntAdr(4, 0, HANDLER0); // INT2-0 = timer
+    await setIntAdr(5, 0, HANDLER1); // INT2-1（未使用）
     await raiseAndRunToIdle(s, mock, 2, 0);
     expect(s.readWord(COUNTER0)).toBe(1);
     expect(s.readWord(COUNTER1)).toBe(0);
   });
 });
 
-test("INT2 要因1はタイマー1スロットだけ呼ぶ", async () => {
+test("INT2 要因ハンドシェイクはタイマー登録を呼ばない", async () => {
   await withCase(async (s, mock) => {
     writeIncRetlStub(s, HANDLER0, COUNTER0);
     writeIncRetlStub(s, HANDLER1, COUNTER1);
     await setIntAdr(4, 0, HANDLER0);
     await setIntAdr(5, 0, HANDLER1);
-    await raiseAndRunToIdle(s, mock, 2, 1);
-    expect(s.readWord(COUNTER0)).toBe(0);
-    expect(s.readWord(COUNTER1)).toBe(1);
-  });
-});
-
-test("INT2 要因3（アドレスブレイク等）はタイマー登録を呼ばない", async () => {
-  await withCase(async (s, mock) => {
-    writeIncRetlStub(s, HANDLER0, COUNTER0);
-    writeIncRetlStub(s, HANDLER1, COUNTER1);
-    await setIntAdr(4, 0, HANDLER0);
-    await setIntAdr(5, 0, HANDLER1);
-    await raiseAndRunToIdle(s, mock, 2, 3);
+    await raiseAndRunToIdle(s, mock, 2, 2);
     expect(s.readWord(COUNTER0)).toBe(0);
     expect(s.readWord(COUNTER1)).toBe(0);
   });

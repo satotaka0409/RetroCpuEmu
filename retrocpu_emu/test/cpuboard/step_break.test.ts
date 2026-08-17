@@ -1,6 +1,6 @@
 /**
  * CPLD ステップ実行（IO:0036–0037）
- * 根拠: breakpoint.mdc「ステップ実行」（INT2・要因 4）
+ * 根拠: breakpoint.mdc「ステップ実行」（INT1・INT1_CAUSE=1）
  *
  * LPSW 2 の次の命令フェッチでワンショット。データ READ や 2 語目では発火しない。
  */
@@ -20,7 +20,7 @@ import {
 } from "../../src/cpuboard/io_ports";
 import { INT_CAUSE_CODE } from "../../src/shared/handshake/handshake_type";
 import {
-  STR_M2,
+  STR_M1,
   getMemory,
   getPendingIrq,
   getState,
@@ -32,8 +32,8 @@ import {
   step,
 } from "../../src/cpuboard/mn1613/mn1613";
 
-/** IRQ2 のペンディングビット */
-const IRQ2_BIT = 0x04;
+/** IRQ1 のペンディングビット */
+const IRQ1_BIT = 0x02;
 /** EOR R0, R0 */
 const OP_EOR_R0 = 0x6000;
 /** H */
@@ -45,10 +45,10 @@ const LPSW2_STR_ADDR = 4;
 const LPSW2_IC_ADDR = 5;
 /** 復帰先（ユーザ 1 命令） */
 const USER_IC = 0x0010;
-/** レベル2 ISR（NPP=1 → NPSW 0x0100、LL=2 は +4/+5） */
-const L2_NPSW_STR = 0x0104;
-const L2_NPSW_IC = 0x0105;
-const L2_ISR_IC = 0x0110;
+/** レベル1 ISR（NPP=1 → NPSW 0x0100、LL=1 は +2/+3） */
+const L1_NPSW_STR = 0x0102;
+const L1_NPSW_IC = 0x0103;
+const L1_ISR_IC = 0x0108;
 
 /**
  * メモリ先頭へワード列を載せ、IC=0 から実行できる状態にする。
@@ -194,46 +194,46 @@ describe("ステップ実行 IO:0036–0037", () => {
     expect(stepBreak.getEnable()).toBe(1);
   });
 
-  it("LPSW 2 の次の命令フェッチで INT2・要因4 が立ち ENA が落ちる", () => {
+  it("LPSW 2 の次の命令フェッチで INT1・INT1_CAUSE=1 が立ち ENA が落ちる", () => {
     placeLpsw2Target([OP_EOR_R0, OP_H]);
     wtPort(IO_PORT_STEP_COM, STEP_BRK_COM_LPSW2);
     wtPort(IO_PORT_STEP_ENA, 1);
 
     loadProg([STEP_BRK_COM_LPSW2, OP_H]);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
 
     step();
     expect(getState().IC).toBe(USER_IC);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
     expect(stepBreak.getPhase()).toBe("armed");
     expect(stepBreak.getEnable()).toBe(1);
 
     setState({ IC: USER_IC });
     startRun();
     step();
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.STEP);
     expect(rdPort(IO_PORT_STEP_ENA)).toBe(0);
     expect(stepBreak.getPhase()).toBe("idle");
   });
 
-  it("ユーザ命令の実行後に M2 が立っていればレベル2 ISR へ入る", () => {
+  it("ユーザ命令の実行後に M1 が立っていればレベル1 ISR へ入る", () => {
     const view = new DataView(getMemory());
-    view.setUint16(L2_NPSW_STR * 2, 0, false);
-    view.setUint16(L2_NPSW_IC * 2, L2_ISR_IC, false);
-    view.setUint16(L2_ISR_IC * 2, OP_H, false);
-    placeLpsw2Target([OP_EOR_R0, OP_H], STR_M2);
+    view.setUint16(L1_NPSW_STR * 2, 0, false);
+    view.setUint16(L1_NPSW_IC * 2, L1_ISR_IC, false);
+    view.setUint16(L1_ISR_IC * 2, OP_H, false);
+    placeLpsw2Target([OP_EOR_R0, OP_H], STR_M1);
     wtPort(IO_PORT_STEP_COM, STEP_BRK_COM_LPSW2);
     wtPort(IO_PORT_STEP_ENA, 1);
     loadProg([STEP_BRK_COM_LPSW2, OP_H]);
     step();
-    setState({ IC: USER_IC, STR: STR_M2 });
+    setState({ IC: USER_IC, STR: STR_M1 });
     startRun();
     step();
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     step();
-    expect(getState().IC).toBe(L2_ISR_IC + 1);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getState().IC).toBe(L1_ISR_IC + 1);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
   });
 
   it("ENA=0 なら LPSW 2 を実行しても上がらない", () => {
@@ -245,7 +245,7 @@ describe("ステップ実行 IO:0036–0037", () => {
     setState({ IC: USER_IC });
     startRun();
     step();
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
   });
 
   it("メモリ READ でトリガ語が出ても武装しない", () => {
@@ -255,7 +255,7 @@ describe("ステップ実行 IO:0036–0037", () => {
     wtPort(IO_PORT_STEP_ENA, 1);
     runSteps([0x2708, dataAddr, OP_H], 1);
     expect(stepBreak.getPhase()).toBe("idle");
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
     expect(rdPort(IO_PORT_STEP_ENA)).toBe(1);
   });
 
@@ -266,11 +266,11 @@ describe("ステップ実行 IO:0036–0037", () => {
 
     step();
     expect(getState().R[0]).toBe(0x1234);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
     expect(stepBreak.getPhase()).toBe("armed");
 
     step();
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.STEP);
     expect(rdPort(IO_PORT_STEP_ENA)).toBe(0);
   });
@@ -282,7 +282,7 @@ describe("ステップ実行 IO:0036–0037", () => {
     step();
     expect(stepBreak.getPhase()).toBe("armed");
     step();
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(stepBreak.getEnable()).toBe(0);
     const pending = getPendingIrq();
     step();

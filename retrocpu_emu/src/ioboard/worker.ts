@@ -174,7 +174,7 @@ async function runIoBoardReset(reason: string): Promise<void> {
   }
   resetBusy = true;
   try {
-    for (const t of intervalTimers) t.stop();
+    intervalTimer.stop();
     resetIoBoardCommandState(cmdState);
     resetLedDisplay();
     resetUndefLed();
@@ -212,26 +212,18 @@ let lastUndefInsn = false;
 
 /**
  * タイマー満了をレベル 2 割り込みとして CPU ボードへ送る。
- * 割り込み要因はタイマー番号（0 / 1）。
- * @param timerNo 満了したタイマー番号
+ * 割り込み要因は INT2_CAUSE=タイマー（0x00）。
  */
-function raiseTimerInterrupt(timerNo: 0 | 1): void {
-  void link.raiseInterrupt(2, intCauseForTimer(timerNo)).catch((e: unknown) => {
+function raiseTimerInterrupt(): void {
+  void link.raiseInterrupt(2, intCauseForTimer()).catch((e: unknown) => {
     log.error("タイマー割り込みの配送に失敗", {
-      timerNo,
       err: e instanceof Error ? e.message : String(e),
     });
   });
 }
 
-/**
- * IO ボードのタイマー 2 本（ハンドシェイク 12h のタイマー番号 0 / 1）。
- * 初期化直後は停止しており、12h を受けたときだけ動き出す。
- */
-const intervalTimers: readonly [IoTimer, IoTimer] = [
-  new IoTimer({ onExpire: () => raiseTimerInterrupt(0) }),
-  new IoTimer({ onExpire: () => raiseTimerInterrupt(1) }),
-];
+/** IO ボードのタイマー 1 本（ハンドシェイク 12h のタイマー番号 0 のみ） */
+const intervalTimer = new IoTimer({ onExpire: () => raiseTimerInterrupt() });
 
 /** 64bit 時刻（11h）。IO ボード開始で 0 クリア、だいたい 10µs ごとに +1 */
 const wallClock = new IoTimeCounter();
@@ -242,7 +234,7 @@ const wallClock = new IoTimeCounter();
  */
 const cmdState = createIoBoardCommandState();
 const cmdDispatcher = new CpuToIoCommandDispatcher(
-  createDefaultCpuToIoHandlers(cmdState, intervalTimers, wallClock),
+  createDefaultCpuToIoHandlers(cmdState, intervalTimer, wallClock),
 );
 
 /**
@@ -264,7 +256,7 @@ link.setCpuToIoFrameHandler((frame) => {
   const response = cmdDispatcher.dispatch(frame);
   if (cmd === CMD_CPU_TO_IO.TIMER_SET) {
     const timerNo = frame[1] ?? 0;
-    const state = intervalTimers[timerNo]?.getState();
+    const state = timerNo === 0 ? intervalTimer.getState() : undefined;
     log.info("タイマー設定を受理 (12h)", {
       timerNo,
       periodMs: state?.periodMs ?? 0,
@@ -459,7 +451,7 @@ function stop(): void {
   running = false;
   Atomics.store(board.ctrl, CTRL.IO_RUNNING, 0);
   wallClock.stop();
-  for (const t of intervalTimers) t.stop();
+  intervalTimer.stop();
   if (timer) {
     clearTimeout(timer);
     timer = null;

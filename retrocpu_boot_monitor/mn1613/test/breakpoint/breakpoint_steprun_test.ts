@@ -1,5 +1,5 @@
 /**
- * ステップ実行（18h / 要因 4 / CPLD 0036・0037）
+ * ステップ実行（18h / INT1_CAUSE=1 / CPLD 0036・0037）
  * 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
  * MN1613_CPUボードメモリ_IOマップ.mdc（STEP_BRK_ENA / STEP_BRK_COM）
  */
@@ -147,7 +147,7 @@ test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", as
   });
 });
 
-test("要因 4 の停止は 1Bh に監視 IC を載せ履歴は書かない", async () => {
+test("INT1_CAUSE=1 の停止は 1Bh に監視 IC を載せ履歴は書かない", async () => {
   await withCase(async (s, mock) => {
     // 要因 4 の INT2 から 1Bh。開始 IC が通知アドレスになる。
     s.writeWord(USER_IC, OP_H);
@@ -158,8 +158,8 @@ test("要因 4 の停止は 1Bh に監視 IC を載せ履歴は書かない", as
       SSBR: 0,
       IISR: 0,
     });
-    mock.bus.INT_CAUSE = 4;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 1;
+    triggerInterrupt(1);
     const [status] = await Promise.all([
       run(USER_IC, s.maxCycles),
       mock.handleOneRequest(),
@@ -173,7 +173,7 @@ test("要因 4 の停止は 1Bh に監視 IC を載せ履歴は書かない", as
   });
 });
 
-test("INT2 要因 4 で停止すると main_loop の H に入る", async () => {
+test("INT1 ステップで停止すると main_loop の H に入る", async () => {
   await withCase(async (s, mock) => {
     s.writeWord(IDLE, OP_H);
     s.writeWord(IC_SAVE, USER_IC);
@@ -184,8 +184,8 @@ test("INT2 要因 4 で停止すると main_loop の H に入る", async () => {
       SSBR: 0,
       IISR: 0,
     });
-    mock.bus.INT_CAUSE = 4;
-    triggerInterrupt(2);
+    mock.bus.INT_CAUSE = 1;
+    triggerInterrupt(1);
     const [status] = await Promise.all([
       run(IDLE, s.maxCycles),
       mock.handleOneRequest(),

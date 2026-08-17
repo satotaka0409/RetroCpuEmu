@@ -1,5 +1,5 @@
 ; breakpoint.asm
-; CPLD 比較器ヒット（INT2 / INT_CAUSE=3）の処理
+; CPLD 比較器ヒット（INT1 / INT1_CAUSE=0）の処理
 ;
 ; 根拠:
 ;   HandShake.mdc（1Ah ブレイク通知 / 10h スロット表）
@@ -7,7 +7,7 @@
 ;   breakpoint.mdc / retrocpu_debug.mdc
 ;
 ; 呼び出し:
-;   g_int2_handler が INT_CAUSE=3 のとき BALD する。
+;   g_int1_handler が INT1_CAUSE=0 のとき BALD する。
 ;   戻り R0=0 → INT2 は LPSW 2 でユーザへ戻る（スルー）。
 ;   戻り R0=1 → INT2 はスタックをほどいて g_main_loop へ（モニタ HALT）。
 ;
@@ -94,7 +94,7 @@ BP_COND_AND_Z		.equ	6	; (access AND data) = 0
 ; 0=条件なし（比較しない）、7=未定義 → スルー
 
 ; -------------------------------------------------------
-; アドレスブレイク（INT_CAUSE=3）
+; アドレスブレイク（INT1 / INT1_CAUSE=0）
 ; @return R0 - 0=継続（LPSW 2） / 1=モニタ HALT（g_main_loop）
 ; @Destruction R0, R1, R2（R3–R4 は退避。値比較時は TSR0 を一時変更）
 ; -------------------------------------------------------

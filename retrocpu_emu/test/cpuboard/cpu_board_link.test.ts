@@ -75,16 +75,17 @@ describe("ボードリンク: IO→CPU 割り込み要求 / CPU→IO フレー�
     expect(getPendingIrq() & IRQ2_BIT).toBe(0);
   });
 
-  it("タイマー0の割り込み要求で INT_CAUSE=0 とレベル2割り込みが立つ", async () => {
-    await client.raiseInterrupt(2, INT_CAUSE_CODE.TIMER0);
+  it("タイマーの割り込み要求で INT2_CAUSE=タイマー(0x00) とレベル2割り込みが立つ", async () => {
+    await client.raiseInterrupt(2, INT_CAUSE_CODE.TIMER);
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
-    expect(readIntCauseFromCpu()).toBe(INT_CAUSE_CODE.TIMER0);
+    expect(readIntCauseFromCpu()).toBe(INT_CAUSE_CODE.TIMER);
   });
 
-  it("タイマー1の割り込み要求では INT_CAUSE=1 が読める", async () => {
-    await client.raiseInterrupt(2, INT_CAUSE_CODE.TIMER1);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
-    expect(readIntCauseFromCpu()).toBe(INT_CAUSE_CODE.TIMER1);
+  it("ブレイクの割り込み要求で INT1_CAUSE=0 とレベル1割り込みが立つ", async () => {
+    const IRQ1_BIT = 0x02;
+    await client.raiseInterrupt(1, INT_CAUSE_CODE.ADDR_BREAK);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
+    expect(readIntCauseFromCpu()).toBe(INT_CAUSE_CODE.ADDR_BREAK);
   });
 
   it("CPU→IO フレームを転送して IO 側の応答が返る", async () => {

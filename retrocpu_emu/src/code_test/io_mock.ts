@@ -138,8 +138,8 @@ export class CodeTestIoMock {
   /**
    * エミュレータの RD/WT をこのモックへ差し替える。
    * handshake があればバスも attach する。
-   * 0030–0034 は CPLD 比較器へ通し、一致時は INT2・要因 3。
-   * 0036–0037 はステップ。ヒット時は INT2・要因 4。
+   * 0030–0034 は CPLD 比較器へ通し、一致時は INT1・INT1_CAUSE=0。
+   * 0036–0037 はステップ。ヒット時は INT1・INT1_CAUSE=1。
    */
   attach(): void {
     if (this.attached) return;
@@ -148,14 +148,14 @@ export class CodeTestIoMock {
       if (this.handshake) {
         this.handshake.bus.INT_CAUSE = INT_CAUSE_CODE.ADDR_BREAK;
       }
-      triggerInterrupt(2);
+      triggerInterrupt(1);
     });
     stepBreak.reset();
     stepBreak.setOnHit(() => {
       if (this.handshake) {
         this.handshake.bus.INT_CAUSE = INT_CAUSE_CODE.STEP;
       }
-      triggerInterrupt(2);
+      triggerInterrupt(1);
     });
     if (this.handshake) {
       this.handshake.attach();

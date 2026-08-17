@@ -82,32 +82,61 @@ export function createHandshakeBus(): CpuIoSignals {
 }
 
 // ─────────────────────────────────────────────
-// 割り込み要因
+// 割り込み要因（IO:0021）
 // ─────────────────────────────────────────────
 
-export const INT_CAUSE_CODE = {
-  /** タイマー0（ハンドシェイク 12h のタイマー番号 0） */
-  TIMER0: 0,
-  /** タイマー1（ハンドシェイク 12h のタイマー番号 1） */
-  TIMER1: 1,
-  /** ハンドシェイクによる割り込み */
+/** INT1 割り込み要因（Bit0）。レベル1＝ブレイク／ステップ */
+export const INT1_CAUSE_CODE = {
+  /** 比較器ヒット（アドレスブレイク） */
+  ADDR_BREAK: 0,
+  /** ステップ実行（CPLD ワンショット） */
+  STEP: 1,
+} as const;
+
+/** INT2 割り込み要因（Bit1-2）。レベル2＝タイマー／ハンドシェイク */
+export const INT2_CAUSE_CODE = {
+  /** タイマー満了（00b → ポート値 0x00） */
+  TIMER: 0,
+  /** ハンドシェイク（01b → ポート値 0x02） */
   HANDSHAKE: 2,
-  /** アドレスブレイク */
-  ADDR_BREAK: 3,
-  /** ステップ実行（CPLD ワンショット。比較器ではない） */
-  STEP: 4,
 } as const;
 
 /**
- * タイマー番号に対応する割り込み要因を返す。
- * @param timerNo タイマー番号（0 または 1）
- * @returns INT_CAUSE_CODE.TIMER0 / TIMER1
- * @throws 0/1 以外を渡した場合
+ * IO:0021 に載せる INT2 要因値（Bit1-2 のみ有効）。
+ * @param cause INT2_CAUSE_CODE.TIMER / HANDSHAKE
+ * @returns 0x00 または 0x02
  */
-export function intCauseForTimer(timerNo: number): 0 | 1 {
-  if (timerNo === 0) return INT_CAUSE_CODE.TIMER0;
-  if (timerNo === 1) return INT_CAUSE_CODE.TIMER1;
-  throw new Error(`invalid timer number: ${timerNo}`);
+export function encodeInt2Cause(
+  cause: typeof INT2_CAUSE_CODE.TIMER | typeof INT2_CAUSE_CODE.HANDSHAKE,
+): number {
+  return cause & 0x06;
+}
+
+/**
+ * IO:0021 に載せる INT1 要因値（Bit0 のみ有効）。
+ * @param cause INT1_CAUSE_CODE.ADDR_BREAK / STEP
+ * @returns 0x00 または 0x01
+ */
+export function encodeInt1Cause(
+  cause: typeof INT1_CAUSE_CODE.ADDR_BREAK | typeof INT1_CAUSE_CODE.STEP,
+): number {
+  return cause & 0x01;
+}
+
+/** 後方互換エイリアス（INT_CAUSE 統合表記） */
+export const INT_CAUSE_CODE = {
+  TIMER: INT2_CAUSE_CODE.TIMER,
+  HANDSHAKE: INT2_CAUSE_CODE.HANDSHAKE,
+  ADDR_BREAK: INT1_CAUSE_CODE.ADDR_BREAK,
+  STEP: INT1_CAUSE_CODE.STEP,
+} as const;
+
+/**
+ * タイマー満了時の INT2 要因（IO:0021 Bit1-2=00）。
+ * @returns 0x00
+ */
+export function intCauseForTimer(): typeof INT2_CAUSE_CODE.TIMER {
+  return INT2_CAUSE_CODE.TIMER;
 }
 
 // ─────────────────────────────────────────────

@@ -1,5 +1,5 @@
 ; handshake_main.asm
-; IO→CPU ハンドシェイク割り込み（INT_CAUSE=2）
+; IO→CPU ハンドシェイク割り込み（INT2 / INT2_CAUSE=ハンドシェイク）
 ; 根拠: HandShake.mdc「レトロCPUボード <- 制御・I/Oボード」
 ;
 ; g_int2_handler から BALD で呼ばれるので、戻りは RET。

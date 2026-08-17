@@ -54,7 +54,7 @@ export interface BeepParams {
 
 /** タイマー設定パラメータ */
 export interface TimerParams {
-  /** タイマー番号 (0 または 1)。割り込み要因もこの番号になる */
+  /** タイマー番号 (0 のみ)。割り込み要因は INT2_CAUSE=タイマー */
   timerNo: number;
   /** タイマー周期 (ms)。0 で停止 */
   periodMs: number;
@@ -97,7 +97,7 @@ export interface CpuToIoHandlers {
 
   /**
    * タイマー設定 (cmd=0x12): タイマー割り込み周期を設定。
-   * timerNo=0/1 でタイマーを選ぶ。periodMs=0 で停止、count=0 で無限
+   * timerNo=0 のみ有効。periodMs=0 で停止、count=0 で無限
    */
   onTimerSet(params: TimerParams): number;
   /**
@@ -382,12 +382,12 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * タイマー設定 (0x12)
-   * タイマー番号は 0 / 1 のみ有効。
+   * タイマー番号は 0 のみ有効（1 以上は NG）。
    * 応答: 1バイト (OK / NG)
    */
   private _handleTimerSet(frame: Uint8Array): Uint8Array {
     const timerNo = frame[0x01]!;
-    if (timerNo !== 0 && timerNo !== 1) {
+    if (timerNo !== 0) {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
     const params: TimerParams = {

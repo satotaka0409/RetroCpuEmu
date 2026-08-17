@@ -61,19 +61,18 @@ async function callTimerSet(
   ]);
 }
 
-test("番号 1・周期 100ms・回数 3 がそのまま IO ボードへ届く", async () => {
+test("番号 0・周期 100ms・回数 3 がそのまま IO ボードへ届く", async () => {
   await withCase(async (s, mock) => {
-    await callTimerSet(mock, 1, 100, 3);
+    await callTimerSet(mock, 0, 100, 3);
     s.expectRegisters({ R0: 0 });
     expect(mock.state.lastTimer).toEqual({
-      timerNo: 1,
+      timerNo: 0,
       periodMs: 100,
       count: 3,
     });
-    expect(mock.timers[0].running).toBe(false);
-    expect(mock.timers[1].running).toBe(true);
-    expect(mock.timers[1].getState().periodMs).toBe(100);
-    expect(mock.timers[1].getState().count).toBe(3);
+    expect(mock.timer.running).toBe(true);
+    expect(mock.timer.getState().periodMs).toBe(100);
+    expect(mock.timer.getState().count).toBe(3);
   });
 });
 
@@ -86,8 +85,15 @@ test("番号 0 は 16bit 周期をそのまま送る", async () => {
       periodMs: 0x1234,
       count: 0,
     });
-    expect(mock.timers[0].running).toBe(true);
-    expect(mock.timers[1].running).toBe(false);
+    expect(mock.timer.running).toBe(true);
+  });
+});
+
+test("番号 1 は NG を返しタイマーは動かない", async () => {
+  await withCase(async (s, mock) => {
+    await callTimerSet(mock, 1, 100, 0);
+    s.expectRegisters({ R0: 1 });
+    expect(mock.timer.running).toBe(false);
   });
 });
 
@@ -95,14 +101,13 @@ test("番号が 0/1 以外なら IO ボードが NG を返しタイマーは動�
   await withCase(async (s, mock) => {
     await callTimerSet(mock, 2, 100, 0);
     s.expectRegisters({ R0: 1 });
-    expect(mock.timers[0].running).toBe(false);
-    expect(mock.timers[1].running).toBe(false);
+    expect(mock.timer.running).toBe(false);
   });
 });
 
 test("R3/R4 は呼び出しの前後で保たれる", async () => {
   await withCase(async (s, mock) => {
-    await callTimerSet(mock, 1, 100, 3);
+    await callTimerSet(mock, 0, 100, 3);
     s.expectRegisters({
       R0: 0,
       R3: 0x3333,

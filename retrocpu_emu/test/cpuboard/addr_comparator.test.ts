@@ -1,8 +1,8 @@
 /**
  * CPLD アドレス比較器（IO:0030–0034）
- * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc / HandShake.mdc（要因 3）
+ * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc / HandShake.mdc（INT1_CAUSE=0）
  *
- * 設定・読取と、一致時の INT2・INT_CAUSE=3・0034 前回書込値を確認する。
+ * 設定・読取と、一致時の INT1・INT1_CAUSE=0・0034 前回書込値を確認する。
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -36,8 +36,8 @@ import {
   step,
 } from "../../src/cpuboard/mn1613/mn1613";
 
-/** IRQ2 のペンディングビット */
-const IRQ2_BIT = 0x04;
+/** IRQ1 のペンディングビット */
+const IRQ1_BIT = 0x02;
 
 /**
  * メモリ先頭へワード列を載せ、IC=0 から実行できる状態にする。
@@ -108,7 +108,7 @@ describe("アドレス比較器 IO:0030–0034", () => {
     expect(addrComparators.getSlot(3)?.addr).toBe(addr & 0x3ffff);
   });
 
-  it("MEM READ 一致で INT2・要因3・ヒット番号が立つ", () => {
+  it("MEM READ 一致で INT1・INT1_CAUSE=0・ヒット番号が立つ", () => {
     const watch = 0x0200;
     new DataView(getMemory()).setUint16(watch * 2, 0xbeef, false);
 
@@ -119,12 +119,12 @@ describe("アドレス比較器 IO:0030–0034", () => {
       encodeBreakCtrl(2, true, false, BREAK_RDWR_RD),
     );
 
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
 
     // LD R0, 0x0200; H
     runSteps([0x2708, watch, 0x2000], 1);
 
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(2);
     expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0);
@@ -141,11 +141,11 @@ describe("アドレス比較器 IO:0030–0034", () => {
     );
 
     runSteps([0x2708, watch, 0x2000], 1);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(0);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(0);
 
     // MVWI R0, 0x2222; STD R0, 0x0300
     runSteps([0x7807, 0x2222, 0x2748, watch, 0x2000], 2);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(0);
     expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0x1111);
@@ -179,7 +179,7 @@ describe("アドレス比較器 IO:0030–0034", () => {
 
     // RD R0, 0x40
     runSteps([0x1840, 0x2000], 1);
-    expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
+    expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
     expect(rdPort(IO_PORT_BREAK_HIT)).toBe(5);
     expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0);

@@ -2,14 +2,17 @@
 ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
 
 INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
-INT_CAUSE	.equ	0x21	; 割り込み要因 Bit0-2（ハンドシェイク=2）
+INT_CAUSE	.equ	0x21	; Bit0=INT1_CAUSE, Bit1-2=INT2_CAUSE
 
-; 割り込み要因番号
-INT_CAUSE_TIMER0	.equ	0
-INT_CAUSE_TIMER1	.equ	1
-INT_CAUSE_HSHK		.equ	2
-INT_CAUSE_ADDR_BREAK	.equ	3
-INT_CAUSE_STEP		.equ	4
+; INT1 要因（Bit0）
+INT1_CAUSE_BREAK	.equ	0
+INT1_CAUSE_STEP		.equ	1
+INT1_CAUSE_MASK		.equ	0x01
+
+; INT2 要因（Bit1-2）
+INT2_CAUSE_TIMER	.equ	0	; 00
+INT2_CAUSE_HSHK		.equ	2	; 01 → ポート値 0x02
+INT2_CAUSE_MASK		.equ	0x06
 
 ; CPLD 比較器（MN1613_CPUボードメモリ_IOマップ.mdc）
 IO_BREAK_CTRL		.equ	0x30
