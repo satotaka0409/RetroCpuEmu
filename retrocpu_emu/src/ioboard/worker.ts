@@ -280,6 +280,13 @@ link.setCpuToIoFrameHandler((frame) => {
       on: cmdState.undefLed,
       status: response[0],
     });
+  } else if (cmd === CMD_CPU_TO_IO.LED_DISPLAY) {
+    log.info("LED表示 (16h)", {
+      status: response[0],
+      mode: cmdState.mode,
+      bulletLed0_7: frame[0x0d],
+      bulletLed8_F: frame[0x0e],
+    });
   } else if (cmd === CMD_CPU_TO_IO.BEEP) {
     const beep = cmdState.lastBeep;
     log.info("BEEP (19h)", {

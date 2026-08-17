@@ -56,6 +56,7 @@ FOO:    h
       const usePath = writeRelFile(dir, "use.rel", useRel);
       const linked = linkRelsWithSdld([defPath, usePath], { workDir: dir });
       assert.equal(linked.defs.get("FOO"), 4);
+      assert.match(linked.mapText, /FOO/);
       const img = linked.image;
       const baldAt = 6;
       assert.equal(img[baldAt], 0x26);

@@ -1,7 +1,7 @@
 # retrocpu_boot_monitor — MN1613 モニター IHX ビルド
 #
 # 主なターゲット:
-#   make ihx          … 各 .asm → .rel → sdld → Intel HEX + CDB
+#   make ihx          … 各 .asm → .rel → sdld → Intel HEX + CDB + MAP
 #   make test         … mn1613/test の結合テスト（テストフレームワーク経由）
 #   make sdcc-setup   … SDCC (sdld) を CMake 経由で構築（ihx の前提）
 #   make clean        … ビルド成果物を削除
@@ -45,6 +45,7 @@ TARGET_NAME   := mn1613_mon
 IHX           := $(HEX_DIR)/$(TARGET_NAME).ihx
 BIN           := $(HEX_DIR)/$(TARGET_NAME).bin
 CDB           := $(HEX_DIR)/$(TARGET_NAME).cdb
+MAP           := $(HEX_DIR)/$(TARGET_NAME).map
 
 ASM_SRCS := \
 	$(SRC_DIR)/main.asm \
@@ -108,7 +109,7 @@ all: ihx
 
 help:
 	@echo "retrocpu_boot_monitor"
-	@echo "  make ihx            各 .asm → .rel → sdld → Intel HEX + CDB"
+	@echo "  make ihx            各 .asm → .rel → sdld → Intel HEX + CDB + MAP"
 	@echo "  make test           mn1613/test 結合テスト（テストフレームワーク）"
 	@echo "  make sdcc-setup     Build sdld via CMake (required for ihx)"
 	@echo "  make clean          Remove monitor build/ artifacts"
@@ -153,7 +154,7 @@ retrocpu-asm-build:
 	@test -f "$(SDLD_LINK_CLI)"
 
 # -------------------------------------------------------
-# 2. Intel HEX（各 .asm → .rel → sdld → IHX + CDB）
+# 2. Intel HEX（各 .asm → .rel → sdld → IHX + CDB + MAP）
 # -------------------------------------------------------
 ihx: sdcc-setup retrocpu-asm-build $(IHX)
 	@echo "Wrote $(IHX)"
@@ -235,7 +236,7 @@ $(REL_BIOS): $(SRC_DIR)/bios/bios_common.asm $(INC_DEPS) | retrocpu-asm-build $(
 
 $(IHX): $(RELS) $(SDLD) | $(HEX_DIR)
 	@test -x "$(SDLD)"
-	node $(SDLD_LINK_CLI) $(RELS) -o $@ --cdb $(CDB)
+	node $(SDLD_LINK_CLI) $(RELS) -o $@ --cdb $(CDB) --map $(MAP)
 
 assemble: $(RELS)
 

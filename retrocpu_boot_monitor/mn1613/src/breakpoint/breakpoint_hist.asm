@@ -138,7 +138,7 @@ l_bp_ha_prev_done:
 	; 時刻 4 ワード
 	mv	X0, SP
 	ai	X0, #BP_HA_T0
-	mvi	R2, #4
+	mvwi	R2, #4
 l_bp_ha_ct:
 	l	R0, 0(X0)
 	str	R0, TSR0, (R4)
@@ -202,7 +202,7 @@ l_bp_ha_ct:
 	l	R2, HSHK_BP_SNAP_SP(X0)
 	or	R2, R2, Z
 	b	l_bp_ha_stk
-	mvi	R2, #HSHK_BH_STACK_WORDS
+	mvwi	R2, #HSHK_BH_STACK_WORDS
 	eor	R0, R0
 l_bp_ha_stk_z:
 	ai	X1, #1
@@ -212,7 +212,7 @@ l_bp_ha_stk_z:
 	b	l_bp_ha_meta
 l_bp_ha_stk:
 	mv	X0, R2
-	mvi	R2, #HSHK_BH_STACK_WORDS
+	mvwi	R2, #HSHK_BH_STACK_WORDS
 l_bp_ha_stk_lp:
 	ai	X0, #1
 	l	R0, 0(X0)

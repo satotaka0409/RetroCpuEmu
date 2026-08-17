@@ -11,10 +11,11 @@ interface SdldLinkCliOptions {
   rels: string[];
   outIhx: string;
   outCdb?: string;
+  outMap?: string;
 }
 
 const USAGE =
-  "Usage: sdld-link <a.rel> [b.rel ...] -o out.ihx [--cdb out.cdb]";
+  "Usage: sdld-link <a.rel> [b.rel ...] -o out.ihx [--cdb out.cdb] [--map out.map]";
 
 /**
  * CLI 引数を解析する。
@@ -25,6 +26,7 @@ export function parseSdldLinkArgs(argv: string[]): SdldLinkCliOptions {
   const rels: string[] = [];
   let outIhx = "";
   let outCdb: string | undefined;
+  let outMap: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]!;
     if (a === "-o") {
@@ -35,6 +37,10 @@ export function parseSdldLinkArgs(argv: string[]): SdldLinkCliOptions {
       outCdb = argv[++i];
       continue;
     }
+    if (a === "--map") {
+      outMap = argv[++i];
+      continue;
+    }
     if (a.startsWith("-")) {
       throw new Error(`${USAGE}\nUnknown option: ${a}`);
     }
@@ -43,11 +49,11 @@ export function parseSdldLinkArgs(argv: string[]): SdldLinkCliOptions {
   if (rels.length === 0 || !outIhx) {
     throw new Error(USAGE);
   }
-  return { rels, outIhx, outCdb };
+  return { rels, outIhx, outCdb, outMap };
 }
 
 /**
- * .rel を sdld でリンクして IHX / CDB を書く。
+ * .rel を sdld でリンクして IHX / CDB / MAP を書く。
  * @param argv CLI 引数
  */
 export function main(argv: string[] = process.argv.slice(2)): void {
@@ -67,6 +73,12 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     fs.mkdirSync(path.dirname(cdbPath), { recursive: true });
     fs.writeFileSync(cdbPath, result.cdbText, "utf8");
     process.stdout.write(`Wrote ${cdbPath}\n`);
+  }
+  if (opts.outMap) {
+    const mapPath = path.resolve(opts.outMap);
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, result.mapText, "utf8");
+    process.stdout.write(`Wrote ${mapPath}\n`);
   }
 }
 

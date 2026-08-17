@@ -206,7 +206,7 @@ l_sr_nt_pad:
 l_sr_nt_stk:
 	mv	X1, SP
 	ai	X1, #12
-	mvi	R2, #HSHK_BH_STACK_WORDS
+	mvwi	R2, #HSHK_BH_STACK_WORDS
 l_sr_nt_stk_lp:
 	ai	X1, #1
 	l	R0, 0(X1)

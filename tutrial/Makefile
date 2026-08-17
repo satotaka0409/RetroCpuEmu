@@ -1,16 +1,20 @@
 # tutrial — MN1613 チュートリアル IHX ビルド
 #
-#   make ihx     … 各サンプルの .asm → .rel → sdld → Intel HEX + CDB
-#   make clean   … 各サンプルの build/ を削除
+#   make ihx              … 全サンプルの .asm → .rel → sdld → Intel HEX + CDB
+#   make <sample>         … 1 件だけ（beep1 / beep2 / bullet_led / console_lcd / sevenseg_led）
+#   make clean            … 各サンプルの build/ を削除
 #
-# サンプル配置: <name>/src/mn1613/<stem>.asm → <name>/build/hex/<stem>.ihx
+# 配置: <sample>/src/mn1613/<stem>.asm → <sample>/build/hex/<stem>.ihx
+# 新しい <sample>/src/mn1613/*.asm は wildcard で自動追加する。
 # BIOS エントリは tutrial/bios.inc（_BIOS ジャンプ表）。モニタ本体はリンクしない。
 # エミュは F7 RST でモニタを DMA したあと、この IHX を載せて 1800h から RUN。
+#
+# cwd は問わない（Makefile のあるディレクトリ基準）。
 
 SHELL := /bin/bash
 
-TUT_DIR   := $(abspath .)
-ROOT_DIR  := $(abspath ..)
+TUT_DIR   := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT_DIR  := $(abspath $(TUT_DIR)/..)
 BIOS_INC  := $(TUT_DIR)/bios.inc
 
 RETROCPU_ASM_DIR ?= $(ROOT_DIR)/retrocpu_asm
@@ -28,39 +32,46 @@ export PATH := $(SDCC_BIN_DIR):$(PATH)
 export SDCC_BIN_DIR
 export SDLD := $(SDCC_BIN_DIR)/sdld
 
-# 相対パスで拾う（abspath の wildcard は環境によって空になる）
-ASM_SRCS := $(sort $(wildcard */src/mn1613/*.asm))
+.DELETE_ON_ERROR:
+
+# デフォルトゴールは ihx（foreach より前に置く。後だと先頭サンプルだけビルドされる）
+.PHONY: all help ihx clean retrocpu-asm-build
+all: ihx
+
+ASM_SRCS := $(sort $(wildcard $(TUT_DIR)/*/src/mn1613/*.asm))
 ifeq ($(ASM_SRCS),)
 $(error no samples: expected */src/mn1613/*.asm under $(TUT_DIR))
 endif
 
-# $(1)=src  $(2)=stem  $(3)=sample  $(4)=MODULE
+# $(1)=abs src  $(2)=stem  $(3)=sample  $(4)=MODULE
 define TUT_ASM_RULES
-ALL_IHX += $(3)/build/hex/$(2).ihx
+ALL_IHX += $(TUT_DIR)/$(3)/build/hex/$(2).ihx
+SAMPLE_NAMES += $(3)
 
-$(3)/build/obj/$(2).rel: $(1) $$(BIOS_INC) | retrocpu-asm-build
-	@mkdir -p $$(dir $$@)
-	node $$(ASM_CLI) --cpu mn1613 $$< -o $$@ --lst $(3)/build/obj/$(2).lst --module $(4)
+.PHONY: $(3)
+$(3): $(TUT_DIR)/$(3)/build/hex/$(2).ihx
 
-$(3)/build/hex/$(2).ihx: $(3)/build/obj/$(2).rel $$(SDLD_LINK_CLI)
+$(TUT_DIR)/$(3)/build/obj/$(2).rel: $(1) $(BIOS_INC) | retrocpu-asm-build
 	@mkdir -p $$(dir $$@)
-	node $$(SDLD_LINK_CLI) $$< -o $$@ --cdb $(3)/build/hex/$(2).cdb
+	node $$(ASM_CLI) --cpu mn1613 $$< -o $$@ --lst $(TUT_DIR)/$(3)/build/obj/$(2).lst --module $(4)
+
+$(TUT_DIR)/$(3)/build/hex/$(2).ihx: $(TUT_DIR)/$(3)/build/obj/$(2).rel $$(SDLD_LINK_CLI)
+	@mkdir -p $$(dir $$@)
+	@test -x "$$(SDLD)" || { echo "sdld がありません: $$(SDLD)"; echo "retrocpu_boot_monitor で make sdcc-setup"; exit 1; }
+	node $$(SDLD_LINK_CLI) $$< -o $$@ --cdb $(TUT_DIR)/$(3)/build/hex/$(2).cdb
 	@echo "Wrote $$@"
 	@echo "Wrote $(3)/build/hex/$(2).cdb"
 endef
 
-$(foreach src,$(ASM_SRCS),$(eval $(call TUT_ASM_RULES,$(src),$(basename $(notdir $(src))),$(firstword $(subst /, ,$(src))),$(shell echo $(basename $(notdir $(src))) | tr '[:lower:]' '[:upper:]'))))
-
-.PHONY: all help ihx clean retrocpu-asm-build
-
-all: ihx
+$(foreach src,$(ASM_SRCS),$(eval $(call TUT_ASM_RULES,$(src),$(basename $(notdir $(src))),$(firstword $(subst /, ,$(patsubst $(TUT_DIR)/%,%,$(src)))),$(shell echo $(basename $(notdir $(src))) | tr '[:lower:]' '[:upper:]'))))
 
 help:
 	@echo "tutrial"
-	@echo "  make ihx     各サンプルの IHX / CDB を出す"
-	@echo "  make clean   各サンプルの build/ を削除"
+	@echo "  make / make ihx     全サンプルの IHX / CDB を出す"
+	@echo "  make <sample>       1 件だけビルド"
+	@echo "  make clean          各サンプルの build/ を削除"
 	@echo "samples:"
-	@$(foreach s,$(ALL_IHX),echo "  $(s)";)
+	@$(foreach s,$(SAMPLE_NAMES),echo "  $(s)";)
 
 retrocpu-asm-build:
 	@if [ ! -f "$(ASM_CLI)" ] || [ ! -f "$(SDLD_LINK_CLI)" ]; then \
@@ -71,6 +82,8 @@ retrocpu-asm-build:
 	@test -f "$(SDLD_LINK_CLI)"
 
 ihx: $(ALL_IHX)
+	@echo "IHX:"
+	@$(foreach s,$(ALL_IHX),echo "  $(s)";)
 
 clean:
 	rm -rf $(TUT_DIR)/*/build

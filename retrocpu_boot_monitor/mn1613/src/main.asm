@@ -11,6 +11,21 @@
 
 	.global g_main
 	.global g_main_loop
+	.global	g_get_rnd
+	.global	g_mem_cpy
+	.global g_malloc
+	.global g_free
+	.global g_malloc2
+	.global g_free2
+	.global g_bios_mode_set
+	.global	g_hshk_get_time
+	.global	g_bios_timer_set
+	.global	g_bios_hex_key_get
+	.global	g_bios_pc_key_get
+	.global	g_bios_led_display
+	.global	g_bios_lcd_control
+	.global	g_bios_lcd_text
+	.global	g_bios_beep
 	.global	g_get_rnd_
 	.global	g_mem_cpy_
 	.global g_malloc_

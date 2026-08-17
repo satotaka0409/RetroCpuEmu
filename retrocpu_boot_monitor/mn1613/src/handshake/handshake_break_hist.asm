@@ -342,7 +342,7 @@ l_bh_se_w:
 	bald	g_hshk_send_byte
 	pop	X1
 	ai	X1, #1
-	mvi	R2, #HSHK_BH_STACK_WORDS
+	mvwi	R2, #HSHK_BH_STACK_WORDS
 l_bh_se_stk:
 	l	R0, 0(X1)
 	ai	X1, #1

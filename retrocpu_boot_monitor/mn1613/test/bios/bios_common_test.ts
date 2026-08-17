@@ -452,10 +452,7 @@ test("g_malloc2_init は範囲・SBR と空きヘッダを書く", async () => {
     expect(s.readWord(s.wordAddr("GL_ALLOC2_SIZE"))).toBe(16);
     expect(s.readWord(phys)).toBe(16);
     expect(s.readWord(phys + 1)).toBe(0);
-    s.expectRegisters({ R0: HEAP2_LOG, R1: HEAP2_SBR,
-      R3: 0x3333,
-      R4: 0x4444,
-    });
+    s.expectRegisters({ R0: HEAP2_LOG, R1: HEAP2_SBR, R3: 0x3333, R4: 0x4444 });
   });
 });
 

@@ -17,7 +17,6 @@
 
 	.global	g_user_main
 
-STACK_TOP	.equ	0xFFFF
 BEEP_MS		.equ	1000
 REPEAT		.equ	4
 FREQ_A		.equ	440
@@ -31,6 +30,8 @@ WAIT_TICKS	.equ	25000
 ; 440Hz / 880Hz を 1 秒ずつ、交互に REPEAT 回鳴らしてモニタへ戻る
 ; @Destruction R0, R1, R2
 g_user_main:
+	eor	R0, R0
+	mv	STR, R0			; BIOS ポーリング中に INT2 を上げない
 	mvwi	R2, #REPEAT
 l_beep_rep:
 	push	R2
@@ -46,7 +47,7 @@ l_beep_rep:
 	si	R2, #1, Z
 	b	l_beep_rep
 
-	bd	0x0108
+	bd	g_main_loop
 
 ; 約 1 秒待つ（250ms × 4）
 ; @Destruction R0, R1, R2

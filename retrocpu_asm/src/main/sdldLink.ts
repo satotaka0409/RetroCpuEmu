@@ -12,6 +12,8 @@ export interface SdldLinkResult {
   hexText: string;
   /** `L:G$name$0$0:hex` と `L:__CP$name$serial:hex` */
   cdbText: string;
+  /** sdld `-m` のマップ全文（最終パス。バイトアドレス） */
+  mapText: string;
   /** HEX をロードしたバイトイメージ */
   image: Uint8Array;
   /** シンボル → バイトアドレス（`l_*` はバイト長） */
@@ -519,5 +521,5 @@ export function linkRelsWithSdld(
   const hexText = bytesToIntelHex(bytes);
   const cdbText = defsToCdbFromSdld(defs);
   const image = hexBytesToImage(bytes);
-  return { hexText, cdbText, image, defs };
+  return { hexText, cdbText, mapText, image, defs };
 }
