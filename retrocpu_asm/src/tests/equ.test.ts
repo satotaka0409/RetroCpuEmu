@@ -87,4 +87,39 @@ describe(".equ 式と依存", () => {
     assert.equal(r.symbols.get("IMM"), 0x55);
     assert.equal(r.words[0].value & 0xff, 0x55);
   });
+
+  test('len(msg) は MN1613 の .dw 文字列のワード数 11', () => {
+    const r = assemble(
+      'N .equ len(msg)\n        .org 0\nmsg:\n        .dw "HELLO WORLD"\n        .word N\n',
+    );
+    assert.equal(r.symbols.get("N"), 11);
+    assert.equal(r.words[r.words.length - 1]!.value, 11);
+  });
+
+  test("len の引数が文字列ラベルでないとエラー", () => {
+    assert.throws(
+      () =>
+        assemble(
+          'N .equ len(msg)\n        .org 0\nmsg:\n        .word 1\n        .word N\n',
+        ),
+      /len\(\) requires a string label/,
+    );
+  });
+
+  test("len に文字列リテラルを渡すとエラー", () => {
+    assert.throws(
+      () => assemble('N .equ len("HELLO")\n        .org 0\n        .word N\n'),
+      /len\(\) requires a string label/,
+    );
+  });
+
+  test("len にグローバルラベルを渡すとエラー", () => {
+    assert.throws(
+      () =>
+        assemble(
+          '        .global msg\nN .equ len(msg)\n        .org 0\nmsg:\n        .dw "HELLO"\n        .word N\n',
+        ),
+      /len\(\) cannot use a global label/,
+    );
+  });
 });

@@ -4,6 +4,7 @@ import {
   matchAbsAddrReloc,
   matchPage0StarReloc,
   matchWordDiffReloc,
+  substLenCalls,
 } from "./expression";
 import {
   encodeInstruction,
@@ -235,6 +236,90 @@ function expandWordDirectiveArgs(
     out.push(arg);
   }
   return out;
+}
+
+/**
+ * `.dw` / `.word` の引数がすべて二重引用符文字列なら、そのワード数（文字数）を返す。
+ * @param args - オペランド
+ * @returns ワード数。文字列でなければ null
+ */
+function wordDirectiveStringLen(args: readonly string[]): number | null {
+  if (args.length === 0) return null;
+  let n = 0;
+  for (const arg of args) {
+    const codes = asciiCodesFromStringArg(arg);
+    if (!codes) return null;
+    n += codes.length;
+  }
+  return n;
+}
+
+/**
+ * `.dw "…"` を直後に置くラベルの文字列長を集める（MN161x はワード数）。
+ * `label:` のみの行のあと `.dw` でも、同一行 `label: .dw` でもよい。
+ * @param lines - 解析済みソース
+ * @returns 大文字ラベル → 長さ
+ */
+function collectStringLens(lines: readonly ParsedLine[]): Map<string, number> {
+  const lenses = new Map<string, number>();
+  const pending: string[] = [];
+  /**
+   * 保留ラベルへ文字列長を記録する。
+   * @param names - ラベル
+   * @param args - `.dw` オペランド
+   */
+  const assign = (names: readonly string[], args: readonly string[]): void => {
+    const n = wordDirectiveStringLen(args);
+    if (n === null) return;
+    for (const name of names) lenses.set(name.toUpperCase(), n);
+  };
+  for (const line of lines) {
+    const op = line.op?.toUpperCase();
+    if (line.label) {
+      if (!op) {
+        pending.push(line.label);
+        continue;
+      }
+      if (op === ".WORD" || op === ".DW" || op === "DW") {
+        assign([...pending, line.label], line.args);
+        pending.length = 0;
+        continue;
+      }
+      pending.length = 0;
+      continue;
+    }
+    if (!op) continue;
+    if ((op === ".WORD" || op === ".DW" || op === "DW") && pending.length > 0) {
+      assign(pending, line.args);
+      pending.length = 0;
+      continue;
+    }
+    pending.length = 0;
+  }
+  return lenses;
+}
+
+/**
+ * 各行のオペランドにある `len(label)` を数値に置き換える。
+ * @param lines - 解析済みソース（破壊的）
+ * @param stringLens - 文字列ラベル表
+ * @param globlNames - `.global` / `.globl` 名
+ */
+function applyLenCalls(
+  lines: ParsedLine[],
+  stringLens: ReadonlyMap<string, number>,
+  globlNames: ReadonlySet<string>,
+): void {
+  for (const line of lines) {
+    line.args = line.args.map((a) => {
+      try {
+        return substLenCalls(a, stringLens, globlNames);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`Line ${line.lineNo}: ${msg}`);
+      }
+    });
+  }
 }
 
 /**
@@ -681,8 +766,10 @@ export function assemble(
     parsed,
   }: { sourceLines: AssemblyResult["sourceLines"]; parsed: ParsedLine[] } =
     parseSource(expanded);
-  const { symbols, symbolAreas, lineAreas } = pass1(parsed, resolved);
   const globlNames: Set<string> = collectGloblNames(parsed);
+  const stringLens = collectStringLens(parsed);
+  applyLenCalls(parsed, stringLens, globlNames);
+  const { symbols, symbolAreas, lineAreas } = pass1(parsed, resolved);
   const symbolInfos: SymbolInfoTable = buildSymbolInfos(
     symbols,
     globlNames,

@@ -179,6 +179,67 @@ export function matchExternalWordDiff(
 }
 
 /**
+ * 識別子の1文字か。`len(` の直前が識別子だと `FOOlen(` を関数と誤認しない。
+ * @param ch - 1文字。無ければ false
+ * @returns 識別子に使える文字なら true
+ */
+function isIdentChar(ch: string | undefined): boolean {
+  if (ch === undefined || ch.length === 0) return false;
+  return /[A-Za-z0-9_.$]/.test(ch);
+}
+
+/**
+ * `len(label)` を、そのラベルが指す `.dw` 文字列の長さに置き換える。
+ * ローカルラベルのみ。MN161x は 1 文字 1 ワードなので戻りはワード数。
+ * 根拠: asm_rules.mdc。
+ * @param expr - 式文字列
+ * @param stringLens - 文字列ラベル → 長さ（大文字キー）
+ * @param globlNames - `.global` / `.globl` された名前（大文字）
+ * @returns 置換後の式
+ * @throws 引数がローカルの文字列ラベルでない
+ */
+export function substLenCalls(
+  expr: string,
+  stringLens: ReadonlyMap<string, number>,
+  globlNames: ReadonlySet<string> = new Set(),
+): string {
+  let out = "";
+  let i = 0;
+  while (i < expr.length) {
+    const rest = expr.slice(i);
+    const m = rest.match(/^len\s*\(/i);
+    if (!m || isIdentChar(i > 0 ? expr[i - 1] : undefined)) {
+      out += expr[i];
+      i += 1;
+      continue;
+    }
+    i += m[0].length;
+    while (i < expr.length && /[ \t]/.test(expr[i]!)) i += 1;
+    const nameM = expr.slice(i).match(/^[A-Za-z_.$][A-Za-z0-9_.$]*/);
+    if (!nameM) {
+      throw new Error(`len() requires a string label: ${expr}`);
+    }
+    const name = nameM[0]!;
+    i += name.length;
+    while (i < expr.length && /[ \t]/.test(expr[i]!)) i += 1;
+    if (expr[i] !== ")") {
+      throw new Error(`len() requires a string label: ${expr}`);
+    }
+    i += 1;
+    const key = name.toUpperCase();
+    if (globlNames.has(key)) {
+      throw new Error(`len() cannot use a global label: ${name}`);
+    }
+    const len = stringLens.get(key);
+    if (len === undefined) {
+      throw new Error(`len() requires a string label: ${name}`);
+    }
+    out += String(len);
+  }
+  return out;
+}
+
+/**
  * `'A'` 形式の文字リテラルを ASCII コード（10進）に置き換える。
  * 根拠: asm_rules.mdc（文字 `'A'` は 0x41）。
  * @param expr - 式文字列
@@ -272,18 +333,25 @@ function parseNumber(token: string): number | undefined {
  *   `|`（ビットOR） `^`（ビットXOR） `&`（ビットAND）
  *   `<<` `>>`（シフト） `+` `-`（加減算） `*` `/` `%`（乗除剰余）
  *   単項 `+` `-` `~`、括弧 `()`
- * 文字リテラル `'A'` は ASCII（0x41）。根拠: asm_rules.mdc。
+ * 文字リテラル `'A'` は ASCII（0x41）。`len(label)` は `.dw` 文字列のワード数。
+ * 根拠: asm_rules.mdc。
  * @param expr - 式文字列
  * @param symbols - シンボルテーブル
  * @param allowUndefined - 未定義シンボル許可フラグ
+ * @param stringLens - `len(label)` 用。文字列ラベル → 長さ
+ * @param globlNames - `.global` 名。`len()` では使えない
  * @return 評価結果の数値
  */
 export function evalExpr(
   expr: string,
   symbols: SymbolTable,
   allowUndefined: boolean,
+  stringLens: ReadonlyMap<string, number> = new Map(),
+  globlNames: ReadonlySet<string> = new Set(),
 ): number {
-  const rewritten = substCharLiterals(expr);
+  const rewritten = substCharLiterals(
+    substLenCalls(expr, stringLens, globlNames),
+  );
   const matched: RegExpMatchArray | null = rewritten.match(
     /[A-Za-z_.$][A-Za-z0-9_.$]*|>[0-9A-Fa-f]+|0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|[0-9A-Fa-f]+[Hh]|[0-7]+[OoQq]|[01]+[Bb]|[0-9]+[Dd]?|<<|>>|[()+\-*/%&|^~]/g,
   );

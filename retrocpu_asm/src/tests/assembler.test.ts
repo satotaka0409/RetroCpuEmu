@@ -46,6 +46,52 @@ describe("evalExpr: 文字リテラル", () => {
   });
 });
 
+describe("evalExpr: len()", () => {
+  const empty = new Map<string, number>();
+  const lenses = new Map<string, number>([["HELLO_MSG1", 11], ["AB", 2]]);
+
+  test("len(HELLO_MSG1) は 11（MN1613 ではワード数）", () => {
+    assert.equal(evalExpr("len(HELLO_MSG1)", empty, false, lenses), 11);
+  });
+
+  test("LEN 大文字と空白", () => {
+    assert.equal(evalExpr("LEN( AB )", empty, false, lenses), 2);
+  });
+
+  test("式の中で使える", () => {
+    assert.equal(evalExpr("len(AB) + 1", empty, false, lenses), 3);
+  });
+
+  test("文字列リテラルはエラー", () => {
+    assert.throws(
+      () => evalExpr('len("HELLO")', empty, false, lenses),
+      /len\(\) requires a string label/,
+    );
+  });
+
+  test("数値はエラー", () => {
+    assert.throws(
+      () => evalExpr("len(5)", empty, false, lenses),
+      /len\(\) requires a string label/,
+    );
+  });
+
+  test("文字列でないラベルはエラー", () => {
+    assert.throws(
+      () => evalExpr("len(NOT_STR)", empty, false, lenses),
+      /len\(\) requires a string label/,
+    );
+  });
+
+  test("グローバルラベルはエラー", () => {
+    const globl = new Set(["HELLO_MSG1"]);
+    assert.throws(
+      () => evalExpr("len(HELLO_MSG1)", empty, false, lenses, globl),
+      /len\(\) cannot use a global label/,
+    );
+  });
+});
+
 describe("assembler: ASCII .dw", () => {
   test(".dw 'H' は 0x0048", () => {
     const r = assemble("        .org 0\n        .dw 'H'\n");

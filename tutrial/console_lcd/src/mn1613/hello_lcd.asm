@@ -17,8 +17,8 @@
 LCD_CLEAR	.equ	0
 LCD_DISPLAY	.equ	2
 LCD_DISP_ON	.equ	1
-HELLO_MSG1_LEN	.equ	11
-HELLO_MSG2_LEN	.equ	12
+HELLO_MSG1_LEN	.equ	len(hello_msg1)
+HELLO_MSG2_LEN	.equ	len(hello_msg2)
 
 	.area	_CODE		(REL,CON)
 	.org	0x1800
