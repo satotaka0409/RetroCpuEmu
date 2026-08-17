@@ -17,7 +17,7 @@
 	.area	_CODE		(REL,CON)
 
 	; @unwarning
-	.global g_bios_beep
+	.global g_bios_beep_
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
 	.global g_hshk_finalize_send
@@ -36,7 +36,7 @@ BIOS_BEEP_FRAME_LEN	.equ	5
 ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_beep:
+g_bios_beep_:
 	push	R3
 	push	R4
 

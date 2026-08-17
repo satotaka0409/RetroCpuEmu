@@ -16,19 +16,19 @@
 	.area	_CODE		(REL,CON)
 
 	.global g_rnd_init
-	.global g_get_rnd
+	.global g_get_rnd_
 	; @unwarning
-	.global g_mem_cpy
+	.global g_mem_cpy_
 	.global g_malloc_init
 	; @unwarning
-	.global g_malloc
+	.global g_malloc_
 	; @unwarning
-	.global g_free
+	.global g_free_
 	.global g_malloc2_init
 	; @unwarning
-	.global g_malloc2
+	.global g_malloc2_
 	; @unwarning
-	.global g_free2
+	.global g_free2_
 	.global g_write_cpu_registers
 	.global GL_RND_SEED
 	.global GL_ALLOC_ADR
@@ -57,16 +57,15 @@ g_rnd_init:
 ; @return R0 - 乱数値
 ; @Destruction R0
 ; -------------------------------------------------------
-g_get_rnd:
+g_get_rnd_:
 	l	R0, *GL_RND_SEED
 	mv	R0, R0, NZ
 	mvi	R0, #1
 	sr	R0, RE
-; @cp g_get_rnd
+; @cp g_get_rnd_
 	tbit	STR, #0, Z
 	eori	R0, #GL_RND_TAP
 	st	R0, *GL_RND_SEED
-; @cp g_get_rnd
 	ret
 
 ; ヒープブロック: [+0]=ワード数（ヘッダ含む） [+1]=0 free / 1 used [+2…]=ユーザ
@@ -82,7 +81,7 @@ GL_HEAP_USED	.equ	1
 ; @param SP+3 - コピー先 A0–A15
 ; @Destruction なし
 ; -------------------------------------------------------
-g_mem_cpy:
+g_mem_cpy_:
 	pshm
 	cpyb	R0, TSR0
 	cpyb	R1, TSR1
@@ -137,7 +136,7 @@ l_minit_done:
 ; @return R0 - ユーザ領域先頭。失敗は 0
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_malloc:
+g_malloc_:
 	push	R3
 	push	R4
 	mv	R1, R0
@@ -210,7 +209,7 @@ l_m_done:
 ; @return R0 - 成功時は同じアドレス。失敗は 0
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_free:
+g_free_:
 	push	R3
 	push	R4
 	mv	R0, R0, NZ
@@ -333,7 +332,7 @@ l_m2i_done:
 ; @return R1 - ユーザ領域の SBR。失敗は 0
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_malloc2:
+g_malloc2_:
 	push	R3
 	push	R4
 	cpyb	R3, TSR0
@@ -421,7 +420,7 @@ l_m2_done:
 ; @return R1 - 成功時は同じ SBR。失敗は 0
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_free2:
+g_free2_:
 	push	R3
 	push	R4
 	cpyb	R3, TSR0

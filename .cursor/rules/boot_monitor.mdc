@@ -27,11 +27,11 @@ MN1613 用 BIOS（モニター領域 `0108h`–`17FFh`）の公開エントリ�
 
 ### 領域と初期化
 
-コードは `.area _CODE (REL,CON)`（`0108h`–、ROM）、値あり定数・テーブルは `.area _DATA (REL,CON)`（ROM、`.word` / `.dw`）、
+コードは `.area _BIOS (REL,CON)`（公開ジャンプ表 `0110h`–）のあと `.area _CODE (REL,CON)`（BIOS の続き、ROM）、値あり定数・テーブルは `.area _DATA (REL,CON)`（ROM、`.word` / `.dw`）、
 モニタの作業変数は `.area _WORK (REL,NOLOAD)`（RAM、`.ds`）に置く。
 システムゼロページは `.area _SYS_PAGE0 (REL,NOLOAD)`（sdld `-b` がバイト `0010h`＝ワード `0008h` から CON。各 `.asm` は `.ds` のみ、`.org` 不要。`L`/`ST *label`）。
 ユーザゼロページは `.area _USR_PAGE0 (REL,NOLOAD)`（`-b` バイト `0080h`＝ワード `0040h`）。
-リンクは `sdld`（`-b` と `.lnk`）。CON 順は `_CODE` → `_DATA` → `_WORK`（`_VECTOR` / ゼロページがあればその前）。
+リンクは SDCC 付属の `sdld`（`.lnk` の `-b`）。ゼロページと `_VECTOR` / `_BIOS` は固定。`_CODE` は `_BIOS` の続き、そのあと `_DATA` → `_WORK`（2 本目の `-b`。配置は sdld）。
 sdld は `s__WORK` / `l__WORK` を出す。CDB はバイト、命令即値はワード（÷2）。
 割り込みベクタは `.area _VECTOR (ABS,OVR)`（`0100h`）。配置表は
 `retrocpu_boot_monitor/mn1613/src/memmap.inc`。`MON_CODE_BASE` / `MON_DATA_BASE`

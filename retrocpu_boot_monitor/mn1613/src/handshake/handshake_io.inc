@@ -3,7 +3,7 @@
 ;
 ; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
 ; interrupt_io.inc と共有。二重 .equ を避けるため include する。
-; memmap.inc は _VECTOR/_CODE の .org を含むのでここからは include しない。
+; memmap.inc は _VECTOR/_BIOS の .org を含むのでここからは include しない。
 	.include "../interrupt_io.inc"
 
 ; 制御信号ポート（方向分離）

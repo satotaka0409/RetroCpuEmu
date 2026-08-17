@@ -17,7 +17,7 @@
 	.area	_CODE		(REL,CON)
 
 	; @unwarning
-	.global g_bios_hex_key_get
+	.global g_bios_hex_key_get_
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
 	.global g_hshk_finalize_send
@@ -33,7 +33,7 @@
 ; @return R0 - OK / 01h モードエラー / 02h その他
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_hex_key_get:
+g_bios_hex_key_get_:
 	push	R3
 	push	R4
 	mv	R2, R0

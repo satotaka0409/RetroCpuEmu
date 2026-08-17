@@ -33,8 +33,9 @@
 	.global g_hshk_mem_map
 	.global g_hshk_mem_ld8
 	.global g_hshk_mem_st8
-	.global g_get_rnd
 	.global GL_HSHK_PAIR
+
+	.global g_get_rnd_
 
 ; -------------------------------------------------------
 ; ENA=0 チェック用の待機（g_get_rnd でばらした粗いスピン）
@@ -42,7 +43,7 @@
 ; -------------------------------------------------------
 g_hshk_wait_ena_delay:
 	push	R3
-	bald	g_get_rnd
+	bald	g_get_rnd_
 	andi	R0, #HSHK_DELAY_MASK
 	awi	R0, #HSHK_DELAY_MIN
 l_hshk_wad_lp:
@@ -447,7 +448,7 @@ g_hshk_recv_byte:
 	b	l_hshk_recv_fail
 	l	R0, *GL_HSHK_PAIR
 	andi	R0, #HSHK_PAIR_RECV
-	mv	R0, R0, Z
+	or	R0, R0, Z
 	b	l_hshk_recv_2
 	mvwi	R0, #HSHK_IN_DENA_BIT
 	bald	l_hshk_wait_in_dena

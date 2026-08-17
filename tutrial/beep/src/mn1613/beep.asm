@@ -13,7 +13,7 @@
 
 	.cpu	mn1613
 
-	.include "bios_addrs.inc"
+	.include "../../../bios.inc"
 
 	.global	g_user_main
 

@@ -18,7 +18,7 @@
 	.area	_CODE		(REL,CON)
 
 	; @unwarning
-	.global g_bios_lcd_control
+	.global g_bios_lcd_control_
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
 	.global g_hshk_finalize_send
@@ -38,7 +38,7 @@ BIOS_LCD1_FRAME_LEN	.equ	5
 ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG / HSHK_NG_OTHER）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_lcd_control:
+g_bios_lcd_control_:
 	push	R3
 	push	R4
 

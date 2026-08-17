@@ -1,3 +1,0 @@
-/home/t1sato/RetroCpuEmu/retrocpu_boot_monitor/build/cmake/CMakeFiles/sdcc_mn1613_tools.dir
-/home/t1sato/RetroCpuEmu/retrocpu_boot_monitor/build/cmake/CMakeFiles/edit_cache.dir
-/home/t1sato/RetroCpuEmu/retrocpu_boot_monitor/build/cmake/CMakeFiles/rebuild_cache.dir

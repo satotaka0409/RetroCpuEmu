@@ -1,139 +1,83 @@
+# LCD HELLO WORLD チュートリアル（MN1613）
+#
+#   make ihx     … hello_lcd.ihx / .cdb（開始ワード 1800h）
+#   make clean
+#
+# ブートモニタの CDB から BIOS アドレスを取り、ユーザ IHX だけ出す。
+# エミュは RST でモニタを載せたあと、この IHX を DMA し 1800h から RUN。
+
 SHELL := /bin/bash
 
-# ルート直下の npm プロジェクト
-PROJECTS := \
-	retrocpu_asm \
-	retrocpu_emu \
-	retrocpu_boot_monitor \
-	retrocpu_test_framework \
-	cursor_expand/asm_editer \
-	cursor_expand/debug_expand
+ROOT_DIR        := $(abspath ../..)
+TUT_DIR         := $(abspath .)
+SRC_DIR         := $(TUT_DIR)/src/mn1613
+BUILD_DIR       := $(TUT_DIR)/build
+OBJ_DIR         := $(BUILD_DIR)/obj
+HEX_DIR         := $(BUILD_DIR)/hex
+TOOLS_DIR       := $(TUT_DIR)/tools
 
-.PHONY: all init clean install build help \
-	clean-% install-% build-% init-% \
-	sdcc-setup monitor-ihx monitor-clean
+MONITOR_DIR     := $(ROOT_DIR)/retrocpu_boot_monitor
+MONITOR_CDB     := $(MONITOR_DIR)/build/hex/mn1613_mon.cdb
+MONITOR_IHX     := $(MONITOR_DIR)/build/hex/mn1613_mon.ihx
 
-# 既定: クリーン → 依存インストール → ビルド
-all: init
+RETROCPU_ASM_DIR ?= $(ROOT_DIR)/retrocpu_asm
+ASM_CLI         := $(RETROCPU_ASM_DIR)/dist/main/cli.js
+SDLD_LINK_CLI   := $(RETROCPU_ASM_DIR)/dist/main/sdldLinkCli.js
 
-init: clean install build
-	@echo ""
-	@echo "init completed for: $(PROJECTS)"
+SDCC_SRC_DIR    ?= $(HOME)/sdcc-mn1613/sdcc/build/sdcc
+SDCC_BIN_DIR    ?= $(SDCC_SRC_DIR)/bin
+export PATH := $(SDCC_BIN_DIR):$(PATH)
+export SDCC_BIN_DIR
+export SDLD := $(SDCC_BIN_DIR)/sdld
+
+TARGET_NAME     := hello_lcd
+IHX             := $(HEX_DIR)/$(TARGET_NAME).ihx
+CDB             := $(HEX_DIR)/$(TARGET_NAME).cdb
+REL             := $(OBJ_DIR)/$(TARGET_NAME).rel
+BIOS_INC        := $(SRC_DIR)/bios_addrs.inc
+
+.PHONY: all help ihx clean monitor retrocpu-asm-build
+
+all: ihx
 
 help:
-	@echo "Usage:"
-	@echo "  make            # = make init"
-	@echo "  make init       # clean → npm install → build（全プロジェクト）"
-	@echo "  make clean      # node_modules / dist 等を削除"
-	@echo "  make install    # npm install のみ"
-	@echo "  make build      # 各プロジェクトのビルド"
-	@echo "  make init-<dir> # 例: make init-retrocpu_asm"
-	@echo "  make clean-<dir> / install-<dir> / build-<dir>"
-	@echo "  make sdcc-setup # SDCC (sdasmn1613/sdld) を CMake 経由で構築"
-	@echo "  make monitor-ihx# モニター Intel HEX（retrocpu_asm + sdld）"
+	@echo "tutrial/console_lcd"
+	@echo "  make ihx     $(IHX) と $(CDB)"
+	@echo "  make clean   ビルド成果物を削除"
 
-# -------------------------------------------------------
-# retrocpu_boot_monitor（SDCC + IHX）
-# -------------------------------------------------------
-sdcc-setup:
-	$(MAKE) -C retrocpu_boot_monitor sdcc-setup
+retrocpu-asm-build:
+	@if [ ! -f "$(ASM_CLI)" ] || [ ! -f "$(SDLD_LINK_CLI)" ]; then \
+		echo "==> building retrocpu_asm"; \
+		cd $(RETROCPU_ASM_DIR) && npm install && npm run build; \
+	fi
+	@test -f "$(ASM_CLI)"
+	@test -f "$(SDLD_LINK_CLI)"
 
-monitor-ihx:
-	$(MAKE) -C retrocpu_boot_monitor ihx
+monitor:
+	@$(MAKE) -C $(MONITOR_DIR) ihx
 
-monitor-clean:
-	$(MAKE) -C retrocpu_boot_monitor clean
+$(MONITOR_CDB):
+	@$(MAKE) -C $(MONITOR_DIR) ihx
 
-# -------------------------------------------------------
-# clean: 一度消してから作り直す前提の掃除
-# -------------------------------------------------------
+$(OBJ_DIR):
+	@mkdir -p $@
+
+$(HEX_DIR):
+	@mkdir -p $@
+
+$(BIOS_INC): $(MONITOR_CDB) $(TOOLS_DIR)/gen_bios_addrs.mjs
+	node $(TOOLS_DIR)/gen_bios_addrs.mjs $(MONITOR_CDB) > $@
+
+$(REL): $(SRC_DIR)/hello_lcd.asm $(BIOS_INC) | retrocpu-asm-build $(OBJ_DIR)
+	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HELLO_LCD
+
+$(IHX): $(REL) $(SDLD_LINK_CLI) | $(HEX_DIR)
+	node $(SDLD_LINK_CLI) $(REL) -o $@ --cdb $(CDB)
+
+ihx: $(IHX)
+	@echo "Wrote $(IHX)"
+	@echo "Wrote $(CDB)"
+
 clean:
-	@for d in $(PROJECTS); do \
-		echo "==> clean $$d"; \
-		$(MAKE) --no-print-directory clean-dir DIR=$$d; \
-	done
-
-clean-dir:
-	@test -n "$(DIR)"
-	@rm -rf "$(DIR)/node_modules" \
-		"$(DIR)/dist" \
-		"$(DIR)/coverage" \
-		"$(DIR)/.vite" \
-		"$(DIR)/.turbo"
-	@rm -f "$(DIR)"/*.vsix
-	@echo "    removed node_modules/dist (and related) in $(DIR)"
-
-# -------------------------------------------------------
-# install
-# -------------------------------------------------------
-install:
-	@for d in $(PROJECTS); do \
-		echo "==> npm install $$d"; \
-		$(MAKE) --no-print-directory install-dir DIR=$$d; \
-	done
-
-install-dir:
-	@test -n "$(DIR)"
-	@test -f "$(DIR)/package.json"
-	@cd "$(DIR)" && npm install
-
-# -------------------------------------------------------
-# build（プロジェクトごとの npm script）
-# -------------------------------------------------------
-build:
-	@for d in $(PROJECTS); do \
-		echo "==> build $$d"; \
-		$(MAKE) --no-print-directory build-dir DIR=$$d; \
-	done
-
-build-dir:
-	@test -n "$(DIR)"
-	@case "$(DIR)" in \
-		retrocpu_asm) \
-			cd "$(DIR)" && npm run build ;; \
-		retrocpu_emu) \
-			cd "$(DIR)" && npm run build ;; \
-		cursor_expand/asm_editer) \
-			cd "$(DIR)" && npm run compile ;; \
-		*) \
-			echo "unknown project: $(DIR)"; exit 1 ;; \
-	esac
-
-# -------------------------------------------------------
-# 個別プロジェクト: make init-retrocpu_asm など
-# （スラッシュは - に置き換え: make init-cursor_expand-asm_editer）
-# -------------------------------------------------------
-init-%:
-	@$(MAKE) --no-print-directory _one GOAL=init SLUG=$*
-
-clean-%:
-	@$(MAKE) --no-print-directory _one GOAL=clean SLUG=$*
-
-install-%:
-	@$(MAKE) --no-print-directory _one GOAL=install SLUG=$*
-
-build-%:
-	@$(MAKE) --no-print-directory _one GOAL=build SLUG=$*
-
-_one:
-	@dir=$$(echo "$(SLUG)" | tr '-' '/'); \
-	found=0; \
-	for d in $(PROJECTS); do \
-		if [ "$$d" = "$$dir" ]; then found=1; break; fi; \
-	done; \
-	if [ "$$found" -ne 1 ]; then \
-		echo "unknown project slug: $(SLUG) (resolved: $$dir)"; \
-		echo "known: $(PROJECTS)"; \
-		exit 1; \
-	fi; \
-	case "$(GOAL)" in \
-		clean) $(MAKE) --no-print-directory clean-dir DIR=$$dir ;; \
-		install) $(MAKE) --no-print-directory install-dir DIR=$$dir ;; \
-		build) $(MAKE) --no-print-directory build-dir DIR=$$dir ;; \
-		init) \
-			$(MAKE) --no-print-directory clean-dir DIR=$$dir; \
-			$(MAKE) --no-print-directory install-dir DIR=$$dir; \
-			$(MAKE) --no-print-directory build-dir DIR=$$dir; \
-			echo "init completed for $$dir" ;; \
-		*) echo "unknown goal $(GOAL)"; exit 1 ;; \
-	esac
+	rm -rf $(BUILD_DIR)
+	rm -f $(BIOS_INC)

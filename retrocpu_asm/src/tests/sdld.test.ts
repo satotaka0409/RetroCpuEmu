@@ -115,4 +115,43 @@ START:  mvwi    X0, #s__WORK
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("_CODE は _BIOS の直後に置く", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sdld-bios-"));
+    try {
+      const rel = writeRel(
+        assemble(`
+        .cpu    mn1613
+        .area   _BIOS           (REL,CON)
+        .org    0x0110
+        .globl  ENTRY
+ENTRY:  h
+        .area   _CODE           (REL,CON)
+        .globl  BODY
+BODY:   h
+`),
+        "MAIN",
+      );
+      const relPath = writeRelFile(dir, "main.rel", rel);
+      const linked = linkRelsWithSdld([relPath], { workDir: dir });
+      const sBios = [...linked.defs.entries()].find(
+        ([n]) => n.toUpperCase() === "S__BIOS",
+      );
+      const lBios = [...linked.defs.entries()].find(
+        ([n]) => n.toUpperCase() === "L__BIOS",
+      );
+      const sCode = [...linked.defs.entries()].find(
+        ([n]) => n.toUpperCase() === "S__CODE",
+      );
+      assert.ok(sBios && lBios && sCode, "s__/l__BIOS と s__CODE が必要");
+      assert.equal(sCode![1], (sBios![1] + lBios![1]) >>> 0);
+      assert.equal(linked.defs.get("ENTRY"), 0x0220, "ENTRY はワード 0x0110");
+      assert.equal(linked.defs.get("BODY"), sCode![1], "BODY は _CODE 先頭");
+      assert.equal(linked.image[0x220], 0x20, "BIOS の H は 0x0110");
+      assert.equal(linked.image[sCode![1]], 0x20, "_CODE の H は BIOS の次");
+      assert.notEqual(linked.image[0] ?? 0, 0x20, "_CODE を 0 番地に置かない");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

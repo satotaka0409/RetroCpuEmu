@@ -1,8 +1,10 @@
-; mn1613_mon.lnk — sdld 領域配置の根拠（実際のリンクは sdldLinkCli が 2 パスで生成する）
+; mn1613_mon.lnk — SDCC 付属 sdld の領域配置（ラッパが .lnk を生成して sdld -f する）
 ;
 ; -i -m -y -w
 ; -b _SYS_PAGE0 = 0x0010
 ; -b _USR_PAGE0 = 0x0080
-; -b _CODE = 0x0200
-; （_DATA / _WORK は 1 パス目の l__CODE / l__DATA から埋める）
+; -b _VECTOR = 0x0000
+; -b _BIOS = 0x0000
+; （_CODE は 1 本目の map の s__BIOS+l__BIOS を 2 本目の -b に書く。配置は sdld）
+; （_DATA / _WORK も同様に l__CODE / l__DATA から -b）
 ; main.rel を先頭に並べる。

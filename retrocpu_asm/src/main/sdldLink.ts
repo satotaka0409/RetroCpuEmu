@@ -185,9 +185,9 @@ export function defsToCdbFromSdld(defs: Map<string, number>): string {
 }
 
 /**
- * `.lnk` 本文を組み立てる。
+ * `.lnk` 本文を組み立てる。配置は SDCC 付属の sdld が行う。
  * @param relPaths 入力 .rel（先頭が MAIN）
- * @param extraB 追加 `-b`（領域 → バイトアドレス）
+ * @param extraB 追加 `-b`（領域 → バイトアドレス）。1 本目の map を見て渡す
  * @param outName `-o` の基点
  * @returns lnk テキスト
  */
@@ -200,6 +200,7 @@ export function buildSdldLnk(
   const lines = ["-i", "-m", "-y", "-w", `-o ${outName}`];
   for (const [area, addr] of Object.entries(SDLD_AREA_BASES)) {
     if (presentAreas && !presentAreas.has(area)) continue;
+    if (Object.prototype.hasOwnProperty.call(extraB, area)) continue;
     lines.push(`-b ${area} = 0x${addr.toString(16).toUpperCase()}`);
   }
   for (const [area, addr] of Object.entries(extraB)) {
@@ -330,6 +331,7 @@ function moduleAreaBases(
       defLookup(defs, `s_${area}`) ?? SDLD_AREA_BASES[area] ?? fallback,
     );
   };
+  seed("_BIOS", 0);
   seed("_CODE", 0);
   seed("_DATA", defLookup(defs, "s__CODE") ?? 0);
   seed("_WORK", defLookup(defs, "s__DATA") ?? 0);
@@ -426,9 +428,10 @@ function applyMn1613WordAddrFixup(
 }
 
 /**
- * .rel を sdld でリンクする。MN161x はバイト単位でリンクし、
- * 命令のアドレス欄をワードへ直す。`_DATA` / `_WORK` は 1 本目の map の
- * `l__CODE` から基点を決める。
+ * .rel を SDCC 付属の `sdld` でリンクする。MN161x はバイト単位でリンクし、
+ * 命令のアドレス欄だけワードへ直す。配置は sdld。`_BIOS` の続きへ `_CODE` を
+ * 置く `-b` と `_DATA` / `_WORK` は 1 本目の map を見て 2 本目の `.lnk` に書く
+ * （sdld8051 が空の `_CODE` を先に作るため、1 本では `_BIOS` の後ろに付かない）。
  * @param relPaths 入力 .rel（MAIN を先頭にすること）
  * @param options wordAddrFixup=false なら TMS（÷2 しない）
  * @returns リンク結果
@@ -473,8 +476,16 @@ export function linkRelsWithSdld(
   let defs = parseSdldMapSymbols(mapText);
   const extraB: Record<string, number> = {};
   const codeLen = defLookup(defs, "l__CODE") ?? defLookup(defs, "l_CODE") ?? 0;
-  const codeStart =
+  let codeStart =
     defLookup(defs, "s__CODE") ?? defLookup(defs, "s_CODE") ?? 0;
+  if (presentAreas.has("_BIOS") && presentAreas.has("_CODE")) {
+    const biosStart =
+      defLookup(defs, "s__BIOS") ?? defLookup(defs, "s_BIOS") ?? 0;
+    const biosLen =
+      defLookup(defs, "l__BIOS") ?? defLookup(defs, "l_BIOS") ?? 0;
+    extraB._CODE = (biosStart + biosLen) >>> 0;
+    codeStart = extraB._CODE;
+  }
   if (presentAreas.has("_DATA")) {
     extraB._DATA = (codeStart + codeLen) >>> 0;
   }

@@ -18,7 +18,7 @@
 	.area	_CODE		(REL,CON)
 
 	; @unwarning
-	.global g_bios_timer_set
+	.global g_bios_timer_set_
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
 	.global g_hshk_finalize_send
@@ -38,7 +38,7 @@ BIOS_TIMER_FRAME_LEN	.equ	6
 ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_timer_set:
+g_bios_timer_set_:
 	push	R3
 	push	R4
 	; R2 = 回数（第3引数。PUSH 後もレジスタ値は残る）

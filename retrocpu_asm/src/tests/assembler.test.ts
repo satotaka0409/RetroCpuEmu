@@ -622,6 +622,20 @@ W0:	.ds	1
     assert.match(rel, /A _WORK size 0002 flags 0000/);
   });
 
+  test("A レコードは _BIOS が _CODE の前", () => {
+    const rel = writeRel(
+      assemble(`
+	.area	_CODE		(REL,CON)
+	H
+	.area	_BIOS		(REL,CON)
+	H
+`),
+      "BIOSORD",
+    );
+    const aOrder = [...rel.matchAll(/^A\s+(\S+)/gm)].map((m) => m[1]);
+    assert.deepEqual(aOrder, ["_BIOS", "_CODE"]);
+  });
+
   test("*label ゼロページは R3_BYTE（P レコードは出さない）", () => {
     const rel = writeRel(
       assemble(`

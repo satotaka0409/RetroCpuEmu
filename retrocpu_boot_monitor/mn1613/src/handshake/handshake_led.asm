@@ -20,11 +20,7 @@
 	.area	_CODE		(REL,CON)
 
 	; @unwarning
-	.global g_bios_led_display
-	; @unwarning
-	.global g_bios_led_seven_seg
-	; @unwarning
-	.global g_bios_led_bullet
+	.global g_bios_led_display_
 	.global GL_HSHK_LED_LATCH
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
@@ -41,7 +37,7 @@
 ; @return R0 - OK / 01h モードエラー / 02h その他
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_led_display:
+g_bios_led_display_:
 	push	R3
 	push	R4
 	mvwi	R1, #HSHK_LED_DATA_LEN
@@ -57,7 +53,7 @@ g_bios_led_display:
 ; @return R0 - OK / 01h モードエラー / 02h その他
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_led_seven_seg:
+l_bios_led_seven_seg:
 	push	R3
 	push	R4
 	mv	R2, R1
@@ -80,7 +76,7 @@ l_led_ss_keep_bullet:
 ; @return R0 - OK / 01h モードエラー / 02h その他
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_bios_led_bullet:
+l_bios_led_bullet:
 	push	R3
 	push	R4
 	andi	R0, #0x00ff

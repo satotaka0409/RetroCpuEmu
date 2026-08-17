@@ -15,7 +15,7 @@
 	; @unwarning
 	.global g_bp_hist_append
 	.global g_hshk_mem_map
-	.global g_hshk_get_time
+	.global g_hshk_get_time_
 	.global GL_BP_HIST_META
 
 BP_KIND_IO		.equ	2
@@ -93,7 +93,7 @@ l_bp_ha_prev_done:
 	; 11h。INT2 中は BUSY=1 のままでは IO が応答しない
 	eor	R0, R0
 	wt	R0, INTERRUPT_BUSY
-	bald	g_hshk_get_time
+	bald	g_hshk_get_time_
 
 	; スロット → メタ。dest = F000h + slot*528 + head*33
 	; *33 = <<5 + n、*528 = <<9 + <<4

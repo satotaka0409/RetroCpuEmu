@@ -14,8 +14,7 @@
 
 	.area	_CODE		(REL,CON)
 
-	; @unwarning
-	.global g_hshk_get_time
+	.global g_hshk_get_time_
 	.global g_hshk_initiate_send
 	.global g_hshk_send_byte
 	.global g_hshk_finalize_send
@@ -33,7 +32,7 @@ HSHK_TIME_WORDS		.equ	4
 ; @return R0 - IO ボードのステータス（HSHK_OK / HSHK_NG）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
-g_hshk_get_time:
+g_hshk_get_time_:
 	push	R3
 	push	R4
 

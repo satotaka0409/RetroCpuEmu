@@ -1,12 +1,13 @@
 /**
  * リンク時の CON 領域順。
- * `_VECTOR` があれば先頭。続けてゼロページ、`_CODE` → `_DATA` → `_WORK`。
+ * `_VECTOR` があれば先頭。続けてゼロページ、`_BIOS` → `_CODE` → `_DATA` → `_WORK`。
  * それ以外の名前はアルファベット順で後ろへ。
  */
 export const AREA_LINK_ORDER: readonly string[] = [
   "_VECTOR",
   "_SYS_PAGE0",
   "_USR_PAGE0",
+  "_BIOS",
   "_CODE",
   "_DATA",
   "_WORK",
@@ -42,12 +43,15 @@ export const A3_ABS = 0x08;
 
 /**
  * sdld `-b` 用の領域開始（asxxxx バイトアドレス）。
- * `_VECTOR` / `_CODE` は 0。main.rel の `.org`（ワード×2）が原点になる。
+ * `_VECTOR` / `_BIOS` / `_CODE` は 0。main.rel の `.org`（ワード×2）が原点になる。
+ * `_CODE` は `_BIOS` があるとき 2 本目の `.lnk` で `s__BIOS+l__BIOS` を `-b` する
+ * （配置するのは SDCC の sdld。sdld8051 は空の `_CODE` を先に作るので 1 本では続かない）。
  */
 export const SDLD_AREA_BASES: Readonly<Record<string, number>> = {
   _SYS_PAGE0: SYS_PAGE0_WORD_BASE * 2,
   _USR_PAGE0: USR_PAGE0_WORD_BASE * 2,
   _VECTOR: 0,
+  _BIOS: 0,
   _CODE: 0,
 };
 
@@ -78,7 +82,7 @@ export function canonicalAreaName(name: string): string {
 /**
  * リンク／REL 出力用に領域名を並べる。
  * @param names - 領域名
- * @returns `_VECTOR` → ゼロページ → `_CODE` → `_DATA` → `_WORK` を優先した配列
+ * @returns `_VECTOR` → ゼロページ → `_BIOS` → `_CODE` → `_DATA` → `_WORK` を優先した配列
  */
 export function orderLinkAreaNames(names: Iterable<string>): string[] {
   const set: Set<string> = new Set(

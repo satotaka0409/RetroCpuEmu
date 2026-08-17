@@ -171,7 +171,7 @@ MN1613 の `PUSH` は **SP が指す空きスロットに書いてから SP を 
 - retrocpu_asm は領域ごとにロケーションカウンタを持つ。`.area` で切り替え、`.org` は
   **現在領域**の原点を動かす。`.ds` / `.blkw` は予約のみ（イメージにワードを出さない）。
   `_WORK` は NOLOAD（`.word` / 命令はエラー）。MN1613 モニタでは `memmap.inc` が
-  `_VECTOR=0x0100` / `_CODE=0x0108`。`_DATA` / `_WORK` は `_CODE` の後ろに CON（固定 `.org` なし）。
+  `_VECTOR=0x0100` / `_BIOS=0x0110`。`_CODE` / `_DATA` / `_WORK` は `_BIOS` の後ろに CON（固定 `.org` なし）。
 - `_WORK` は初期値を持てない。定数テーブルは `_DATA` に `.word` で置き、
   RAM の初期化は起動時ルーチン（例: `g_hshk_addr_break_init`）で書く。
 
@@ -199,8 +199,11 @@ retrocpu_asm はラベルと疑似命令を混ぜないため、左端の疑似�
 ; memmap.inc（配置表。ゼロページの .org は書かない）
 	.area	_SYS_PAGE0		(REL,NOLOAD)
 	.area	_USR_PAGE0		(REL,NOLOAD)
+	.area	_VECTOR		(REL,CON)
+	.org	0x0100
+	.area	_BIOS		(REL,CON)
+	.org	0x0110
 	.area	_CODE		(REL,CON)
-	.org	0x0108
 	.area	_DATA		(REL,CON)
 	.area	_WORK		(REL,NOLOAD)
 
@@ -241,7 +244,7 @@ GL_RND_SEED:	.ds	1
 
 ### 起動の仕方
 
-手で叩くときはラッパ経由（`.lnk` の 2 パスと MN1613 のワード÷2 を含む）。
+手で叩くときはラッパ経由（`.lnk` を書いて SDCC 付属の `sdld -f`。MN1613 はアドレス欄のワード÷2 だけラッパ）。配置は sdld。
 
 ```text
 npm --prefix retrocpu_asm run sdld-link -- main.rel other.rel -o out.ihx --cdb out.cdb
@@ -277,7 +280,8 @@ sdld -f out.lnk
 -b _SYS_PAGE0 = 0x0010
 -b _USR_PAGE0 = 0x0080
 -b _VECTOR = 0x0000
--b _CODE = 0x0000
+-b _BIOS = 0x0000
+-b _CODE = 0x....
 -b _DATA = 0x....
 -b _WORK = 0x....
 main.rel
@@ -301,9 +305,10 @@ other.rel
 | `_SYS_PAGE0` | `0x0010` | `0008h` | 各 `.asm` は `.ds` のみ。`.org` 不要 |
 | `_USR_PAGE0` | `0x0080` | `0040h` | 同上 |
 | `_VECTOR` | `0x0000` | — | overlay。`main` の `.org 0x0100` が付ける |
-| `_CODE` | `0x0000` | — | `main` の `.org 0x0108` が付ける |
-| `_DATA` | 1 パス目の `s__CODE + l__CODE` | — | 別名領域なので自動では `_CODE` の後ろに付かない |
-| `_WORK` | 1 パス目の `s__DATA + l__DATA`（無ければ `_CODE` の直後） | — | NOLOAD。IHX には出さない |
+| `_BIOS` | `0x0000` | — | `main` の `.org 0x0110` が付ける |
+| `_CODE` | `_BIOS` があれば 1 本目 map の `s__BIOS + l__BIOS` を 2 本目の `-b` に書く | — | 配置は sdld。sdld8051 が空の `_CODE` を先に作るので 1 本では続かない |
+| `_DATA` | 1 本目の `s__CODE + l__CODE`（2 本目で `_CODE` を動かしたあと） | — | 同上。sdld の `-b` |
+| `_WORK` | 1 本目の `s__DATA + l__DATA`（無ければ `_CODE` の直後） | — | NOLOAD。IHX には出さない |
 
 `.lnk` の **最後に `.rel` を並べる**。フラグの後、入力の前。
 
@@ -311,13 +316,13 @@ other.rel
 
 1. **`main.rel` を必ず先頭**にする。`sdld` はモジュールを並べ替えない。Makefile / テストフレームワークが `MAIN` を先頭にする。先頭を間違えるとリセットベクタと `g_main` がイメージ先頭に来ない。
 2. **`-b` は、入力 `.rel` に実際にある領域だけ**書く。無い領域を `-b` すると `No definition of area` で exit 2。
-3. **`_DATA` / `_WORK` は 2 パス**が必要。1 本目で `l__CODE` / `l__DATA` を見てから `-b` を埋める。手で `sdld -f` するならマップを見て 2 回目を自分で書く。製品経路は `sdldLinkCli` がやる。
+3. **リンカは SDCC 付属の `sdld` だけ。** 自前リンカは使わない。`_CODE` / `_DATA` / `_WORK` の開始は 1 本目の map を見て 2 本目の `.lnk` の `-b` に書き、もう一度 `sdld -f` する。sdld8051 は空の `_CODE` を先に作るので、`-b` 無しでは `_BIOS` の後ろに付かない。
 4. **`-w` を落とさない。** 長いグローバルと `; @cp`（`__CP$name$serial`）が切れる。
 5. **アドレス単位。** `-b` / マップ / CDB は **バイト**。CPU の IC・即値・`*label` は **ワード**。ラッパがリロケーション欄を ÷2 する。CDB の値を命令にそのまま載せない。
 6. **`s_<area>` / `l_<area>`。** sdld が出す（例: `s__WORK`, `l__WORK`）。CDB はバイト。`mvwi X0, #s__WORK` は **ワード開始**、`#l__WORK` は **ワード数**（÷2 後）。ソースでは `.global s__WORK` / `.global l__WORK` が必要。
 7. **NOLOAD**（`_WORK` / ゼロページ）は IHX に出ない。サイズと開始はマップに残る。RAM クリアは起動ルーチンで `s__WORK` / `l__WORK` を使う。
 8. **外部ラベル同士の引き算**（`END-START` で別モジュール）は sdld が差リロケーションを持たないのでアセンブル時エラー。同一モジュール内の差だけ定数になる。
-9. **`.area` の CON 順**は `_VECTOR` → `_SYS_PAGE0` → `_USR_PAGE0` → `_CODE` → `_DATA` → `_WORK`。同じ領域は `.rel` の並び順で連結する。
+9. **`.area` の CON 順**は `_VECTOR` → `_SYS_PAGE0` → `_USR_PAGE0` → `_BIOS` → `_CODE` → `_DATA` → `_WORK`。同じ領域は `.rel` の並び順で連結する。
 10. 手で `sdld` だけ走らせて IHX を使うと、MN1613 のアドレス欄がバイトのまま残る。製品・テストは必ずラッパ（`sdldLinkCli` / `linkRelsWithSdld`）を通す。
 
 ## レビュー時の厳格なチェック項目
@@ -331,7 +336,7 @@ other.rel
 7. `.area` / `.org` / `.include` が左端から始まっていないか？（字下げ必須。左端はラベル）。`.include` しているのが `.asm` ではないか？（`.inc` のみ）
 8. RAM 変数を `_DATA` や `MON_*_BASE + n` の `.equ` で置いていないか？（`.area _WORK` + `.ds`。システムゼロページは `_SYS_PAGE0 (REL,NOLOAD)` + `.ds`（`.org` 不要。sdld `-b` が `0008h` から CON。`L`/`ST *label`）。ユーザゼロページは `_USR_PAGE0`（`0040h`–）。値ありは `_DATA`）
 9. リンクは `sdld` か？（自前リンカ禁止。複数 `.rel` なら `main.rel` 先頭。Makefile / フレームワークが先頭にする。sdld は並べ替えない）
-10. `.area` のリンク順は `_CODE` → `_DATA` → `_WORK` か？（A レコード順と `-b`）
+10. `.area` のリンク順は `_BIOS` → `_CODE` → `_DATA` → `_WORK` か？（A レコード順と `-b`）
 
 # アセンブラ編集支援拡張機能 - cursor_asm_editer
 
