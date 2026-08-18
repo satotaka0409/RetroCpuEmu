@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "レトロマイコンエミュ Debug",
+      "name": "レトロマイコンエミュ:MN1613",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder:retrocpu_emu}",

@@ -6,4 +6,5 @@
   "sevenseg_adddress_digit": "4", // MN1613:0x05 TMS9995:0x04 Z8002:0x04 MC68332:0x06
   "sevenseg_data_digit": "4", // MN1613:0x04 TMS9995:0x04 Z8002:0x04 MC68332:0x04
   "emulate_port": "29000", // エミュレータのIOボード 受付ポート番号
+  "boot": "tms9995_mon.ihx", // ブート用のモニタプログラム
 }

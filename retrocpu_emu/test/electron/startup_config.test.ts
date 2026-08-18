@@ -33,6 +33,7 @@ describe("startup_config", () => {
       sevenseg_adddress_digit: "4",
       sevenseg_data_digit: "6",
       emulate_port: "29001",
+      boot: "mn1613_mon.ihx",
     });
     expect(cfg.settings.cpuType).toBe(CPU_TYPE.TMS9995);
     expect(cfg.settings.clockDiv).toBe(2);
@@ -41,6 +42,7 @@ describe("startup_config", () => {
     expect(cfg.settings.sevenSegAddrDigits).toBe(0x04);
     expect(cfg.settings.sevenSegDataDigits).toBe(0x06);
     expect(cfg.emulatePort).toBe(29001);
+    expect(cfg.bootMonitorHex).toBe("mn1613_mon.ihx");
   });
 
   it("不正値は既定値へフォールバックする", () => {
@@ -68,6 +70,7 @@ describe("startup_config", () => {
   // cpu type
   "cpu": "2",
   "clock": "1",
+  "boot": "./boot_monitor.ihx",
 }
 `,
       "utf8",
@@ -81,6 +84,7 @@ describe("startup_config", () => {
     expect(loaded.configPath).toBe(configPath);
     expect(loaded.settings.cpuType).toBe(CPU_TYPE.TMS9995);
     expect(loaded.settings.clockDiv).toBe(1);
+    expect(loaded.bootMonitorHex).toBe(path.join(dir, "boot_monitor.ihx"));
   });
 
   it("実ファイル tms9995.jsonc を起動引数で読み込める", async () => {

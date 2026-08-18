@@ -220,14 +220,13 @@ if (gotLock) {
       clockDiv: startup.settings.clockDiv,
       resetVector: startup.settings.resetVector,
       emulatePort: startup.emulatePort,
+      bootMonitorHex: startup.bootMonitorHex,
       settingAreaPath,
     });
 
     let bootMonitorHex: string | undefined;
     try {
-      bootMonitorHex = resolveBootMonitorHexPath(
-        process.env.RETROCPU_BOOT_MONITOR_HEX,
-      );
+      bootMonitorHex = resolveBootMonitorHexPath(startup.bootMonitorHex);
       log.info("ブートモニタ IHX", { bootMonitorHex });
     } catch (e) {
       log.warn("ブートモニタ IHX を解決できない（RST 時に失敗する）", {

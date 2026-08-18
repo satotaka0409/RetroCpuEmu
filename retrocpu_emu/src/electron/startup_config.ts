@@ -14,6 +14,7 @@ import {
 export type StartupConfig = {
   settings: IoBoardSettings;
   emulatePort?: number;
+  bootMonitorHex?: string;
 };
 
 export type StartupConfigLoadResult = StartupConfig & {
@@ -73,10 +74,12 @@ export function parseStartupConfigObject(raw: unknown): StartupConfig {
   };
 
   const emulatePort = clampOptional(parseNumberish(src.emulate_port), 1, 65535);
+  const bootMonitorHex = parseNonEmptyString(src.boot);
 
   return {
     settings,
     emulatePort,
+    bootMonitorHex,
   };
 }
 
@@ -98,8 +101,13 @@ export async function loadStartupConfigFromArgv(
 
   const text = await fs.readFile(configPath, "utf8");
   const parsed = parseJsonc(text) as unknown;
+  const loaded = parseStartupConfigObject(parsed);
   return {
-    ...parseStartupConfigObject(parsed),
+    ...loaded,
+    bootMonitorHex: resolveBootPath(
+      loaded.bootMonitorHex,
+      path.dirname(configPath),
+    ),
     source: "json",
     configPath,
   };
@@ -124,6 +132,22 @@ function findConfigArg(argv: string[], cwd: string): string | undefined {
     return path.resolve(cwd, arg);
   }
   return undefined;
+}
+
+function resolveBootPath(
+  bootPath: string | undefined,
+  baseDir: string,
+): string | undefined {
+  if (!bootPath) return undefined;
+  return path.isAbsolute(bootPath)
+    ? path.normalize(bootPath)
+    : path.resolve(baseDir, bootPath);
+}
+
+function parseNonEmptyString(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  return s.length > 0 ? s : undefined;
 }
 
 function parseNumberish(v: unknown): number | undefined {

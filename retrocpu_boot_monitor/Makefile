@@ -166,77 +166,78 @@ $(HEX_DIR):
 	@mkdir -p $@
 
 $(REL_MAIN): $(SRC_DIR)/main.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module MAIN
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module MAIN
 
 $(REL_INT): $(SRC_DIR)/interrupt.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module INTERRUPT
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module INTERRUPT
 
 $(REL_BP): $(SRC_DIR)/breakpoint/breakpoint.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module BREAKPOINT
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module BREAKPOINT
 
 $(REL_BP_H): $(SRC_DIR)/breakpoint/breakpoint_hist.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module BREAKPOINT_HIST
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module BREAKPOINT_HIST
 
 $(REL_BP_S): $(SRC_DIR)/breakpoint/breakpoint_steprun.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module BREAKPOINT_STEP
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module BREAKPOINT_STEP
 
 $(REL_HSHK_C): $(SRC_DIR)/handshake/handshake_common.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_COMMON
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_COMMON
 
 $(REL_HSHK_M): $(SRC_DIR)/handshake/handshake_main.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_MAIN
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_MAIN
 
 $(REL_HSHK_AB): $(SRC_DIR)/handshake/handshake_address_break.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_ADDR_BRK
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_ADDR_BRK
 
 $(REL_HSHK_CM): $(SRC_DIR)/handshake/handshake_chg_mode.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_CHG_MODE
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_CHG_MODE
 
 $(REL_HSHK_K): $(SRC_DIR)/handshake/handshake_hex_keyboard.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_HEX_KEY
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_HEX_KEY
 
 $(REL_HSHK_PK): $(SRC_DIR)/handshake/handshake_pc_keyboard.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_PC_KEY
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_PC_KEY
 
 $(REL_HSHK_L): $(SRC_DIR)/handshake/handshake_led.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_LED
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_LED
 
 $(REL_HSHK_B): $(SRC_DIR)/handshake/handshake_beep.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_BEEP
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_BEEP
 
 $(REL_HSHK_T): $(SRC_DIR)/handshake/handshake_timer.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_TIMER
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_TIMER
 
 $(REL_HSHK_GT): $(SRC_DIR)/handshake/handshake_get_time.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_GET_TIME
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_GET_TIME
 
 $(REL_HSHK_UL): $(SRC_DIR)/handshake/handshake_undef_led.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_UNDEF_LED
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_UNDEF_LED
 
 $(REL_HSHK_LCD1): $(SRC_DIR)/handshake/handshake_lcd1.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_LCD1
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_LCD1
 
 $(REL_HSHK_LCD2): $(SRC_DIR)/handshake/handshake_lcd2.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_LCD2
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_LCD2
 
 $(REL_HSHK_RM): $(SRC_DIR)/handshake/handshake_read_memory.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_READ_MEM
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_READ_MEM
 
 $(REL_HSHK_WM): $(SRC_DIR)/handshake/handshake_write_memory.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_WRITE_MEM
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_WRITE_MEM
 
 $(REL_HSHK_IO): $(SRC_DIR)/handshake/handshake_io_rw.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_IO_RW
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_IO_RW
 
 $(REL_HSHK_BH): $(SRC_DIR)/handshake/handshake_break_hist.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HSHK_BRK_HIST
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_BRK_HIST
 
 $(REL_BIOS): $(SRC_DIR)/bios/bios_common.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module BIOS_COMMON
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module BIOS_COMMON
 
 $(IHX): $(RELS) $(SDLD) | $(HEX_DIR)
 	@test -x "$(SDLD)"
 	node $(SDLD_LINK_CLI) $(RELS) -o $@ --cdb $(CDB) --map $(MAP)
+	cp -f $@ ../retrocpu_emu/
 
 assemble: $(RELS)
 
