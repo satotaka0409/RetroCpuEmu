@@ -1,5 +1,5 @@
 /**
- * `.global` / `.globl` 宣言があるがオペランド参照が無いラベルの警告。
+ * `.global` / `.globl` 宣言があるが、ラベル定義もオペランド参照も無い名前の警告。
  */
 
 import { parseAsmLine, parseGlobalDirectiveNames } from "../symbols/parseLine";
@@ -8,10 +8,10 @@ import type { CpuArchitecture } from "../cpu/types";
 import type { InvalidRegisterHit } from "./invalidRegisters";
 
 /**
- * グローバル宣言のうち、使用箇所が無い名前を列挙する。
+ * グローバル宣言のうち、定義もオペランド参照も無い名前を列挙する。
  * @param line ソース 1 行
  * @param arch CPU（ニーモニック列の特定用）
- * @param isReferenced ワークスペースにオペランド参照があるか
+ * @param isReferenced 同じワークスペースに `name:` / `.equ` または命令参照があるか
  * @returns 警告ヒット（`.global` 上の識別子）
  */
 export function findUnusedGlobalDeclarations(

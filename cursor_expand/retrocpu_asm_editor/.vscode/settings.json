@@ -28,5 +28,29 @@
     "editor.suggestOnTriggerCharacters": false,
     "editor.wordBasedSuggestions": "off",
     "editor.snippetSuggestions": "none"
+  },
+  "[typescript]": {
+    "editor.tabSize": 8,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize"
+  },
+  "[javascript]": {
+    "editor.tabSize": 8,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize"
+  },
+  "[json]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize"
+  },
+  "[jsonc]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.indentSize": "tabSize"
   }
 }

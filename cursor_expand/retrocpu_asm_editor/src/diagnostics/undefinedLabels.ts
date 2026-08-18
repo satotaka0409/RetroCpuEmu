@@ -12,6 +12,7 @@ import {
   findInvalidGprOperands,
 } from "./invalidRegisters";
 import {
+  isAsmBuiltinCall,
   parseAsmLine,
   parseGlobalDirectiveNames,
   type SymbolIndex,
@@ -50,8 +51,8 @@ export class AsmDiagnostics {
     }
     this.index.indexDocument(document);
     const arch = detectArchitecture(document.fileName, document.getText());
-    // 未使用 `.global` はワークスペース索引のオペランド参照で判定する。
-    // 定義ファイル自身に BALD が無くても、他 .asm の参照があれば警告しない。
+    // 未使用 `.global` は、ラベル/`.equ` 定義またはオペランド参照があれば消す。
+    // 同じファイルの `name:` は使用箇所とみなす。他 .asm の BALD でも消える。
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (let lineNo = 0; lineNo < document.lineCount; lineNo += 1) {
@@ -85,7 +86,8 @@ export class AsmDiagnostics {
         for (const hit of findUnusedGlobalDeclarations(
           line.text,
           arch,
-          (n) => this.index.hasOperandReference(n),
+          (n) =>
+            this.index.hasOperandReference(n) || this.index.hasLabelOrEqu(n),
         )) {
           const d = new vscode.Diagnostic(
             new vscode.Range(lineNo, hit.start, lineNo, hit.end),
@@ -147,6 +149,7 @@ export class AsmDiagnostics {
         parsed.mnemonic !== undefined &&
         MN1613_COPY_SET_MNEMONICS.has(parsed.mnemonic);
       for (const name of skipLabelRefs ? [] : parsed.refs) {
+        if (name === "LEN") continue;
         if (this.index.has(name)) continue;
         let ranges = findIdentRangesInLine(
           line.text,
@@ -157,6 +160,7 @@ export class AsmDiagnostics {
           ranges = findIdentRangesInLine(line.text, name, 0);
         }
         for (const r of ranges) {
+          if (isAsmBuiltinCall(name, line.text.slice(r.end))) continue;
           const range = new vscode.Range(lineNo, r.start, lineNo, r.end);
           const d = new vscode.Diagnostic(
             range,

@@ -13,7 +13,8 @@ import {
 
 export type StartupConfig = {
   settings: IoBoardSettings;
-  emulatePort?: number;
+  emulatePort: number;
+  /** ブートモニタ IHX。設定エリアには書かない */
   bootMonitorHex?: string;
 };
 
@@ -26,8 +27,10 @@ export type StartupConfigLoadResult = StartupConfig & {
  * 起動引数が無い場合の既定設定（MN1613）。
  */
 export function createDefaultStartupConfig(): StartupConfig {
+  const settings = defaultSettingsForCpu(CPU_TYPE.MN1613);
   return {
-    settings: defaultSettingsForCpu(CPU_TYPE.MN1613),
+    settings,
+    emulatePort: settings.emulatePort,
   };
 }
 
@@ -38,23 +41,27 @@ export function createDefaultStartupConfig(): StartupConfig {
 export function parseStartupConfigObject(raw: unknown): StartupConfig {
   const base = defaultSettingsForCpu(CPU_TYPE.MN1613);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { settings: base };
+    return { settings: base, emulatePort: base.emulatePort };
   }
 
   const src = raw as Record<string, unknown>;
   const cpuParsed = parseNumberish(src.cpu);
   const cpuType = isCpuType(cpuParsed) ? cpuParsed : base.cpuType;
 
+  const cpuDefaults = defaultSettingsForCpu(cpuType);
   const settings: IoBoardSettings = {
-    ...defaultSettingsForCpu(cpuType),
-    clockDiv: clampTo(parseNumberish(src.clock), 0, 3, base.clockDiv),
+    ...cpuDefaults,
+    clockDiv: clampTo(parseNumberish(src.clock), 0, 3, cpuDefaults.clockDiv),
     cpuType,
     cpuTypeReset: 0,
-    addrStep:
-      parseNumberish(src.address_addcount) === ADDR_STEP_2
-        ? ADDR_STEP_2
-        : ADDR_STEP_1,
-    resetVector: toU32(parseNumberish(src.reset_vector), base.resetVector),
+    addrStep: parseAddrStep(
+      parseNumberish(src.address_addcount),
+      cpuDefaults.addrStep,
+    ),
+    resetVector: toU32(
+      parseNumberish(src.reset_vector),
+      cpuDefaults.resetVector,
+    ),
     sevenSegAddrDigits: clampTo(
       parseNumberish(
         src.sevenseg_adddress_digit ??
@@ -63,22 +70,27 @@ export function parseStartupConfigObject(raw: unknown): StartupConfig {
       ),
       0,
       255,
-      defaultSettingsForCpu(cpuType).sevenSegAddrDigits,
+      cpuDefaults.sevenSegAddrDigits,
     ),
     sevenSegDataDigits: clampTo(
       parseNumberish(src.sevenseg_data_digit),
       0,
       255,
-      defaultSettingsForCpu(cpuType).sevenSegDataDigits,
+      cpuDefaults.sevenSegDataDigits,
+    ),
+    emulatePort: clampTo(
+      parseNumberish(src.emulate_port),
+      1,
+      65535,
+      cpuDefaults.emulatePort,
     ),
   };
 
-  const emulatePort = clampOptional(parseNumberish(src.emulate_port), 1, 65535);
   const bootMonitorHex = parseNonEmptyString(src.boot);
 
   return {
     settings,
-    emulatePort,
+    emulatePort: settings.emulatePort,
     bootMonitorHex,
   };
 }
@@ -114,7 +126,8 @@ export async function loadStartupConfigFromArgv(
 }
 
 /**
- * IO 設定エリアへ起動設定を書き込む。
+ * jsonc から読んだ値を IO ボード設定エリアへ書く。
+ * `boot` は IHX パス専用なので設定エリアには含めない。
  */
 export async function saveStartupConfigToSettingArea(
   settingAreaPath: string,
@@ -184,20 +197,19 @@ function clampTo(
   return value;
 }
 
-function clampOptional(
-  value: number | undefined,
-  min: number,
-  max: number,
-): number | undefined {
-  if (value == null) return undefined;
-  if (value < min) return undefined;
-  if (value > max) return undefined;
-  return value;
-}
-
 function toU32(value: number | undefined, fallback: number): number {
   if (value == null) return fallback >>> 0;
   return value >>> 0;
+}
+
+/**
+ * アドレス増加数を 1 または 2 にする。未指定・不正は CPU 既定。
+ * @param value jsonc の address_addcount
+ * @param fallback CPU 種類の既定増加数
+ */
+function parseAddrStep(value: number | undefined, fallback: number): number {
+  if (value === ADDR_STEP_1 || value === ADDR_STEP_2) return value;
+  return fallback === ADDR_STEP_2 ? ADDR_STEP_2 : ADDR_STEP_1;
 }
 
 function isCpuType(value: number | undefined): value is number {

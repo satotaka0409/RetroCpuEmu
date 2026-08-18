@@ -22,7 +22,12 @@ export const OFFSETS = {
   RESET_VECTOR_3: 0x09,
   SEVEN_SEG_ADDR_DIGITS: 0x0a,
   SEVEN_SEG_DATA_DIGITS: 0x0b,
+  EMULATE_PORT_HI: 0x0c,
+  EMULATE_PORT_LO: 0x0d,
 } as const;
+
+/** エミュレータ受付ポート既定値（ioboard.mdc 0C–0D。0x7148 = 29000） */
+export const DEFAULT_EMULATE_PORT = 0x7148;
 
 /** アドレス増加数: 1 ずつ */
 export const ADDR_STEP_1 = 1;
@@ -45,6 +50,8 @@ export type IoBoardSettings = {
   resetVector: number;
   sevenSegAddrDigits: number;
   sevenSegDataDigits: number;
+  /** エミュレータ IO ボード受付ポート（16bit。既定 0x7148） */
+  emulatePort: number;
 };
 
 export type LoadSettingAreaResult = {
@@ -133,6 +140,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         resetVector: 0,
         sevenSegAddrDigits: 0x04,
         sevenSegDataDigits: 0x04,
+        emulatePort: DEFAULT_EMULATE_PORT,
       };
     case CPU_TYPE.Z8002:
       return {
@@ -143,6 +151,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         resetVector: 0,
         sevenSegAddrDigits: 0x04,
         sevenSegDataDigits: 0x04,
+        emulatePort: DEFAULT_EMULATE_PORT,
       };
     case CPU_TYPE.MC68332:
       return {
@@ -153,6 +162,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         resetVector: 0,
         sevenSegAddrDigits: 0x06,
         sevenSegDataDigits: 0x04,
+        emulatePort: DEFAULT_EMULATE_PORT,
       };
     case CPU_TYPE.MN1613:
     default:
@@ -164,6 +174,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         resetVector: 0x00000108,
         sevenSegAddrDigits: 0x05,
         sevenSegDataDigits: 0x04,
+        emulatePort: DEFAULT_EMULATE_PORT,
       };
   }
 }
@@ -181,6 +192,7 @@ export function decodeSettingArea(raw: Uint8Array): IoBoardSettings {
     resetVector: readU32be(buf, OFFSETS.RESET_VECTOR_0),
     sevenSegAddrDigits: clampByte(buf[OFFSETS.SEVEN_SEG_ADDR_DIGITS]),
     sevenSegDataDigits: clampByte(buf[OFFSETS.SEVEN_SEG_DATA_DIGITS]),
+    emulatePort: normalizeEmulatePort(readU16be(buf, OFFSETS.EMULATE_PORT_HI)),
   };
 }
 
@@ -198,6 +210,11 @@ export function encodeSettingArea(settings: IoBoardSettings): Uint8Array {
   writeU32be(raw, OFFSETS.RESET_VECTOR_0, settings.resetVector >>> 0);
   raw[OFFSETS.SEVEN_SEG_ADDR_DIGITS] = settings.sevenSegAddrDigits & 0xff;
   raw[OFFSETS.SEVEN_SEG_DATA_DIGITS] = settings.sevenSegDataDigits & 0xff;
+  writeU16be(
+    raw,
+    OFFSETS.EMULATE_PORT_HI,
+    normalizeEmulatePort(settings.emulatePort),
+  );
   return raw;
 }
 
@@ -320,6 +337,16 @@ function normalizeRaw(raw: Uint8Array): Uint8Array {
 
 function clampByte(v: number | undefined): number {
   return (v ?? 0) & 0xff;
+}
+
+/**
+ * 受付ポートを 1–65535 に正規化する。0 と未書き込み相当 0xFFFF は既定値。
+ * @param value 16bit ポート番号
+ */
+function normalizeEmulatePort(value: number): number {
+  const p = value & 0xffff;
+  if (p === 0 || p === 0xffff) return DEFAULT_EMULATE_PORT;
+  return p;
 }
 
 function readU16be(raw: Uint8Array, offset: number): number {

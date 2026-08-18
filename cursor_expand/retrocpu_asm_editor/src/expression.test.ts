@@ -12,7 +12,7 @@ import {
   isEquDefinitionLine,
   matchEquDef,
 } from "./symbols/equParse";
-import { parseAsmLine, parseGlobalDirectiveNames } from "./symbols/parseLine";
+import { isAsmBuiltinCall, parseAsmLine, parseGlobalDirectiveNames } from "./symbols/parseLine";
 import {
   collectSymbolOccurrences,
   findIdentRangesInLine,
@@ -187,6 +187,32 @@ describe("parseAsmLine: ラベル参照抽出", () => {
     const p = parseAsmLine("\tl\tR0, LAB(R1)", arch);
     assert.equal(p.kind, "instruction");
     assert.deepEqual(p.refs, ["LAB"]);
+  });
+
+  test("len(label) の LEN は refs にしない（引数ラベルだけ拾う）", () => {
+    const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg2)", arch);
+    assert.equal(p.kind, "instruction");
+    assert.deepEqual(p.refs, ["HELLO_MSG2"]);
+  });
+
+  test("hello_lcd の #len(hello_msg1) も LEN を refs にしない", () => {
+    const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg1)", arch);
+    assert.equal(p.kind, "instruction");
+    assert.ok(!p.refs.includes("LEN"));
+    assert.deepEqual(p.refs, ["HELLO_MSG1"]);
+  });
+
+  test("isAsmBuiltinCall は len( だけ真", () => {
+    assert.equal(isAsmBuiltinCall("len", "(hello_msg1)"), true);
+    assert.equal(isAsmBuiltinCall("LEN", " (msg)"), true);
+    assert.equal(isAsmBuiltinCall("len", ""), false);
+    assert.equal(isAsmBuiltinCall("hello_msg1", "("), false);
+  });
+
+  test("len ラベル単独参照は refs に残す", () => {
+    const p = parseAsmLine("\tb\tlen", arch);
+    assert.equal(p.kind, "instruction");
+    assert.deepEqual(p.refs, ["LEN"]);
   });
 
   test(".include の文字列は refs にしない", () => {

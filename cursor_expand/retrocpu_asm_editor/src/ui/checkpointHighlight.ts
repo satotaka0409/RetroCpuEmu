@@ -1,6 +1,6 @@
 /**
  * `; @cp` チェックポイントのエディタ色分け
- * 根拠: asm_editer.mdc（テーマで上書き可能な高コントラスト色）
+ * 根拠: asm_editor.mdc（テーマで上書き可能な高コントラスト色）
  */
 
 import * as vscode from "vscode";

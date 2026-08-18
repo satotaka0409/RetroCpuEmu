@@ -1,6 +1,6 @@
-# Retro Assembler Editor（asm_editer）
+# Retro Assembler Editor（retrocpu_asm_editor）
 
-Cursor / VS Code 向けレトロ CPU **アセンブラ編集**拡張（`cursor_expand/asm_editer`）。  
+Cursor / VS Code 向けレトロ CPU **アセンブラ編集**拡張（`cursor_expand/retrocpu_asm_editor`）。  
 デバッグ UI は別拡張 [`debug_expand`](../debug_expand/)（`retro-cpu-debug`）で、パッケージ・起動・配布とも独立。
 
 根拠: [`.cursor/rules/asm-rules.mdc`](../../.cursor/rules/asm-rules.mdc)
@@ -74,7 +74,7 @@ ADD:
 
 ### 未使用グローバル警告の抑止
 
-BIOS の公開エントリなど、ワークスペース内に呼び出しが無い `.global` は黄色い波線になる。直上または同一行に `; @unwarning` を置くと、**その 1 行だけ**警告しない。連続する `.global` には効かない（各行に付ける）。全角 `＠unwarning` も同じ。
+BIOS の公開エントリなど、ワークスペース内に **ラベル定義も呼び出しも無い** `.global` は黄色い波線になる。同じファイルに `name:` があれば警告しない。直上または同一行に `; @unwarning` を置くと、**その 1 行だけ**警告しない。連続する `.global` には効かない（各行に付ける）。全角 `＠unwarning` も同じ。
 
 ```asm
 	; @unwarning
@@ -98,13 +98,13 @@ BIOS の公開エントリなど、ワークスペース内に呼び出しが無
 ## 開発
 
 ```bash
-cd cursor_expand/asm_editer
+cd cursor_expand/retrocpu_asm_editor
 npm install
 npm run compile
 ```
 
 マルチルート（`RetroCpuEmu.code-workspace`）では **Run Extension**。  
-`asm_editer` フォルダだけ開いているときは **Run Extension (this folder)**。
+`retrocpu_asm_editor` フォルダだけ開いているときは **Run Extension (this folder)**。
 
 1. `npm install` 済みであること（`node_modules` が無いと preLaunchTask が失敗する）
 2. **F5**

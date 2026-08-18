@@ -1,31 +1,35 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "アセンブラエディタ:BOOT MONITOR",
-      "type": "extensionHost",
-      "request": "launch",
-      "runtimeExecutable": "${execPath}",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder:cursor_asm_editer}",
-        "${workspaceFolder:retrocpu_boot_monitor}"
-      ],
-      "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
-      "preLaunchTask": "compile retro-asm-editor",
-      "sourceMaps": true
-    },
-    {
-      "name": "アセンブラエディタ:TUTORIAL",
-      "type": "extensionHost",
-      "request": "launch",
-      "runtimeExecutable": "${execPath}",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}",
-        "${workspaceFolder:tutorial}"
-      ],
-      "outFiles": ["${workspaceFolder:tutorial}/dist/**/*.js"],
-      "preLaunchTask": "compile retro-asm-editor",
-      "sourceMaps": true
-    }
-  ]
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "アセンブラエディタ:BOOT MONITOR",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder:retrocpu_asm_editor}",
+				"${workspaceFolder:retrocpu_boot_monitor}"
+			],
+			"outFiles": [
+				"${workspaceFolder:retrocpu_asm_editor}/dist/**/*.js"
+			],
+			"preLaunchTask": "compile retrocpu-asm-editor",
+			"sourceMaps": true
+		},
+		{
+			"name": "アセンブラエディタ:TUTORIAL",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder:retrocpu_asm_editor}",
+				"${workspaceFolder:tutorial}"
+			],
+			"outFiles": [
+				"${workspaceFolder:retrocpu_asm_editor}/dist/**/*.js"
+			],
+			"preLaunchTask": "compile retrocpu-asm-editor",
+			"sourceMaps": true
+		}
+	]
 }

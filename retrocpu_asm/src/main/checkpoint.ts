@@ -1,6 +1,6 @@
 /**
  * `; @cp` チェックポイント（アセンブララベルではない）
- * 根拠: asm_editer.mdc
+ * 根拠: asm_editor.mdc
  */
 
 import type { AsmCheckpoint, EmittedWord, ParsedLine } from "./types";

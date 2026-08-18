@@ -15,6 +15,7 @@ export {
   parseAsmLine,
   extractLabelRefs,
   parseGlobalDirectiveNames,
+  isAsmBuiltinCall,
 } from "./parseLine";
 export { collectIncludePaths, resolveIncludePath } from "./includeParse";
 
@@ -59,6 +60,16 @@ export class SymbolIndex {
       if ((counts.get(key) ?? 0) > 0) return true;
     }
     return false;
+  }
+
+  /**
+   * ワークスペースにラベルまたは `.equ` 定義があるか。
+   * `.global` 宣言だけでは true にならない（未使用警告で定義本体を見るため）。
+   * @param name シンボル名
+   * @returns 定義があれば true
+   */
+  hasLabelOrEqu(name: string): boolean {
+    return this.lookup(name).some((s) => s.kind === "label" || s.kind === "equ");
   }
 
   /**

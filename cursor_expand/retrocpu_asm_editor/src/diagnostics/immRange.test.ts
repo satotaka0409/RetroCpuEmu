@@ -44,6 +44,10 @@ describe("findImmRangeOverflows", () => {
     );
   });
 
+  test("MVWI #len(hello_msg2) はラベル式なので範囲診断しない", () => {
+    assert.deepEqual(msgs("\tmvwi\tR1, #len(hello_msg2)"), []);
+  });
+
   test(".dw ラベルは数値評価できないのでスキップ", () => {
     assert.deepEqual(msgs("\t.dw\tg_main"), []);
   });

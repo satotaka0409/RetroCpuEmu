@@ -141,7 +141,7 @@ export type CdbSymbol = {
 
 /**
  * CDB の `L:__CP$name$serial:addr`（`; @cp`。アセンブララベルではない）。
- * 根拠: asm_editer.mdc / asm_test_framework.mdc
+ * 根拠: asm_editor.mdc / asm_test_framework.mdc
  */
 export type CdbCheckpoint = {
   /** `__CP$uart_initialized$0001` */

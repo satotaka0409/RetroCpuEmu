@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "compile retro-asm-editor",
+      "label": "compile retrocpu-asm-editor",
       "type": "npm",
       "script": "compile",
       "group": {

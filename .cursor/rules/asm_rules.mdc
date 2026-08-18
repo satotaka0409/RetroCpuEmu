@@ -339,10 +339,10 @@ other.rel
 9. リンクは `sdld` か？（自前リンカ禁止。複数 `.rel` なら `main.rel` 先頭。Makefile / フレームワークが先頭にする。sdld は並べ替えない）
 10. `.area` のリンク順は `_BIOS` → `_CODE` → `_DATA` → `_WORK` か？（A レコード順と `-b`）
 
-# アセンブラ編集支援拡張機能 - cursor_asm_editer
+# アセンブラ編集支援拡張機能 - retrocpu_asm_editor
 
 - これは、アセンブラの編集作業に特化したCursor Vscode 拡張機能
-- cursor_asm_editer にプロジェクトがある
+- `cursor_expand/retrocpu_asm_editor` にプロジェクトがある
 - 対象アーキテクチャは以下の通り
 - Panafacom MN1613
 - 命令語、ラベル、宣言文、コメントなどを区別して色分けして表示できる

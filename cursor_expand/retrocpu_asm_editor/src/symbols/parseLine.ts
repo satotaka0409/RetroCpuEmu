@@ -64,6 +64,34 @@ function isNonLabelIdent(up: string): boolean {
   );
 }
 
+/** アセンブラ組み込み関数（asm_rules.mdc の `len(label)`） */
+const ASM_BUILTIN_FUNCS = new Set(["LEN"]);
+
+/**
+ * `len(label)` のような組み込み関数呼び出しか。
+ * `B len` のような同名ラベル参照は false（後ろが `(` のときだけ関数）。
+ * @param ident 識別子（大文字小文字不問）
+ * @param restAfterIdent 識別子の直後（空白可）
+ * @returns 組み込み関数なら true
+ */
+export function isAsmBuiltinCall(
+  ident: string,
+  restAfterIdent: string,
+): boolean {
+  if (!ASM_BUILTIN_FUNCS.has(ident.toUpperCase())) return false;
+  return /^\s*\(/.test(restAfterIdent);
+}
+
+/**
+ * `len(arg)` の関数名を除き、引数だけ残す。
+ * `#len(hello_msg1)` → `#(hello_msg1)`。LEN をラベルと誤認しない。
+ * @param operands オペランド文字列
+ * @returns 関数名を除いた文字列
+ */
+function stripAsmBuiltinCalls(operands: string): string {
+  return operands.replace(/\blen\s*\(/gi, "(");
+}
+
 /**
  * オペランドから数値リテラルを除去する（ラベル誤検出防止）。
  * `0b…` / `0x…` / `1010b` / `0FFh` などをスペースに置換する。
@@ -101,7 +129,9 @@ function collectOperandRefs(
 ): string[] {
   // 文字列リテラル・数値リテラルは除外
   const cleaned = stripNumericLiterals(
-    operands.replace(/"[^"]*"/g, " ").replace(/'[^']*'/g, " "),
+    stripAsmBuiltinCalls(
+      operands.replace(/"[^"]*"/g, " ").replace(/'[^']*'/g, " "),
+    ),
   );
   const refs: string[] = [];
   const seen = new Set<string>();
@@ -118,6 +148,7 @@ function collectOperandRefs(
     if (arch.mnemonics.has(up)) continue;
     if (isDirectiveToken(up, arch)) continue;
     if (isNonLabelIdent(up)) continue;
+    if (isAsmBuiltinCall(up, cleaned.slice(m.index + m[0].length))) continue;
     seen.add(up);
     refs.push(up);
   }

@@ -1,12 +1,12 @@
 ---
 alwaysApply: false
-description: asm_editer のデバッグチェックポイント特殊コメント仕様（文書先行）
+description: asm_editor のデバッグチェックポイント特殊コメント仕様（文書先行）
 ---
 
-# asm_editer デバッグチェックポイント仕様
+# asm_editor デバッグチェックポイント仕様
 
 本仕様は、アセンブラソース内に「検索しやすいチェックポイント」を埋め込むための文書定義である。
-`.rel` の `L:__CP$name$serial:addr` は `retrocpu_asm` が出す。CDB / テスト CPU ログはリンカと `retrocpu_test_framework`。エディタ色分けは `cursor_expand/asm_editer`。
+`.rel` の `L:__CP$name$serial:addr` は `retrocpu_asm` が出す。CDB / テスト CPU ログはリンカと `retrocpu_test_framework`。エディタ色分けは `cursor_expand/retrocpu_asm_editor`。
 
 ## 目的
 
@@ -37,7 +37,7 @@ IME の全角 `＠`（`; ＠cp NAME`）も同じ意味として認める。
 3. 同名チェックポイントは許可する。`; @cp` はアセンブララベルではないので、同一ワードでもエラーにしない。
 4. 識別子は `__CP$<name>$<serial4>`（同名は `0001` 起算の 4 桁）。例: 2 つの `; @cp gl_get_rnd` → `__CP$gl_get_rnd$0001` と `__CP$gl_get_rnd$0002`。
 
-## エディタ表示（asm_editer）
+## エディタ表示（retrocpu_asm_editor）
 
 1. チェックポイントコメント `; @cp ...` 行は通常コメントとは別トークンとして扱い、表示色を変更する。
    `; @cp IOPORT_40_OUTPUT` のような書き方ができる（日本語不可、スペース区切り不可、アンダースコアでつなぐ）。
@@ -48,8 +48,9 @@ IME の全角 `＠`（`; ＠cp NAME`）も同じ意味として認める。
 
 ## 未使用グローバル警告の抑止
 
-エディタは `.global` / `.globl` のうち、ワークスペースにオペランド参照が無い名前へ黄色い波線を出す。
-公開 BIOS など、意図して未参照の宣言は次の特殊コメントで抑止する。
+エディタは `.global` / `.globl` のうち、ワークスペースに **ラベル定義もオペランド参照も無い** 名前へ黄色い波線を出す。
+同じファイルの `g_user_main:` のような定義は使用箇所とみなす。
+定義はあるが呼び出しがワークスペース外だけの公開 BIOS は警告しない。定義も参照も無い宣言だけ `; @unwarning` で抑止する。
 
 ```text
 ; @unwarning

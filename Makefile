@@ -41,7 +41,7 @@ BIOS_INC        := $(SRC_DIR)/bios_addrs.inc
 all: ihx
 
 help:
-	@echo "tutrial/console_lcd"
+	@echo "tutorial/console_lcd"
 	@echo "  make ihx     $(IHX) と $(CDB)"
 	@echo "  make clean   ビルド成果物を削除"
 

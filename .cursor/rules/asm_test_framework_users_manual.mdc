@@ -338,5 +338,5 @@ test("g_rnd_init(0) は種を 1 にする", async () => {
 | `boot_monitor.mdc` | BIOS 公開エントリ |
 | `HandShake.mdc` | 線とコマンド |
 | `MN1613_CPUボードメモリ_IOマップ.mdc` | メモリ／IO |
-| `asm_editer.mdc` | `; @cp` |
+| `asm_editor.mdc` | `; @cp` |
 | `MN1613.mdc` | 命令 |

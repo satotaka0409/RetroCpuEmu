@@ -8,8 +8,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 mkdirSync(join(root, "dist/electron"), { recursive: true });
 mkdirSync(join(root, "dist/renderer"), { recursive: true });
 
-/** winston は動的 require を含むためバンドルせず node_modules から解決させる */
-const nodeExternal = ["electron", "winston"];
+/**
+ * winston は動的 require、jsonc-parser は UMD 内の相対 require（./impl/format 等）を
+ * 含むためバンドルせず node_modules から解決させる。
+ */
+const nodeExternal = ["electron", "winston", "jsonc-parser"];
 
 await build({
   entryPoints: [join(root, "src/electron/main.ts")],

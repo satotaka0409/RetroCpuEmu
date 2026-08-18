@@ -159,6 +159,9 @@ function classifyEa(raw: string): EaShape {
   m = t.match(/^\[\s*\*.*\]\s*,\s*([A-Za-z_][A-Za-z0-9_]*)$/i);
   if (m) return { kind: "idxind", name: m[1]!.toUpperCase() };
 
+  // `#len(label)` は即値式。`disp(Xn)` のインデックスと誤認しない
+  if (/^#?\s*len\s*\(/i.test(t)) return { kind: "other" };
+
   m = t.match(/^(.+)\(\s*(CSBR|SSBR|TSR0|TSR1)\s*\)$/i);
   if (m) return { kind: "bbidx", name: m[2]!.toUpperCase() };
 

@@ -133,6 +133,24 @@ export function collectSymbolOccurrences(
 }
 
 /**
+ * ソース内のラベル定義と `.equ` 名を集める（大文字）。
+ * `.global` 宣言だけは含めない。
+ * @param text ソース全文
+ * @returns 定義名の集合
+ */
+export function collectLabelDefNames(text: string): Set<string> {
+  const names = new Set<string>();
+  for (const line of text.split(/\r?\n/)) {
+    const stripped = stripAsmComment(line);
+    const labelM = stripped.match(/^\s*([A-Za-z_.$][A-Za-z0-9_.$]*)\s*:/);
+    if (labelM) names.add(labelM[1]!.toUpperCase());
+    const equ = matchEquDef(stripped);
+    if (equ) names.add(equ.name);
+  }
+  return names;
+}
+
+/**
  * 命令・データディレクティブのオペランドにあるラベル参照を数える。
  * `.global` / `.globl` 宣言とラベル定義そのものは含めない。
  * @param text ソース全文

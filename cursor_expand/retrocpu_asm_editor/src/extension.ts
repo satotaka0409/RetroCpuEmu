@@ -21,7 +21,7 @@ import { CpuStatusBar } from "./ui/cpuStatusBar";
  * - グローバルラベルホバー（宣言側コメント。JSDoc 風なら強調）
  * - サブルーチン呼び出しホバー（呼び出し規約）
  * - 保存時整形でソースを壊さない no-op フォーマッタ
- * - `; @cp` チェックポイントの色分け（asm_editer.mdc）
+ * - `; @cp` チェックポイントの色分け（asm_editor.mdc）
  * - `; @unwarning` 未使用グローバル警告の抑止
  * - `; TODO` コメントの色分け（概要ルーラー付き）
  */
@@ -63,7 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const cpuBar = new CpuStatusBar(() => reinitialize("cpu-changed"));
 
-  output.appendLine("Retro Assembler activated (v0.2.4 .global skip).");
+  output.appendLine("Retro Assembler activated (v0.2.5 len builtin).");
   void reinitialize("activate");
 
   context.subscriptions.push(

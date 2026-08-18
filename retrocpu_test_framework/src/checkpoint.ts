@@ -1,6 +1,6 @@
 /**
  * `; @cp <name>` チェックポイントの注入と CDB 行生成
- * 根拠: asm_editer.mdc / asm_test_framework.mdc
+ * 根拠: asm_editor.mdc / asm_test_framework.mdc
  */
 
 /** CDB / ログに出す 1 件分（アセンブララベルではない） */

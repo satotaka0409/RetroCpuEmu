@@ -119,4 +119,8 @@ describe("findInvalidAddressingOperands", () => {
     assert.match(msg("\tM\tDR0, R3"), /\(R3\)/);
     assert.deepEqual(names("\tD\tR0, (R2)"), ["R0"]);
   });
+
+  test("MVWI #len(label) は即値でありインデックス診断しない", () => {
+    assert.deepEqual(names("\tmvwi\tR1, #len(hello_msg2)"), []);
+  });
 });

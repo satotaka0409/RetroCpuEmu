@@ -6,7 +6,7 @@ import {
 import { detectArchitecture } from "../cpu/registry";
 import { TMS9995_INSN_HELP } from "../cpu/tms9995/insnHelp";
 import type { SymbolIndex } from "../symbols/index";
-import { extractLabelRefs, parseAsmLine } from "../symbols/index";
+import { extractLabelRefs, isAsmBuiltinCall, parseAsmLine } from "../symbols/index";
 
 /**
  * ホバー: .equ の値、TMS9995 命令説明、グローバルラベルの宣言コメント（JSDoc なら強調）、呼び出し規約。
@@ -27,6 +27,21 @@ export function createCallHoverProvider(
       if (!wordRange) return undefined;
       const word = document.getText(wordRange);
       const name = word.toUpperCase();
+      const line = document.lineAt(position.line);
+      if (
+        isAsmBuiltinCall(name, line.text.slice(wordRange.end.character))
+      ) {
+        const md = new vscode.MarkdownString(
+          [
+            "### `len(label)`",
+            "",
+            "`.dw` / `.word` 文字列ラベルの長さ（MN161x は 1 文字 1 ワードなのでワード数）。",
+            "",
+            "ローカルラベルのみ。`.global` や数値・命令ラベルは使えない（asm_rules.mdc）。",
+          ].join("\n"),
+        );
+        return new vscode.Hover(md, wordRange);
+      }
       const defs = index.lookup(name);
 
       // .equ 定数: 解決済みの値を優先表示
@@ -59,7 +74,6 @@ export function createCallHoverProvider(
       }
 
       const arch = detectArchitecture(document.fileName, document.getText());
-      const line = document.lineAt(position.line);
       const parsed = parseAsmLine(line.text, arch);
       if (
         arch.id === "tms9995" &&

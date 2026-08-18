@@ -6,11 +6,16 @@ import {
   createDefaultStartupConfig,
   loadStartupConfigFromArgv,
   parseStartupConfigObject,
+  saveStartupConfigToSettingArea,
 } from "../../src/electron/startup_config";
 import {
   ADDR_STEP_1,
   ADDR_STEP_2,
   CPU_TYPE,
+  DEFAULT_EMULATE_PORT,
+  OFFSETS,
+  SETTING_MARK,
+  decodeSettingArea,
 } from "../../src/ioboard/setting_area";
 
 describe("startup_config", () => {
@@ -22,6 +27,8 @@ describe("startup_config", () => {
     expect(cfg.settings.resetVector).toBe(0x0108);
     expect(cfg.settings.sevenSegAddrDigits).toBe(0x05);
     expect(cfg.settings.sevenSegDataDigits).toBe(0x04);
+    expect(cfg.settings.emulatePort).toBe(DEFAULT_EMULATE_PORT);
+    expect(cfg.emulatePort).toBe(DEFAULT_EMULATE_PORT);
   });
 
   it("起動 JSON の文字列値を設定へ反映する", () => {
@@ -41,6 +48,7 @@ describe("startup_config", () => {
     expect(cfg.settings.resetVector).toBe(0x00001234);
     expect(cfg.settings.sevenSegAddrDigits).toBe(0x04);
     expect(cfg.settings.sevenSegDataDigits).toBe(0x06);
+    expect(cfg.settings.emulatePort).toBe(29001);
     expect(cfg.emulatePort).toBe(29001);
     expect(cfg.bootMonitorHex).toBe("mn1613_mon.ihx");
   });
@@ -57,7 +65,8 @@ describe("startup_config", () => {
     expect(cfg.settings.clockDiv).toBe(0);
     expect(cfg.settings.addrStep).toBe(ADDR_STEP_1);
     expect(cfg.settings.resetVector).toBe(0x0108);
-    expect(cfg.emulatePort).toBeUndefined();
+    expect(cfg.settings.emulatePort).toBe(DEFAULT_EMULATE_PORT);
+    expect(cfg.emulatePort).toBe(DEFAULT_EMULATE_PORT);
   });
 
   it("JSONC ファイルを起動設定として読み込める", async () => {
@@ -84,6 +93,7 @@ describe("startup_config", () => {
     expect(loaded.configPath).toBe(configPath);
     expect(loaded.settings.cpuType).toBe(CPU_TYPE.TMS9995);
     expect(loaded.settings.clockDiv).toBe(1);
+    expect(loaded.settings.addrStep).toBe(ADDR_STEP_2);
     expect(loaded.bootMonitorHex).toBe(path.join(dir, "boot_monitor.ihx"));
   });
 
@@ -98,6 +108,43 @@ describe("startup_config", () => {
     expect(loaded.settings.cpuType).toBe(CPU_TYPE.TMS9995);
     expect(loaded.settings.clockDiv).toBe(0);
     expect(loaded.settings.addrStep).toBe(ADDR_STEP_2);
-    expect(loaded.emulatePort).toBe(29000);
+    expect(loaded.settings.resetVector).toBe(0);
+    expect(loaded.emulatePort).toBe(DEFAULT_EMULATE_PORT);
+  });
+
+  it("jsonc の値を設定エリアへ書き、boot は書かない", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "startup-config-"));
+    const settingPath = path.join(dir, "ioboard_setting_area.bin");
+    const cfg = parseStartupConfigObject({
+      clock: "2",
+      cpu: "1",
+      address_addcount: "1",
+      reset_vector: "0x00000108",
+      sevenseg_adddress_digit: "5",
+      sevenseg_data_digit: "4",
+      emulate_port: "29001",
+      boot: "mn1613_mon.ihx",
+    });
+
+    await saveStartupConfigToSettingArea(settingPath, cfg);
+
+    const raw = new Uint8Array(await fs.readFile(settingPath));
+    const decoded = decodeSettingArea(raw);
+    expect((raw[OFFSETS.MARK_HI]! << 8) | raw[OFFSETS.MARK_LO]!).toBe(
+      SETTING_MARK,
+    );
+    expect(decoded.clockDiv).toBe(2);
+    expect(decoded.cpuType).toBe(CPU_TYPE.MN1613);
+    expect(decoded.addrStep).toBe(ADDR_STEP_1);
+    expect(decoded.resetVector).toBe(0x00000108);
+    expect(decoded.sevenSegAddrDigits).toBe(0x05);
+    expect(decoded.sevenSegDataDigits).toBe(0x04);
+    expect(decoded.emulatePort).toBe(29001);
+    expect(raw[OFFSETS.EMULATE_PORT_HI]).toBe(0x71);
+    expect(raw[OFFSETS.EMULATE_PORT_LO]).toBe(0x49);
+    expect(Buffer.from(raw).includes(Buffer.from("mn1613_mon.ihx"))).toBe(
+      false,
+    );
+    expect(Buffer.from(raw).includes(Buffer.from("boot"))).toBe(false);
   });
 });

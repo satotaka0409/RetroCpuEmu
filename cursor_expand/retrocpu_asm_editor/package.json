@@ -1,8 +1,8 @@
 {
-  "name": "retrocpu-asm-editor",
+  "name": "retro-asm-editor",
   "displayName": "Retro Assembler Editor",
   "description": "レトロ CPU アセンブラ編集支援（MN1610 / MN1613 / TMS9995）",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "retroemu",
   "license": "MIT",
   "engines": {
@@ -173,7 +173,7 @@
     "compile": "tsc -p tsconfig.build.json",
     "watch": "tsc -watch -p tsconfig.build.json",
     "lint": "tsc -p ./ --noEmit",
-    "test": "node --require tsx/cjs --test src/**/*.test.ts",
+    "test": "node --require tsx/cjs --test \"src/**/*.test.ts\"",
     "package": "vsce package"
   },
   "devDependencies": {

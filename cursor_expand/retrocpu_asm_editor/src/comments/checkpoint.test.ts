@@ -1,6 +1,6 @@
 /**
  * `; @cp` チェックポイント解析
- * 根拠: asm_editer.mdc
+ * 根拠: asm_editor.mdc
  */
 
 import assert from "node:assert/strict";

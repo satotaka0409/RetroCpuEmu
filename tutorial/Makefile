@@ -1,4 +1,4 @@
-# tutrial — MN1613 チュートリアル IHX ビルド
+# tutorial — MN1613 チュートリアル IHX ビルド
 #
 #   make ihx              … 全サンプルの .asm → .rel → sdld → Intel HEX + CDB
 #   make <sample>         … 1 件だけ（beep1 / beep2 / bullet_led / console_lcd / sevenseg_led）
@@ -6,7 +6,7 @@
 #
 # 配置: <sample>/src/mn1613/<stem>.asm → <sample>/build/hex/<stem>.ihx
 # 新しい <sample>/src/mn1613/*.asm は wildcard で自動追加する。
-# BIOS エントリは tutrial/bios.inc（_BIOS ジャンプ表）。モニタ本体はリンクしない。
+# BIOS エントリは tutorial/bios.inc（_BIOS ジャンプ表）。モニタ本体はリンクしない。
 # エミュは F7 RST でモニタを DMA したあと、この IHX を載せて 1800h から RUN。
 #
 # cwd は問わない（Makefile のあるディレクトリ基準）。
@@ -66,7 +66,7 @@ endef
 $(foreach src,$(ASM_SRCS),$(eval $(call TUT_ASM_RULES,$(src),$(basename $(notdir $(src))),$(firstword $(subst /, ,$(patsubst $(TUT_DIR)/%,%,$(src)))),$(shell echo $(basename $(notdir $(src))) | tr '[:lower:]' '[:upper:]'))))
 
 help:
-	@echo "tutrial"
+	@echo "tutorial"
 	@echo "  make / make ihx     全サンプルの IHX / CDB を出す"
 	@echo "  make <sample>       1 件だけビルド"
 	@echo "  make clean          各サンプルの build/ を削除"

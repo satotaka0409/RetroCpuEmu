@@ -1,6 +1,6 @@
 /**
  * IOボード設定エリア（save/load/initialize）
- * 根拠: ioboard.mdc 「IOボード設定エリア」（00h–0Bh）
+ * 根拠: ioboard.mdc 「IOボード設定エリア」（00h–0Dh）
  */
 
 import { describe, it, expect } from "vitest";
@@ -8,6 +8,7 @@ import {
   ADDR_STEP_1,
   ADDR_STEP_2,
   CPU_TYPE,
+  DEFAULT_EMULATE_PORT,
   OFFSETS,
   SETTING_AREA_SIZE,
   SETTING_MARK,
@@ -50,7 +51,7 @@ function mn1613Settings(partial: Partial<IoBoardSettings> = {}): IoBoardSettings
 }
 
 describe("setting_area", () => {
-  it("オフセットは ioboard.mdc の 00h–0Bh に一致する", () => {
+  it("オフセットは ioboard.mdc の 00h–0Dh に一致する", () => {
     expect(OFFSETS).toEqual({
       MARK_HI: 0x00,
       MARK_LO: 0x01,
@@ -64,6 +65,8 @@ describe("setting_area", () => {
       RESET_VECTOR_3: 0x09,
       SEVEN_SEG_ADDR_DIGITS: 0x0a,
       SEVEN_SEG_DATA_DIGITS: 0x0b,
+      EMULATE_PORT_HI: 0x0c,
+      EMULATE_PORT_LO: 0x0d,
     });
   });
 
@@ -91,6 +94,10 @@ describe("setting_area", () => {
     expect(raw[OFFSETS.RESET_VECTOR_3]).toBe(0x08);
     expect(raw[OFFSETS.SEVEN_SEG_ADDR_DIGITS]).toBe(0x05);
     expect(raw[OFFSETS.SEVEN_SEG_DATA_DIGITS]).toBe(0x04);
+    expect(raw[OFFSETS.EMULATE_PORT_HI]).toBe(
+      (DEFAULT_EMULATE_PORT >>> 8) & 0xff,
+    );
+    expect(raw[OFFSETS.EMULATE_PORT_LO]).toBe(DEFAULT_EMULATE_PORT & 0xff);
   });
 
   it("未保存またはマーク不正なら初期化し既定値を書き込む", async () => {
@@ -135,6 +142,7 @@ describe("setting_area", () => {
       resetVector: 0x11223344,
       sevenSegAddrDigits: 0x00,
       sevenSegDataDigits: 0x00,
+      emulatePort: 0x1234,
     });
     const storage = createMemoryStorage(raw);
 
@@ -172,6 +180,7 @@ describe("setting_area", () => {
       resetVector: 0x11223344,
       sevenSegAddrDigits: 0x09,
       sevenSegDataDigits: 0x09,
+      emulatePort: 0x1234,
     });
 
     const written = writeSettingAreaByte(raw, OFFSETS.CPU_TYPE_RESET, 1);
@@ -210,5 +219,8 @@ function loadFromRaw(raw: Uint8Array) {
       0,
     sevenSegAddrDigits: raw[OFFSETS.SEVEN_SEG_ADDR_DIGITS]! & 0xff,
     sevenSegDataDigits: raw[OFFSETS.SEVEN_SEG_DATA_DIGITS]! & 0xff,
+    emulatePort:
+      ((raw[OFFSETS.EMULATE_PORT_HI] ?? 0) << 8) |
+      (raw[OFFSETS.EMULATE_PORT_LO] ?? 0),
   };
 }

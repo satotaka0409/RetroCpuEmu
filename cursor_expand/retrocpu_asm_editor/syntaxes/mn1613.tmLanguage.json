@@ -8,6 +8,7 @@
     { "include": "#todos" },
     { "include": "#comments" },
     { "include": "#directives" },
+    { "include": "#functions" },
     { "include": "#labels" },
     { "include": "#numbers" },
     { "include": "#registers" },
@@ -66,6 +67,14 @@
         {
           "name": "keyword.control.directive.mn1613asm",
           "match": "(?i)\\.(cpu|org|equ|word|ds|blkw|blkb|dw|area|globl|global|include|macro|endm|rept|irp|irpc|mexit|end)\\b|^\\s*(?:CPU|EQU|DW|DS|BLKW|BLKB|ORG|INCLUDE|MACRO|ENDM|REPT|IRP|IRPC|MEXIT|END|GLOBL|GLOBAL|AREA)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.mn1613asm",
+          "match": "(?i)\\blen\\b(?=\\s*\\()"
         }
       ]
     },

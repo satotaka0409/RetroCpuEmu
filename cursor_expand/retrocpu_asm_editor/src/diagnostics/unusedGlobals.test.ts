@@ -5,7 +5,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { mn1613Architecture } from "../cpu/mn1613/arch";
-import { collectOperandRefCounts } from "../symbols/occurrences";
+import {
+  collectLabelDefNames,
+  collectOperandRefCounts,
+} from "../symbols/occurrences";
 import { findUnusedGlobalDeclarations } from "./unusedGlobals";
 
 describe("findUnusedGlobalDeclarations", () => {
@@ -25,6 +28,25 @@ describe("findUnusedGlobalDeclarations", () => {
 
   test("参照があれば警告しない", () => {
     assert.deepEqual(msgs("        .global g_foo", ["G_FOO"]), []);
+  });
+
+  test("同じファイルのラベル定義があれば警告しない", () => {
+    const src = [
+      "        .global g_user_main",
+      "g_user_main:",
+      "        H",
+      "",
+    ].join("\n");
+    const labels = collectLabelDefNames(src);
+    const refs = collectOperandRefCounts(src, arch);
+    const hits = findUnusedGlobalDeclarations(
+      "        .global g_user_main",
+      arch,
+      (n) => (refs.get(n) ?? 0) > 0 || labels.has(n),
+    );
+    assert.deepEqual(hits, []);
+    assert.equal(labels.has("G_USER_MAIN"), true);
+    assert.equal(refs.get("G_USER_MAIN") ?? 0, 0);
   });
 
   test("参照が無ければ警告する", () => {
@@ -76,5 +98,19 @@ describe("collectOperandRefCounts", () => {
     const src = "        .word g_main\n";
     const c = collectOperandRefCounts(src, arch);
     assert.equal(c.get("G_MAIN"), 1);
+  });
+});
+
+describe("collectLabelDefNames", () => {
+  test("ラベル定義を集める（.global は含めない）", () => {
+    const src = [
+      "        .global g_user_main",
+      "g_user_main:",
+      "        H",
+      "",
+    ].join("\n");
+    const names = collectLabelDefNames(src);
+    assert.equal(names.has("G_USER_MAIN"), true);
+    assert.equal(names.size, 1);
   });
 });
