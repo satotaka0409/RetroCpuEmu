@@ -21,7 +21,7 @@ interface CliOptions {
 }
 
 const USAGE =
-  "Usage: retrocpu_asm [--cpu|-m mn1610|mn1613|tms9995] <input.asm> [-o out.rel] [--lst out.lst] [--module NAME]";
+  "Usage: retrocpu_asm [--cpu|-m mn1613|tms9995] <input.asm> [-o out.rel] [--lst out.lst] [--module NAME]";
 
 /**
  * INCLUDEディレクティブのオペランドからファイルパスを取り出す。
@@ -133,7 +133,7 @@ export function parseArgs(argv: string[]): CliOptions {
       const cpu = parseCpuType(val);
       if (!cpu) {
         throw new Error(
-          `--cpu/-m の値は mn1610 / mn1613 / tms9995 で指定してください（値: ${val}）\n${USAGE}`,
+          `--cpu/-m の値は mn1613 / tms9995 で指定してください（値: ${val}）\n${USAGE}`,
         );
       }
       opts.cpuType = cpu;
@@ -205,7 +205,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     relPath,
     writeRel(
       result,
-      opts.moduleName ?? (cpuType === "tms9995" ? "TMS9995" : "MN1610"),
+      opts.moduleName ?? (cpuType === "tms9995" ? "TMS9995" : "MN1613"),
     ),
     "utf8",
   );

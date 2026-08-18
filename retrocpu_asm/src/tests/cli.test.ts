@@ -16,15 +16,15 @@ describe("parseArgs: --cpu / -m 任意（無ければソース .cpu）", () => {
     assert.equal(opts.input, "a.asm");
   });
 
-  test("-m mn1610 を受け付ける", () => {
-    const opts = parseArgs(["a.asm", "-m", "mn1610"]);
-    assert.equal(opts.cpuType, "mn1610");
+  test("-m mn1613 を受け付ける", () => {
+    const opts = parseArgs(["a.asm", "-m", "mn1613"]);
+    assert.equal(opts.cpuType, "mn1613");
     assert.equal(opts.input, "a.asm");
   });
 
   test("--cpu を入力ファイルの前に置いてもよい", () => {
-    const opts = parseArgs(["--cpu", "mn1610", "foo.asm", "-o", "out.rel"]);
-    assert.equal(opts.cpuType, "mn1610");
+    const opts = parseArgs(["--cpu", "mn1613", "foo.asm", "-o", "out.rel"]);
+    assert.equal(opts.cpuType, "mn1613");
     assert.equal(opts.input, "foo.asm");
     assert.equal(opts.outRel, "out.rel");
   });
@@ -44,15 +44,15 @@ describe("parseArgs: --cpu / -m 任意（無ければソース .cpu）", () => {
     assert.equal(opts.moduleName, "MOD");
   });
 
-  test("-m tms9995 を受け付ける", () => {
-    const opts = parseArgs(["a.asm", "-m", "tms9995"]);
-    assert.equal(opts.cpuType, "tms9995");
-  });
-
   test("未指定でも parseArgs は通る（.cpu は assemble 側）", () => {
     const opts = parseArgs(["a.asm"]);
     assert.equal(opts.input, "a.asm");
     assert.equal(opts.cpuType, undefined);
+  });
+
+  test("-m tms9995 を受け付ける", () => {
+    const opts = parseArgs(["a.asm", "-m", "tms9995"]);
+    assert.equal(opts.cpuType, "tms9995");
   });
 
   test("引数なしは Usage エラー", () => {
@@ -62,15 +62,12 @@ describe("parseArgs: --cpu / -m 任意（無ければソース .cpu）", () => {
   test("不正な値はエラー", () => {
     assert.throws(
       () => parseArgs(["--cpu", "z80", "a.asm"]),
-      /mn1610 \/ mn1613 \/ tms9995/,
+      /mn1613 \/ tms9995/,
     );
   });
 
   test("-m の値が無い場合はエラー", () => {
-    assert.throws(
-      () => parseArgs(["a.asm", "-m"]),
-      /mn1610 \/ mn1613 \/ tms9995/,
-    );
+    assert.throws(() => parseArgs(["a.asm", "-m"]), /mn1613 \/ tms9995/);
   });
 
   test("未知オプションはエラー", () => {
@@ -83,7 +80,6 @@ describe("parseArgs: --cpu / -m 任意（無ければソース .cpu）", () => {
 
 describe("assemble: CPU モード切替", () => {
   const awiSrc = ["        .org 0", "        AWI R0, #1", ""].join("\n");
-  const balSrc = ["        .org 0", "L:      BAL L", ""].join("\n");
 
   test(".cpu mn1613 だけで AWI をアセンブルできる", () => {
     const r = assemble("\t.cpu\tmn1613\n        .org 0\n        AWI R0, #1\n");
@@ -91,17 +87,9 @@ describe("assemble: CPU モード切替", () => {
     assert.equal(r.cpuType, "mn1613");
   });
 
-  test(".CPU MN1610 は大文字小文字を無視する", () => {
-    const r = assemble("\t.CPU\tMN1610\n        .org 0\nL:\tBAL L\n");
-    assert.equal(r.cpuType, "mn1610");
-  });
-
-  test("引数の CPU はソース .cpu より優先する", () => {
-    assert.throws(
-      () =>
-        assemble("\t.cpu\tmn1613\n        .org 0\n        AWI R0, #1\n", "mn1610"),
-      /MN1613 専用命令/,
-    );
+  test(".CPU MN1613 は大文字小文字を無視する", () => {
+    const r = assemble("\t.CPU\tMN1613\n        .org 0\n        H\n");
+    assert.equal(r.cpuType, "mn1613");
   });
 
   test(".cpu も引数も無ければエラー", () => {
@@ -118,10 +106,10 @@ describe("assemble: CPU モード切替", () => {
     );
   });
 
-  test(".cpu は mn1610 / mn1613 / tms9995 以外を拒否する", () => {
+  test(".cpu は mn1613 / tms9995 以外を拒否する", () => {
     assert.throws(
       () => assemble("\t.cpu\tz8002\n        .org 0\n        H\n"),
-      /unknown \.cpu 'z8002' \(mn1610 \/ mn1613 \/ tms9995\)/,
+      /unknown \.cpu 'z8002' \(mn1613 \/ tms9995\)/,
     );
     assert.throws(
       () => assemble("\t.cpu\tz80\n        .org 0\n        H\n"),
@@ -134,21 +122,7 @@ describe("assemble: CPU モード切替", () => {
     assert.ok(r.words.length >= 1);
   });
 
-  test("mn1610 では AWI がエラー", () => {
-    assert.throws(() => assemble(awiSrc, "mn1610"), /MN1613 専用命令/);
-  });
-
-  test("mn1610 でも BAL はアセンブルできる", () => {
-    const r = assemble(balSrc, "mn1610");
-    assert.ok(r.words.length >= 1);
-  });
-
   test("parseArgs の cpuType を assemble に渡せる", () => {
-    const opts = parseArgs(["--cpu", "mn1610", "dummy.asm"]);
-    assert.throws(
-      () => assemble(awiSrc, opts.cpuType),
-      /MN1613 専用命令/,
-    );
     const opts13 = parseArgs(["-m", "mn1613", "dummy.asm"]);
     const r = assemble(awiSrc, opts13.cpuType);
     assert.ok(r.words.length >= 1);
@@ -156,7 +130,10 @@ describe("assemble: CPU モード切替", () => {
 
   test("tms9995 で LI をアセンブルできる", () => {
     const opts = parseArgs(["--cpu", "tms9995", "dummy.asm"]);
-    const r = assemble("        .org 0\n        LI R1, #0x1234\n", opts.cpuType);
+    const r = assemble(
+      "        .org 0\n        LI R1, #0x1234\n",
+      opts.cpuType,
+    );
     assert.equal(r.addressUnit, "byte");
     assert.deepEqual(
       r.words.map((w) => w.value),

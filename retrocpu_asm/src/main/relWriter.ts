@@ -117,12 +117,12 @@ function relocItem(
  * リンク後に `linkRelsWithSdld` が ÷2 してワードへ戻す。
  * TMS9995: バイトのまま（÷2 しない）。
  * @param result アセンブル結果
- * @param moduleName モジュール名（省略時は "MN1610"）
+ * @param moduleName モジュール名（省略時は "MN1613"）
  * @return REL形式テキスト
  */
 export function writeRel(
   result: AssemblyResult,
-  moduleName = "MN1610",
+  moduleName = "MN1613",
 ): string {
   const byteAddrs = result.addressUnit === "byte";
   const addrStep = byteAddrs ? 2 : 1;
@@ -208,9 +208,7 @@ export function writeRel(
       .sort((a, b) => a.address - b.address);
 
   const relocsOf = (area: string) =>
-    result.relocs.filter(
-      (r) => canonicalAreaName(r.area ?? "_CODE") === area,
-    );
+    result.relocs.filter((r) => canonicalAreaName(r.area ?? "_CODE") === area);
 
   for (const areaName of areaNames) {
     const info = areaByName.get(areaName);
@@ -219,8 +217,7 @@ export function writeRel(
       sorted.length === 0
         ? -1
         : sorted.reduce((m, w) => Math.max(m, w.address), 0);
-    const fromWords =
-      maxAddr < 0 ? 0 : byteAddrs ? maxAddr + 2 : maxAddr + 1;
+    const fromWords = maxAddr < 0 ? 0 : byteAddrs ? maxAddr + 2 : maxAddr + 1;
     const fromInfo = info ? areaSizeRel(info.size, byteAddrs) : 0;
     const sizeRel = Math.max(fromWords, fromInfo);
     const noload = info?.noload === true || areaName === "_WORK";
@@ -283,7 +280,9 @@ export function writeRel(
             `${hex2(item.mode)} ${hex2(item.rtp)} ${beWord(item.index)}`,
           );
         }
-        lines.push(`R ${beWord(R3_WORD_AREA)} ${beWord(areaIdx)}${items.length ? ` ${items.join(" ")}` : ""}`);
+        lines.push(
+          `R ${beWord(R3_WORD_AREA)} ${beWord(areaIdx)}${items.length ? ` ${items.join(" ")}` : ""}`,
+        );
         p += chunkWords;
       }
 

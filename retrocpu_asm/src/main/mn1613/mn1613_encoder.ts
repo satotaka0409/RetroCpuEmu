@@ -1,5 +1,5 @@
 /**
- * MN1610 / MN1613 命令エンコーダ。
+ * MN1613 命令エンコーダ。
  * TMS9995 は `tms9995/tms9995_encode.ts`。
  */
 
@@ -96,83 +96,6 @@ const II_MAP = new Map<string, number>([
 
 // ─── 2語命令セット（pass1 の PC カウント用） ──────────────────────────────────
 
-/** MN1613 新設命令のニモニックセット（MN1610 モードでは使用不可） */
-export const MN1613_ONLY_OPS = new Set<string>([
-  // データ転送
-  "LD",
-  "STD",
-  "LR",
-  "STR",
-  "MVWR",
-  "MVWI",
-  "MVBR",
-  "BSWR",
-  "DSWR",
-  // スタック
-  "PSHM",
-  "POPM",
-  // 整数演算
-  "AWR",
-  "AWI",
-  "SWR",
-  "SWI",
-  "CWR",
-  "CWI",
-  "CBR",
-  "CBI",
-  "NEG",
-  "AD",
-  "SD",
-  "M",
-  "D",
-  "DAA",
-  "DAS",
-  "LADR",
-  "LADI",
-  // 論理演算
-  "ANDR",
-  "ANDI",
-  "ORR",
-  "ORI",
-  "EORR",
-  "EORI",
-  // 浮動小数点演算
-  "FA",
-  "FS",
-  "FM",
-  "FD",
-  "FIX",
-  "FLT",
-  // 分岐
-  "BD",
-  "BL",
-  "BR",
-  "BALD",
-  "BALL",
-  "BALR",
-  "RETL",
-  // ビット操作
-  "TSET",
-  "TRST",
-  "SRBT",
-  "DEBP",
-  // 特殊命令
-  "BLK",
-  "RDR",
-  "WTR",
-  // セグメントレジスタ転送
-  "LB",
-  "LS",
-  "STB",
-  "STS",
-  "CPYB",
-  "CPYS",
-  "CPYH",
-  "SETB",
-  "SETS",
-  "SETH",
-]);
-
 /** 常に2語を占める命令ニモニックのセット */
 export const TWO_WORD_OPS = new Set<string>([
   // データ転送 (AD16)
@@ -239,7 +162,7 @@ export function u16(v: number, what: string): number {
   return v & 0xffff;
 }
 
-// ─── パースヘルパー（MN1610共通） ─────────────────────────────────────────────
+// ─── パースヘルパー ─────────────────────────────────────────────────────────────
 
 function parseReg(token: string, allowStr: boolean): number {
   const reg = REG_MAP.get(token.toUpperCase());
@@ -271,9 +194,7 @@ function parseEm(token?: string): number {
 function requireImmHash(arg: string, what: string): string {
   const t = arg.trim();
   if (!t.startsWith("#")) {
-    throw new Error(
-      `${what}: immediate operand requires '#' (got '${arg}')`,
-    );
+    throw new Error(`${what}: immediate operand requires '#' (got '${arg}')`);
   }
   return t.slice(1).trim();
 }
@@ -304,10 +225,7 @@ function parseImm4(
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  return u4(
-    evalExpr(requireImmHash(arg, "I4"), symbols, allowUndefined),
-    "I4",
-  );
+  return u4(evalExpr(requireImmHash(arg, "I4"), symbols, allowUndefined), "I4");
 }
 
 /**
@@ -322,10 +240,7 @@ function parseImm8(
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  return u8(
-    evalExpr(requireImmHash(arg, "I8"), symbols, allowUndefined),
-    "I8",
-  );
+  return u8(evalExpr(requireImmHash(arg, "I8"), symbols, allowUndefined), "I8");
 }
 
 /**
@@ -373,9 +288,7 @@ function parseImm16(
   symbols: SymbolTable,
   allowUndefined: boolean,
 ): number {
-  return (
-    evalExpr(stripAddrDecorators(arg), symbols, allowUndefined) & 0xffff
-  );
+  return evalExpr(stripAddrDecorators(arg), symbols, allowUndefined) & 0xffff;
 }
 
 /**
@@ -397,12 +310,8 @@ function stripAddrDecorators(arg: string): string {
 /**
  * `addr(BRn)` 形式を解析する。一致しなければ null。
  */
-function parseAddrWithBB(
-  arg: string,
-): { bb: number; addr: string } | null {
-  const m = arg
-    .trim()
-    .match(/^(.+)\(\s*(CSBR|SSBR|TSR0|TSR1)\s*\)$/i);
+function parseAddrWithBB(arg: string): { bb: number; addr: string } | null {
+  const m = arg.trim().match(/^(.+)\(\s*(CSBR|SSBR|TSR0|TSR1)\s*\)$/i);
   if (!m) return null;
   return { addr: m[1].trim(), bb: parseBB(m[2]) };
 }
@@ -826,17 +735,11 @@ export function encodeInstruction(
 ): number[] {
   if (!line.op) throw new Error(`Line ${line.lineNo}: missing opcode`);
   const op = line.op.toUpperCase();
-
-  // MN1610 モード時に MN1613 専用命令を使用した場合はエラー
-  if (cpuType === "mn1610" && MN1613_ONLY_OPS.has(op)) {
-    throw new Error(
-      `Line ${line.lineNo}: '${line.op}' は MN1613 専用命令です（--cpu mn1610 モードでは使用できません）`,
-    );
-  }
+  void cpuType;
 
   switch (op) {
     // ════════════════════════════════════════════════════════════════════════
-    // MN1610 互換命令（1語）
+    // 基本命令（1語）
     // ════════════════════════════════════════════════════════════════════════
 
     case "L": {
@@ -1243,8 +1146,7 @@ export function encodeInstruction(
       expectArgs(line, 2, 3);
       requireDr0(line.args[0]);
       const ii = parseDr0MemRi(line.args[1]);
-      const skip =
-        line.args.length > 2 ? parseSkip(line.args[2]) : 0;
+      const skip = line.args.length > 2 ? parseSkip(line.args[2]) : 0;
       return [op5(0b01111, 7, skip, 0x0c | ii)];
     }
     case "D": {
@@ -1252,8 +1154,7 @@ export function encodeInstruction(
       expectArgs(line, 2, 3);
       requireDr0(line.args[0]);
       const ii = parseDr0MemRi(line.args[1]);
-      const skip =
-        line.args.length > 2 ? parseSkip(line.args[2]) : 0;
+      const skip = line.args.length > 2 ? parseSkip(line.args[2]) : 0;
       return [op5(0b01110, 7, skip, 0x0c | ii)];
     }
     case "DAA": {

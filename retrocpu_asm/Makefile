@@ -2,8 +2,11 @@ SHELL := /bin/bash
 
 NODE_MAJOR ?= 24
 NODESOURCE_SETUP_URL := https://deb.nodesource.com/setup_$(NODE_MAJOR).x
+PKG_TOOL ?= @yao-pkg/pkg
+PKG_TARGET ?= node22-linux-x64
+PKG_OUTPUT ?= bin/retrocpu_asm
 
-.PHONY: localup typescript nodejs-install deps static-analysis
+.PHONY: localup typescript nodejs-install deps static-analysis dist-binary
 
 localup: nodejs-install deps static-analysis
 	@echo "localup completed"
@@ -30,6 +33,16 @@ deps:
 # TypeScript の静的解析（型チェックのみ）
 static-analysis:
 	npx tsc -p tsconfig.json --noEmit
+
+# Node ランタイム不要の単体実行バイナリを生成する（配布向け）
+dist-binary:
+	npm run build
+	mkdir -p $(dir $(PKG_OUTPUT))
+	@if [[ -f /etc/ssl/certs/ca-certificates.crt ]]; then \
+		export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt; \
+	fi; \
+	npx --yes $(PKG_TOOL) dist/main/cli.js --targets $(PKG_TARGET) --output $(PKG_OUTPUT)
+	@echo "created: $(PKG_OUTPUT)"
 
 typescript_uninstall:
 	# npm をアンインストール

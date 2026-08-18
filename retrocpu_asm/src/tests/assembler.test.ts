@@ -42,13 +42,19 @@ describe("evalExpr: 文字リテラル", () => {
   });
 
   test("閉じない文字リテラルはエラー", () => {
-    assert.throws(() => evalExpr("'A", empty, false), /Invalid character literal/);
+    assert.throws(
+      () => evalExpr("'A", empty, false),
+      /Invalid character literal/,
+    );
   });
 });
 
 describe("evalExpr: len()", () => {
   const empty = new Map<string, number>();
-  const lenses = new Map<string, number>([["HELLO_MSG1", 11], ["AB", 2]]);
+  const lenses = new Map<string, number>([
+    ["HELLO_MSG1", 11],
+    ["AB", 2],
+  ]);
 
   test("len(HELLO_MSG1) は 11（MN1613 ではワード数）", () => {
     assert.equal(evalExpr("len(HELLO_MSG1)", empty, false, lenses), 11);
@@ -713,8 +719,14 @@ GL_BAL_TMP:	.ds	1
     );
     assert.ok(!rel.includes("\nP "), rel);
     const rLines = rel.split("\n").filter((l) => l.startsWith("R "));
-    assert.ok(rLines.some((l) => l.includes("03 03")), rel);
-    assert.ok(rLines.some((l) => l.includes("03 05")), rel);
+    assert.ok(
+      rLines.some((l) => l.includes("03 03")),
+      rel,
+    );
+    assert.ok(
+      rLines.some((l) => l.includes("03 05")),
+      rel,
+    );
   });
 
   test("REL ヘッダーが正しい", () => {
@@ -1086,15 +1098,6 @@ B:	.ds	1
     assert.equal(r.words.length, 0);
   });
 
-  test("領域なしの .org 0 は従来どおり", () => {
-    const r = assemble(`
-        .org 0
-START:  H
-`);
-    assert.equal(r.symbols.get("START"), 0);
-    assert.equal(r.words[0]!.address, 0);
-  });
-
   test("TMS9995 の .blkw はワード単位（バイト×2）", () => {
     const r = assemble(
       `
@@ -1108,5 +1111,14 @@ B:	.ds	2
     assert.equal(r.symbols.get("A"), 0x8300);
     assert.equal(r.symbols.get("B"), 0x8302);
     assert.equal(r.words.length, 0);
+  });
+
+  test("領域なしの .org 0 は従来どおり", () => {
+    const r = assemble(`
+        .org 0
+START:  H
+`);
+    assert.equal(r.symbols.get("START"), 0);
+    assert.equal(r.words[0]!.address, 0);
   });
 });

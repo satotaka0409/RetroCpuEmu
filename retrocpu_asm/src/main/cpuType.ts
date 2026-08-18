@@ -1,8 +1,8 @@
 import { stripLineComment } from "./parser";
 import type { CpuType } from "./types";
 
-/** `.cpu` / `--cpu` で指定できる CPU（この3つのみ） */
-export const CPU_TYPES: readonly CpuType[] = ["mn1610", "mn1613", "tms9995"];
+/** `.cpu` / `--cpu` で指定できる CPU */
+export const CPU_TYPES: readonly CpuType[] = ["mn1613", "tms9995"];
 
 /**
  * CPU 名を正規化する（大文字小文字無視）。
@@ -12,7 +12,7 @@ export const CPU_TYPES: readonly CpuType[] = ["mn1610", "mn1613", "tms9995"];
 export function parseCpuType(value: string | undefined): CpuType | null {
   if (value === undefined) return null;
   const v = value.trim().toLowerCase();
-  if (v === "mn1610" || v === "mn1613" || v === "tms9995") return v;
+  if (v === "mn1613" || v === "tms9995") return v;
   return null;
 }
 
@@ -52,14 +52,12 @@ export function scanSourceCpu(sourceText: string): CpuType | undefined {
       }
       const raw = m[1];
       if (!raw) {
-        throw new Error(
-          `Line ${i + 1}: .cpu requires mn1610 / mn1613 / tms9995`,
-        );
+        throw new Error(`Line ${i + 1}: .cpu requires mn1613 or tms9995`);
       }
       const cpu = parseCpuType(raw);
       if (!cpu) {
         throw new Error(
-          `Line ${i + 1}: unknown .cpu '${raw}' (mn1610 / mn1613 / tms9995)`,
+          `Line ${i + 1}: unknown .cpu '${raw}' (mn1613 / tms9995)`,
         );
       }
       found = cpu;
@@ -88,6 +86,6 @@ export function resolveCpuType(
   if (explicit) return explicit;
   if (fromSource) return fromSource;
   throw new Error(
-    "CPU が未指定です（--cpu / -m または先頭の .cpu で mn1610 / mn1613 / tms9995 を指定してください）",
+    "CPU が未指定です（--cpu / -m または先頭の .cpu で mn1613 / tms9995 を指定してください）",
   );
 }

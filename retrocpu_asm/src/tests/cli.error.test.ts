@@ -113,7 +113,7 @@ describe("asm CLI: エラー時はメッセージのみで exit 1", () => {
     try {
       const r = runCli(ASM_CLI, ["--cpu", "z80", file]);
       assert.equal(r.status, 1);
-      assert.match(r.stderr, /mn1610 \/ mn1613 \/ tms9995/);
+      assert.match(r.stderr, /mn1613 \/ tms9995/);
       assertNoStackTrace(r.stderr);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -143,4 +143,3 @@ describe("asm CLI: エラー時はメッセージのみで exit 1", () => {
     }
   });
 });
-

@@ -1,5 +1,5 @@
-/** CPUの種別（`.cpu` / `--cpu` で指定できるのはこの3つのみ） */
-export type CpuType = "mn1610" | "mn1613" | "tms9995";
+/** CPUの種別 */
+export type CpuType = "mn1613" | "tms9995";
 
 /** PC / ラベルのアドレス単位 */
 export type AddressUnit = "word" | "byte";
@@ -29,7 +29,11 @@ export type SymbolInfoTable = Map<string, SymbolInfo>;
  */
 export type RelocOperand =
   | { kind: "symbol"; name: string }
-  | { kind: "word"; value: number; /** オフセットの属する領域。省略時はパッチ先領域 */ area?: string }
+  | {
+      kind: "word";
+      value: number;
+      /** オフセットの属する領域。省略時はパッチ先領域 */ area?: string;
+    }
   | { kind: "const"; value: number };
 
 /** リロケーションの書き込み幅 */
@@ -68,7 +72,7 @@ export interface ParsedLine extends SourceLine {
 
 /** ソース行に対応づいた出力1ワード */
 export interface EmittedWord {
-  /** 領域内アドレス（MN161x: ワード / TMS: バイト） */
+  /** 領域内アドレス（MN1613: ワード / TMS9995: バイト） */
   address: number;
   /** 16bit値 */
   value: number;
@@ -81,7 +85,7 @@ export interface EmittedWord {
 /** アセンブル結果の 1 領域 */
 export interface AreaInfo {
   name: string;
-  /** アドレス単位でのサイズ（MN161x: ワード / TMS: バイト） */
+  /** アドレス単位でのサイズ（MN1613: ワード / TMS9995: バイト） */
   size: number;
   noload: boolean;
 }
@@ -100,14 +104,14 @@ export interface AssemblyResult {
   sourceLines: SourceLine[];
   /**
    * `.ds` / `.blkw` 行の先頭ロケーション（行番号 → アドレス）。
-   * LST 用。イメージには出さない（MN161x: ワード / TMS: バイト）。
+   * LST 用。イメージには出さない（MN1613: ワード / TMS9995: バイト）。
    */
   storageAddrs: Map<number, number>;
   /** アセンブル対象 CPU */
   cpuType: CpuType;
   /**
    * EmittedWord.address / シンボル値の単位。
-   * MN161x: word、TMS9995: byte
+   * MN1613: word、TMS9995: byte
    */
   addressUnit: AddressUnit;
   /**
@@ -123,6 +127,6 @@ export interface AsmCheckpoint {
   /** 同名 4 桁（0001 起算） */
   serial: string;
   area: string;
-  /** MN161x: ワード / TMS: バイト */
+  /** MN1613: ワード / TMS9995: バイト */
   address: number;
 }

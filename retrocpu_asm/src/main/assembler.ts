@@ -6,12 +6,7 @@ import {
   matchWordDiffReloc,
   substLenCalls,
 } from "./expression";
-import {
-  encodeInstruction,
-  MN1613_ONLY_OPS,
-  TWO_WORD_OPS,
-  u16,
-} from "./mn1613/mn1613_encoder";
+import { encodeInstruction, TWO_WORD_OPS, u16 } from "./mn1613/mn1613_encoder";
 import {
   encodeTms9995Instruction,
   tms9995InstructionSize,
@@ -154,7 +149,7 @@ function parseAreaDirective(
 
 /**
  * `.ds` / `.blkw` が消費するアドレス単位数を返す。
- * MN161x: どちらもワード数。TMS9995: `.ds` はバイト、`.blkw` はワード（×2）。
+ * MN1613: どちらもワード数。TMS9995: `.ds` はバイト、`.blkw` はワード（×2）。
  * @param op - `.DS` または `.BLKW`
  * @param count - 指定個数
  * @param cpuType - CPU
@@ -187,14 +182,16 @@ function evalStorageReserve(
   }
   const count: number = evalExpr(line.args[0]!, symbols, pass1);
   if (count < 0) {
-    throw new Error(`Line ${line.lineNo}: ${line.op} count must not be negative`);
+    throw new Error(
+      `Line ${line.lineNo}: ${line.op} count must not be negative`,
+    );
   }
   return storageSize(op, count, cpuType) & 0xffff;
 }
 
 /**
  * ディレクティブが消費する単位数を返す。
- * MN161x: ワード数、TMS9995: バイト数。
+ * MN1613: ワード数、TMS9995: バイト数。
  * @param line - 解析済みソース行
  * @param cpuType - CPU
  * @return 消費サイズ
@@ -463,12 +460,6 @@ function pass1(
       );
     }
 
-    if (cpuType === "mn1610" && MN1613_ONLY_OPS.has(op)) {
-      throw new Error(
-        `Line ${line.lineNo}: '${line.op}' は MN1613 専用命令です（--cpu mn1610 モードでは使用できません）`,
-      );
-    }
-
     if (op === ".EQU" || op === "EQU") {
       if (!line.label && line.args.length < 2) {
         throw new Error(
@@ -517,7 +508,10 @@ function pass1(
     }
 
     if (isDirective(op)) {
-      if (areaNoload(areas) && (op === ".WORD" || op === ".DW" || op === "DW")) {
+      if (
+        areaNoload(areas) &&
+        (op === ".WORD" || op === ".DW" || op === "DW")
+      ) {
         throw new Error(
           `Line ${line.lineNo}: ${areas.current} cannot have initial values (use .ds)`,
         );
