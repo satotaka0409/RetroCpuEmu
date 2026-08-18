@@ -1,5 +1,5 @@
 {
-  "name": "retro-asm-editor",
+  "name": "retrocpu-asm-editor",
   "displayName": "Retro Assembler Editor",
   "description": "レトロ CPU アセンブラ編集支援（MN1610 / MN1613 / TMS9995）",
   "version": "0.2.4",

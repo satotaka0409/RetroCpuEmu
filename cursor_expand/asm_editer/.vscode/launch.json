@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
+      "name": "アセンブラエディタ:BOOT MONITOR",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
@@ -12,22 +12,20 @@
       ],
       "outFiles": ["${workspaceFolder:cursor_asm_editer}/dist/**/*.js"],
       "preLaunchTask": "compile retro-asm-editor",
-      "sourceMaps": true,
-      "debugWebWorkerExtensions": false
+      "sourceMaps": true
     },
     {
-      "name": "Run Extension (this folder)",
+      "name": "アセンブラエディタ:TUTORIAL",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "${workspaceFolder}/../../retrocpu_boot_monitor"
+        "${workspaceFolder:tutorial}"
       ],
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "outFiles": ["${workspaceFolder:tutorial}/dist/**/*.js"],
       "preLaunchTask": "compile retro-asm-editor",
-      "sourceMaps": true,
-      "debugWebWorkerExtensions": false
+      "sourceMaps": true
     }
   ]
 }

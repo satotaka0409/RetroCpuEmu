@@ -13,6 +13,12 @@ import type { EmuSnapshot } from "../shared/emu_types";
 import type { BeepWire } from "../shared/emu_api";
 import { playHostBeep, stopHostBeep } from "./host_beep";
 import { getLogFilePath, getLogger, initLogging } from "../log/logger";
+import {
+  createDefaultStartupConfig,
+  loadStartupConfigFromArgv,
+  saveStartupConfigToSettingArea,
+  type StartupConfigLoadResult,
+} from "./startup_config";
 
 /** esbuild CJS 出力では __dirname が使える */
 declare const __dirname: string;
@@ -189,6 +195,34 @@ if (gotLock) {
     log.info("IO ボードを起動する", { logFile: getLogFilePath() });
     installMenu();
 
+    const settingAreaPath = path.join(
+      app.getPath("userData"),
+      "ioboard_setting_area.bin",
+    );
+
+    let startup: StartupConfigLoadResult = {
+      ...createDefaultStartupConfig(),
+      source: "default",
+    };
+    try {
+      startup = await loadStartupConfigFromArgv(process.argv);
+    } catch (e) {
+      log.warn("起動 JSON の読み込みに失敗したため既定値を使う", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    await saveStartupConfigToSettingArea(settingAreaPath, startup);
+    log.info("起動設定を適用", {
+      source: startup.source,
+      configPath: startup.configPath,
+      cpuType: startup.settings.cpuType,
+      clockDiv: startup.settings.clockDiv,
+      resetVector: startup.settings.resetVector,
+      emulatePort: startup.emulatePort,
+      settingAreaPath,
+    });
+
     let bootMonitorHex: string | undefined;
     try {
       bootMonitorHex = resolveBootMonitorHexPath(
@@ -208,6 +242,8 @@ if (gotLock) {
       ioSliceMs: 16,
       logDir,
       bootMonitorHex,
+      settingAreaPath,
+      debugPort: startup.emulatePort,
     });
     unsub = host.subscribe(broadcastSnapshot);
     unsubBeep = host.subscribeBeep(broadcastBeep);

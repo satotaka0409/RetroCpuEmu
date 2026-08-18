@@ -21,6 +21,10 @@ export type EmuHostOptions = {
   logDir?: string;
   /** ブートモニタ IHX（IO Worker の RST / 電源投入で DMA する） */
   bootMonitorHex?: string;
+  /** IO ボード設定エリア保存先 */
+  settingAreaPath?: string;
+  /** デバッグ TCP 待ち受けポート（省略時は既定値） */
+  debugPort?: number;
 };
 
 type Listener = (snap: EmuSnapshot) => void;
@@ -234,6 +238,8 @@ export class EmuHost {
         sliceMs: this.opts.ioSliceMs ?? 16,
         logDir: this.opts.logDir,
         bootMonitorHex: this.opts.bootMonitorHex,
+        settingAreaPath: this.opts.settingAreaPath,
+        debugPort: this.opts.debugPort,
       },
     });
 

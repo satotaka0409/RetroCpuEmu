@@ -1,8 +1,8 @@
 {
   "folders": [
     {
-      "name": "cursor_asm_editer",
-      "path": "./cursor_expand/asm_editer",
+      "name": "retrocpu_asm_editor",
+      "path": "./cursor_expand/retrocpu_asm_editor",
     },
     {
       "name": "debug_expand",

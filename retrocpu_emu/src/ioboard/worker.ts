@@ -57,6 +57,8 @@ type WorkerInit = {
   bootMonitorHex?: string;
   /** IO ボード設定エリア保存先（省略時は logDir の親配下） */
   settingAreaPath?: string;
+  /** デバッグ TCP 待ち受けポート（省略時は既定値） */
+  debugPort?: number;
 };
 
 const init = workerData as WorkerInit;
@@ -289,10 +291,7 @@ link.setCpuToIoFrameHandler((frame) => {
     if (response[0] === 0 && beep) {
       emitBeep(beep.frequencyHz, beep.durationMs);
     }
-  } else if (
-    cmd === CMD_CPU_TO_IO.LCD_CTRL ||
-    cmd === CMD_CPU_TO_IO.LCD_TEXT
-  ) {
+  } else if (cmd === CMD_CPU_TO_IO.LCD_CTRL || cmd === CMD_CPU_TO_IO.LCD_TEXT) {
     const lcd = getLcdWire();
     log.info("LCD (17h/18h)", {
       cmd: `0x${cmd.toString(16)}`,
@@ -468,6 +467,7 @@ function stop(): void {
 async function startDebugHost(): Promise<void> {
   await stopDebugHost();
   const host = new DebugHost({
+    port: init.debugPort,
     handlers: {
       addrBreakSet: (payload) => link.addrBreakSet(payload),
       addrBreakClr: (slot) => link.addrBreakClr(slot),
