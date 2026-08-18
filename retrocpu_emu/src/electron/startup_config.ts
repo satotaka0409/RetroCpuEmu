@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parse as parseJsonc } from "jsonc-parser";
 import {
   ADDR_STEP_1,
   ADDR_STEP_2,
@@ -87,7 +88,7 @@ export async function loadStartupConfigFromArgv(
   argv: string[],
   cwd = process.cwd(),
 ): Promise<StartupConfigLoadResult> {
-  const configPath = findJsonArg(argv, cwd);
+  const configPath = findConfigArg(argv, cwd);
   if (!configPath) {
     return {
       ...createDefaultStartupConfig(),
@@ -96,7 +97,7 @@ export async function loadStartupConfigFromArgv(
   }
 
   const text = await fs.readFile(configPath, "utf8");
-  const parsed = JSON.parse(text) as unknown;
+  const parsed = parseJsonc(text) as unknown;
   return {
     ...parseStartupConfigObject(parsed),
     source: "json",
@@ -115,11 +116,11 @@ export async function saveStartupConfigToSettingArea(
   await saveSettingArea(storage, config.settings);
 }
 
-function findJsonArg(argv: string[], cwd: string): string | undefined {
+function findConfigArg(argv: string[], cwd: string): string | undefined {
   for (const arg of argv.slice(1)) {
     if (!arg) continue;
     if (arg.startsWith("-")) continue;
-    if (!/\.json$/i.test(arg)) continue;
+    if (!/\.(json|jsonc)$/i.test(arg)) continue;
     return path.resolve(cwd, arg);
   }
   return undefined;

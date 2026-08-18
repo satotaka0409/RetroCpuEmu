@@ -49,7 +49,7 @@ describe("IoBoardHandshakeMock", () => {
     reset();
     mock = createIoBoardHandshakeMock({ timeoutMs: 1000 });
     dispatcher = new CpuToIoCommandDispatcher(
-      createDefaultCpuToIoHandlers(mock.state, mock.timers),
+      createDefaultCpuToIoHandlers(mock.state, mock.timer),
     );
   });
 
@@ -108,7 +108,7 @@ describe("IoBoardHandshakeMock", () => {
     clock.reset();
     now = 4n * IO_TIME_TICK_NS;
     const d = new CpuToIoCommandDispatcher(
-      createDefaultCpuToIoHandlers(mock.state, mock.timers, clock),
+      createDefaultCpuToIoHandlers(mock.state, mock.timer, clock),
     );
     const resp = d.dispatch(new Uint8Array([CMD_CPU_TO_IO.TIME_GET]));
     expect([...resp.slice(0, 8)]).toEqual([0, 0, 0, 0, 0, 0, 0, 4]);

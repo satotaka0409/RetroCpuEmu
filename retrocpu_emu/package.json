@@ -23,6 +23,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "jsonc-parser": "^3.3.1",
     "winston": "^3.19.0"
   }
 }
