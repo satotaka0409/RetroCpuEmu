@@ -1,17 +1,21 @@
 # tutorial — MN1613 チュートリアル IHX ビルド
 #
-#   make ihx              … 全サンプルの .asm → .rel → sdld → Intel HEX + CDB
-#   make <sample>         … 1 件だけ（beep1 / beep2 / bullet_led / console_lcd / sevenseg_led）
-#   make clean            … 各サンプルの build/ を削除
+#   make / make all / make ihx
+#         配下の全プログラム（**/src/mn1613/*.asm）を Intel HEX + CDB にする
+#   make <sample>         そのディレクトリ 1 件だけ
+#   make clean            各サンプルの build/ を削除
 #
 # 配置: <sample>/src/mn1613/<stem>.asm → <sample>/build/hex/<stem>.ihx
-# 新しい <sample>/src/mn1613/*.asm は wildcard で自動追加する。
+# 新しいサンプルはディレクトリを足すだけで対象になる（列挙しない）。
 # BIOS エントリは tutorial/bios.inc（_BIOS ジャンプ表）。モニタ本体はリンクしない。
 # エミュは F7 RST でモニタを DMA したあと、この IHX を載せて 1800h から RUN。
 #
 # cwd は問わない（Makefile のあるディレクトリ基準）。
 
 SHELL := /bin/bash
+
+# 先頭サンプルの .PHONY がデフォルトにならないよう先に固定する
+.DEFAULT_GOAL := all
 
 TUT_DIR   := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT_DIR  := $(abspath $(TUT_DIR)/..)
@@ -34,14 +38,14 @@ export SDLD := $(SDCC_BIN_DIR)/sdld
 
 .DELETE_ON_ERROR:
 
-# デフォルトゴールは ihx（foreach より前に置く。後だと先頭サンプルだけビルドされる）
-.PHONY: all help ihx clean retrocpu-asm-build
-all: ihx
-
-ASM_SRCS := $(sort $(wildcard $(TUT_DIR)/*/src/mn1613/*.asm))
+# 配下すべての src/mn1613/*.asm（深さは問わない）
+ASM_SRCS := $(sort $(shell find "$(TUT_DIR)" -type f -path '*/src/mn1613/*.asm'))
 ifeq ($(ASM_SRCS),)
-$(error no samples: expected */src/mn1613/*.asm under $(TUT_DIR))
+$(error no samples: expected **/src/mn1613/*.asm under $(TUT_DIR))
 endif
+
+ALL_IHX :=
+SAMPLE_NAMES :=
 
 # $(1)=abs src  $(2)=stem  $(3)=sample  $(4)=MODULE
 define TUT_ASM_RULES
@@ -65,11 +69,17 @@ endef
 
 $(foreach src,$(ASM_SRCS),$(eval $(call TUT_ASM_RULES,$(src),$(basename $(notdir $(src))),$(firstword $(subst /, ,$(patsubst $(TUT_DIR)/%,%,$(src)))),$(shell echo $(basename $(notdir $(src))) | tr '[:lower:]' '[:upper:]'))))
 
+SAMPLE_NAMES := $(sort $(SAMPLE_NAMES))
+
+.PHONY: all help ihx clean retrocpu-asm-build $(SAMPLE_NAMES)
+
+all: ihx
+
 help:
 	@echo "tutorial"
-	@echo "  make / make ihx     全サンプルの IHX / CDB を出す"
-	@echo "  make <sample>       1 件だけビルド"
-	@echo "  make clean          各サンプルの build/ を削除"
+	@echo "  make / make all / make ihx   配下の全プログラムをビルド"
+	@echo "  make <sample>                1 件だけビルド"
+	@echo "  make clean                   各サンプルの build/ を削除"
 	@echo "samples:"
 	@$(foreach s,$(SAMPLE_NAMES),echo "  $(s)";)
 
@@ -82,8 +92,8 @@ retrocpu-asm-build:
 	@test -f "$(SDLD_LINK_CLI)"
 
 ihx: $(ALL_IHX)
-	@echo "IHX:"
+	@echo "IHX ($(words $(ALL_IHX))):"
 	@$(foreach s,$(ALL_IHX),echo "  $(s)";)
 
 clean:
-	rm -rf $(TUT_DIR)/*/build
+	find "$(TUT_DIR)" -type d -name build -prune -exec rm -rf {} +

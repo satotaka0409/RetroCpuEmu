@@ -16,6 +16,7 @@ import {
   createIoBoardCommandState,
   createIoBoardHandshakeMock,
   IoBoardHandshakeMock,
+  setHexKeyHeld,
 } from "../../../src/ioboard/handshake/io_board_mock";
 import { getLcdWire, resetLcdConsole } from "../../../src/ioboard/lcd_console";
 import {
@@ -100,6 +101,17 @@ describe("IoBoardHandshakeMock", () => {
       0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80,
     ]);
     expect(ok[8]).toBe(RESPONSE_CODE.OK);
+  });
+
+  it("setHexKeyHeld は 4×4 の列ビットを立てて落とす", () => {
+    const state = createIoBoardCommandState();
+    setHexKeyHeld(state, 0, true);
+    setHexKeyHeld(state, 7, true);
+    expect(state.hexKeys[0]).toBe(0x01);
+    expect(state.hexKeys[3]).toBe(0x02);
+    setHexKeyHeld(state, 0, false);
+    expect(state.hexKeys[0]).toBe(0);
+    expect(state.hexKeys[3]).toBe(0x02);
   });
 
   it("時刻取得(0x11)は timeSource があればそのティックを返す", () => {

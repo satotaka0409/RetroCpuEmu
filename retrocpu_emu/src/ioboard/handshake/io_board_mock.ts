@@ -168,6 +168,38 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
 }
 
 /**
+ * 16進キー 0–F をハンドシェイク 14h の列ビットへ写す。
+ * 4×4 配置: 列 = 下位 2bit、ビット番号 = 上位 2bit（0–3 が bit0、4–7 が bit1）。
+ * @param digit キー番号 0–15
+ * @returns 列 0–3 とビットマスク。範囲外は null
+ */
+export function hexDigitColumnMask(
+  digit: number,
+): { col: number; mask: number } | null {
+  if (!Number.isInteger(digit) || digit < 0 || digit > 15) return null;
+  return { col: digit & 3, mask: 1 << ((digit >> 2) & 3) };
+}
+
+/**
+ * 14h 用の 16進キー押下ビットを更新する（押している間 ON）。
+ * @param state IO ボード状態
+ * @param digit キー番号 0–15
+ * @param held true=押下、false=離す
+ */
+export function setHexKeyHeld(
+  state: IoBoardMockState,
+  digit: number,
+  held: boolean,
+): void {
+  const loc = hexDigitColumnMask(digit);
+  if (!loc) return;
+  const cur = state.hexKeys[loc.col] ?? 0;
+  state.hexKeys[loc.col] = held
+    ? (cur | loc.mask) & 0xff
+    : cur & ~loc.mask & 0xff;
+}
+
+/**
  * 状態を持つ既定 CpuToIoHandlers（モニター相手のモック挙動）。
  * @param state 更新対象のモック状態
  * @param timer タイマー設定 (12h) を実際に反映する IO ボードタイマー（1 本）。

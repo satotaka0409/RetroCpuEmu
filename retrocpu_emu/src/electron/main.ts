@@ -248,6 +248,9 @@ if (gotLock) {
     unsubBeep = host.subscribeBeep(broadcastBeep);
     ipcMain.handle("emu:getSnapshot", () => host!.getSnapshot());
     ipcMain.on("emu:keyHex", (_e, digit: string) => host?.keyHex(digit));
+    ipcMain.on("emu:keyHexHold", (_e, digit: string, down: boolean) =>
+      host?.keyHexHold(digit, down),
+    );
     ipcMain.on("emu:keyFn", (_e, fn: string) => host?.keyFn(fn));
     ipcMain.on("emu:keyAdsLongPress", () => host?.keyAdsLongPress());
     ipcMain.handle("emu:loadIntelHex", (_e, hex: string) =>

@@ -68,6 +68,12 @@ export type EmuApi = {
   onBeep: (cb: (beep: BeepWire) => void) => () => void;
   getSnapshot: () => Promise<EmuSnapshotWire>;
   keyHex: (digit: string) => void;
+  /**
+   * 16進キーの押し続け（ハンドシェイク 14h ビットマップ）。
+   * @param digit "0"〜"F"
+   * @param down true=押下、false=離す
+   */
+  keyHexHold: (digit: string, down: boolean) => void;
   keyFn: (fn: string) => void;
   keyAdsLongPress: () => void;
   loadIntelHex: (hex: string) => Promise<{

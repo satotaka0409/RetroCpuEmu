@@ -166,6 +166,16 @@ export class EmuHost {
   }
 
   /**
+   * 16進キーの押し続けを IO Worker へ送る（14h ビットマップ）。
+   * @param digit "0"〜"F"
+   * @param down true=押下、false=離す
+   */
+  keyHexHold(digit: string, down: boolean): void {
+    log.debug("16進キー押下", { digit, down });
+    this.io?.postMessage({ type: "key:hex:hold", digit, down });
+  }
+
+  /**
    * ファンクションキー押下を IO Worker へ送る。
    * @param fn "F0"〜"F7"（ADS / CLR / INC / DEC / WINC / RUN / H-ST / RST）
    */

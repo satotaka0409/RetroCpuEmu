@@ -40,6 +40,14 @@ contextBridge.exposeInMainWorld("emuApi", {
   keyHex(digit: string): void {
     ipcRenderer.send("emu:keyHex", digit);
   },
+  /**
+   * 16進キーの押し続けをメインへ送る（14h ビットマップ）。
+   * @param digit "0"〜"F"
+   * @param down true=押下、false=離す
+   */
+  keyHexHold(digit: string, down: boolean): void {
+    ipcRenderer.send("emu:keyHexHold", digit, down);
+  },
   keyFn(fn: string): void {
     ipcRenderer.send("emu:keyFn", fn);
   },

@@ -11,6 +11,10 @@ const FUNCTION_KEYS = ["F0", "F1", "F2", "F3", "F4", "F5", "F6", "F7"] as const;
 
 export type HexKeyboardHandlers = {
   onHexClick?: (value: string) => void;
+  /** 16進キーを押し始めた（14h 押し続け） */
+  onHexDown?: (value: string) => void;
+  /** 16進キーを離した */
+  onHexUp?: (value: string) => void;
   onFunctionClick?: (fn: string) => void;
   onFunctionLongPress?: (fn: string) => void;
   /** F0→ADS など表示ラベル */
@@ -41,6 +45,12 @@ export function mountHexKeyboard(
       btn.type = "button";
       btn.className = "hex-key";
       btn.textContent = key;
+      btn.addEventListener("pointerdown", (ev) => {
+        btn.setPointerCapture(ev.pointerId);
+        handlers.onHexDown?.(key);
+      });
+      btn.addEventListener("pointerup", () => handlers.onHexUp?.(key));
+      btn.addEventListener("pointercancel", () => handlers.onHexUp?.(key));
       btn.addEventListener("click", () => handlers.onHexClick?.(key));
       rowEl.appendChild(btn);
     }
