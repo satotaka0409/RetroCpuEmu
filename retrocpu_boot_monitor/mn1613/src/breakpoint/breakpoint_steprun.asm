@@ -3,7 +3,7 @@
 ; 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
 ;   MN1613_CPUボードメモリ_IOマップ.mdc（0036/0037）
 ;
-; 18h 方式 1: GL_STEP_ARM を立て、OK を返す。ENA はここでは上げない
+; 18h 方式 1: GL_BP_STEP_ARM を立て、OK を返す。ENA はここでは上げない
 ;   （ハンドラ途中のフェッチで発火するため）。INT1 の LPSW 1 直前に
 ;   g_step_arm_cpld が 0037h=2006h・0036h=1 を書く。
 ; 要因 1: 1Bh（アドレス・レジスタ・スタック 16 ワード）を送りモニタ HALT（R0=1）。
@@ -11,6 +11,7 @@
 
 	.cpu	mn1613
 
+	.include "../interrupt_io.inc"
 	.include "../handshake/handshake_io.inc"
 
 	.area	_CODE		(REL,CON)
@@ -18,7 +19,7 @@
 	.global g_hshk_break_resume
 	.global g_step_arm_cpld
 	.global g_step_interrupt_handler
-	.global GL_STEP_ARM
+	.global GL_BP_STEP_ARM
 	.global g_hshk_recv_byte
 	.global g_hshk_send_byte
 	.global g_hshk_send_word
@@ -31,7 +32,7 @@
 ; -------------------------------------------------------
 ; ブレイク復帰（コマンド 18h）
 ; @note IO→CPU 転送中。コマンド 1B 受信済み。残り 1B: 実行方式。
-; @note 0=通常再開（ENA を上げない）/ 1=ステップ（GL_STEP_ARM=1）。
+; @note 0=通常再開（ENA を上げない）/ 1=ステップ（GL_BP_STEP_ARM=1）。
 ; @return R0 - 線上 status（OK / NG）
 ; @Destruction R0, R1, R2（R3–R4 は退避）
 ; -------------------------------------------------------
@@ -53,8 +54,7 @@ l_sr_61_ng:
 	pop	R3
 	ret
 l_sr_61_ok:
-	mvwi	X1, #GL_STEP_ARM
-	st	R1, 0(X1)
+	st	R1, *GL_BP_STEP_ARM
 	mvwi	R0, #HSHK_OK
 	bald	g_hshk_send_byte
 	pop	R4
@@ -63,21 +63,20 @@ l_sr_61_ok:
 
 ; -------------------------------------------------------
 ; LPSW 1 の直前に CPLD を武装する（INT1 エピローグから BALD）。
-; @note 常に 0037h へ LPSW 2 の語を書く。GL_STEP_ARM≠0 のときだけ
+; @note 常に 0037h へ LPSW 2 の語を書く。GL_BP_STEP_ARM≠0 のときだけ
 ;   0036h=1 にしてフラグを落とす。通常再開では ENA を触らない。
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
 g_step_arm_cpld:
 	mvwi	R0, #STEP_BRK_COM_LPSW2
 	wt	R0, IO_STEP_BRK_COM
-	mvwi	X1, #GL_STEP_ARM
-	l	R0, 0(X1)
+	l	R0, *GL_BP_STEP_ARM
 	or	R0, R0, Z
 	b	l_sr_arm_go
 	ret
 l_sr_arm_go:
 	eor	R0, R0
-	st	R0, 0(X1)
+	st	R0, *GL_BP_STEP_ARM
 	mvi	R0, #1
 	wt	R0, IO_STEP_BRK_ENA
 	ret
@@ -107,7 +106,7 @@ l_sr_nt_addr:
 	b	l_sr_nt_ic
 	bd	l_sr_nt_fail
 l_sr_nt_ic:
-	l	R0, *HSHK_L2_IC_SAVE
+	l	R0, *INT1_IC_SAVE
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ
 	b	l_sr_nt_r0
@@ -156,13 +155,13 @@ l_sr_nt_sp:
 	b	l_sr_nt_str
 	bd	l_sr_nt_fail
 l_sr_nt_str:
-	l	R0, *HSHK_L2_STR_SAVE
+	l	R0, *INT1_STR_SAVE
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ
 	b	l_sr_nt_ic2
 	bd	l_sr_nt_fail
 l_sr_nt_ic2:
-	l	R0, *HSHK_L2_IC_SAVE
+	l	R0, *INT1_IC_SAVE
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ
 	b	l_sr_nt_sbr
@@ -251,6 +250,6 @@ l_sr_nt_fail:
 	pop	R3
 	ret
 
-	.area	_WORK		(REL,NOLOAD)
+	.area	_USR_PAGE0	(REL,NOLOAD)
 ; 18h 方式 1 のとき 1。g_step_arm_cpld が ENA を上げて 0 に戻す
-GL_STEP_ARM:		.ds	1
+GL_BP_STEP_ARM:	.ds	1

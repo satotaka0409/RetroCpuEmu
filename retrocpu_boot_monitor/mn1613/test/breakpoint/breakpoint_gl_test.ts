@@ -379,14 +379,14 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
 
     const resume = await callHandler(mock, Uint8Array.from([0x18, 1]), 1);
     expect(Array.from(resume)).toEqual([0x00]);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(1);
     expect(stepBreak.getEnable()).toBe(0);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
 
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
     expect(stepBreak.getTriggerWord()).toBe(0x2006);
     expect(stepBreak.getEnable()).toBe(1);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
   });
 });
 
@@ -473,12 +473,12 @@ test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行�
           1,
         );
         expect(Array.from(resume)).toEqual([0x00]);
-        expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
+        expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(1);
 
         await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
         expect(stepBreak.getTriggerWord()).toBe(0x2006);
         expect(stepBreak.getEnable()).toBe(1);
-        expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+        expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
       }
     });
   }

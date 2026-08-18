@@ -95,10 +95,10 @@ async function callHandler(
 
 test("18h 方式 0 は OK で ARM を落とす（ENA は上げない）", async () => {
   await withCase(async (s, mock) => {
-    s.writeWord(s.wordAddr("GL_STEP_ARM"), 1);
+    s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 1);
     const reply = await callHandler(mock, Uint8Array.from([0x18, 0]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
     expect(stepBreak.getEnable()).toBe(0);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
@@ -108,7 +108,7 @@ test("18h 方式 1 は ARM を立て、ENA はまだ 0", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(mock, Uint8Array.from([0x18, 1]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(1);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(1);
     expect(stepBreak.getEnable()).toBe(0);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
@@ -116,10 +116,10 @@ test("18h 方式 1 は ARM を立て、ENA はまだ 0", async () => {
 
 test("18h 方式 2 は NG で ARM を変えない", async () => {
   await withCase(async (s, mock) => {
-    s.writeWord(s.wordAddr("GL_STEP_ARM"), 0);
+    s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 0);
     const reply = await callHandler(mock, Uint8Array.from([0x18, 2]), 1);
     expect(Array.from(reply)).toEqual([0x01]);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
     expect(stepBreak.getEnable()).toBe(0);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
@@ -128,11 +128,11 @@ test("18h 方式 2 は NG で ARM を変えない", async () => {
 test("g_step_arm_cpld は ARM=1 のとき 0037h=2006h・0036h=1 にしてフラグを落とす", async () => {
   await withCase(async (s) => {
     stepBreak.writePort(0x37, 0x1111);
-    s.writeWord(s.wordAddr("GL_STEP_ARM"), 1);
+    s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 1);
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
     expect(stepBreak.getTriggerWord()).toBe(STEP_COM);
     expect(stepBreak.getEnable()).toBe(1);
-    expect(s.readWord(s.wordAddr("GL_STEP_ARM"))).toBe(0);
+    expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
   });
 });
 
@@ -140,7 +140,7 @@ test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", as
   await withCase(async (s) => {
     stepBreak.writePort(0x36, 0);
     stepBreak.writePort(0x37, 0x1111);
-    s.writeWord(s.wordAddr("GL_STEP_ARM"), 0);
+    s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 0);
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
     expect(stepBreak.getTriggerWord()).toBe(STEP_COM);
     expect(stepBreak.getEnable()).toBe(0);

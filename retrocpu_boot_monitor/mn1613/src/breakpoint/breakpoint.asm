@@ -296,9 +296,8 @@ l_bp_nt_slot:
 ; 履歴件数（Bit7 履歴有効時のみ。最大 16。無効なら 0）
 l_bp_nt_hc:
 	mv	X0, SP
-	l	R4, 1(X0)		; 表
+	l	X1, 1(X0)		; 表
 	l	R1, 2(X0)		; slot
-	mv	X1, R4
 	eor	R2, R2
 	l	R0, HSHK_AB_W_FLAGS(X1)
 	andi	R0, #HSHK_AB_F_HIST, NZ
@@ -332,7 +331,7 @@ l_bp_nt_hc_send:
 
 l_bp_nt_flags:
 	mv	X0, SP
-	l	R4, 1(X0)
+	l	X1, 1(X0)
 	l	R0, HSHK_AB_W_FLAGS(X1)
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
@@ -342,7 +341,7 @@ l_bp_nt_flags:
 
 l_bp_nt_cnt:
 	mv	X0, SP
-	l	R4, 1(X0)
+	l	X1, 1(X0)
 	l	R0, HSHK_AB_W_COUNT(X1)
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
@@ -352,7 +351,7 @@ l_bp_nt_cnt:
 
 l_bp_nt_addr:
 	mv	X0, SP
-	l	R4, 1(X0)
+	l	X1, 1(X0)
 	l	R0, 3(X1)		; addr 上位 16bit
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ
@@ -360,7 +359,7 @@ l_bp_nt_addr:
 	bd	l_bp_notify_fail
 l_bp_nt_tbl2:
 	mv	X0, SP
-	l	R4, 1(X0)
+	l	X1, 1(X0)
 	l	R0, 4(X1)		; addr 下位 16bit
 	bald	g_hshk_send_word
 	cwi	R0, #HSHK_OK, NZ

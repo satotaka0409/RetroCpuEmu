@@ -14,6 +14,15 @@ INT2_CAUSE_TIMER	.equ	0	; 00
 INT2_CAUSE_HSHK		.equ	2	; 01 → ポート値 0x02
 INT2_CAUSE_MASK		.equ	0x06
 
+; OPSW 退避スロット（ゼロページ）
+; 割り込み受理時に STR/IC が lv*2 / lv*2+1 へ保存される
+INT0_STR_SAVE		.equ	0
+INT0_IC_SAVE		.equ	1
+INT1_STR_SAVE		.equ	2
+INT1_IC_SAVE		.equ	3
+INT2_STR_SAVE		.equ	4
+INT2_IC_SAVE		.equ	5
+
 ; CPLD 比較器（MN1613_CPUボードメモリ_IOマップ.mdc）
 IO_BREAK_CTRL		.equ	0x30
 IO_BREAK_ADDR_HI	.equ	0x31

@@ -126,19 +126,24 @@ g_int1_handler:
 	andi	R0, #INT1_CAUSE_MASK
 	st	R0, 1(X1)
 	push	X1
-	; 比較器ブレイク（Bit0=0）
+	; 互換のため INT1 退避を共有退避へミラーする
+	l	R0, *INT1_STR_SAVE
+	st	R0, *HSHK_L2_STR_SAVE
+	l	R0, *INT1_IC_SAVE
+	st	R0, *HSHK_L2_IC_SAVE
+	; 要因分岐（Bit0: 0=比較器ブレイク / 1=ステップ）
 	l	R0, 1(X1)
-	or	R0, R0, Z
-	b	l_int1_try_step, NZ
+	cbi	R0, #INT1_CAUSE_BREAK, NZ
+	b	l_int1_do_break
+	cbi	R0, #INT1_CAUSE_STEP, NZ
+	b	l_int1_do_step
+	b	l_int1_epilogue
+l_int1_do_break:
 	bald	g_breakpoint_interrupt_handler
 	or	R0, R0, Z
 	b	l_int1_halt
 	b	l_int1_epilogue
-l_int1_try_step:
-	; ステップ実行（Bit0=1。比較器は使わない）
-	l	R0, 1(X1)
-	cbi	R0, #INT1_CAUSE_STEP, NZ
-	b	l_int1_epilogue
+l_int1_do_step:
 	bald	g_step_interrupt_handler
 	or	R0, R0, Z
 	b	l_int1_halt
@@ -191,7 +196,7 @@ g_int2_handler:
 	; タイマー（Bit1-2=00）: INT2 0 割り込みハンドラー
 	l	R0, 1(X1)
 	or	R0, R0, Z
-	b	l_next_handshake, NZ
+	b	l_next_handshake
 	mvwi	X0, #GL_INT2_ADR
 	l	R0, 1(X0)
 	or	R0, R0, Z
