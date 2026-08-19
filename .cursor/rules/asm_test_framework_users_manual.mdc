@@ -235,7 +235,7 @@ IO→CPU の比較器設定（コマンド `10h`。CPU→IO のモード設定 `
 
 ### 4.2 BIOS／モニタ結合
 
-成果物は `retrocpu_boot_monitor` の Makefile（`make ihx` → `build/hex/mn1613_mon.ihx` と `.cdb`）。テスト設定のひな型は `mn1613/test/mn1613_mon_settings.ts` です。
+成果物は `retrocpu_boot_monitor` の Makefile（`make ihx` → `build/hex/mn1613/mn1613_mon.ihx` と `.cdb`）。テスト設定のひな型は `mn1613/test/mn1613_mon_settings.ts` です。
 
 ```ts
 import {

@@ -8,9 +8,9 @@
     "assemble": "node dist/main/cli.js",
     "sdld-link": "node dist/main/sdldLinkCli.js",
     "dev": "tsx src/main/cli.ts",
-    "test": "tsc -p tsconfig.test.json && node --test dist/tests/assembler.test.js dist/tests/assembler.error.test.js dist/tests/equ.test.js dist/tests/mn1613/mn1613_instructions.test.js dist/tests/sdld.test.js dist/tests/macros.test.js dist/tests/cli.test.js dist/tests/cli.error.test.js dist/tests/tms9995_instructions.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist/tests/assembler.test.js dist/tests/assembler.error.test.js dist/tests/equ.test.js dist/tests/mn1613/mn1613_instructions.test.js dist/tests/sdld.test.js dist/tests/macros.test.js dist/tests/cli.test.js dist/tests/cli.error.test.js dist/tests/tms9995/tms9995_instructions.test.js",
     "test:cli": "tsc -p tsconfig.test.json && node --test dist/tests/cli.test.js",
-    "test:tms9995": "tsc -p tsconfig.test.json && node --test dist/tests/tms9995_instructions.test.js",
+    "test:tms9995": "tsc -p tsconfig.test.json && node --test dist/tests/tms9995/tms9995_instructions.test.js",
     "test:equ": "tsc -p tsconfig.test.json && node --test dist/tests/equ.test.js"
   },
   "devDependencies": {

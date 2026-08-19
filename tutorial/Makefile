@@ -5,7 +5,7 @@
 #   make <sample>         そのディレクトリ 1 件だけ
 #   make clean            各サンプルの build/ を削除
 #
-# 配置: <sample>/src/mn1613/<stem>.asm → <sample>/build/hex/<stem>.ihx
+# 配置: <sample>/src/mn1613/<stem>.asm → <sample>/build/hex/mn1613/<stem>.ihx
 # 新しいサンプルはディレクトリを足すだけで対象になる（列挙しない）。
 # BIOS エントリは tutorial/bios.inc（_BIOS ジャンプ表）。モニタ本体はリンクしない。
 # エミュは F7 RST でモニタを DMA したあと、この IHX を載せて 1800h から RUN。
@@ -49,22 +49,22 @@ SAMPLE_NAMES :=
 
 # $(1)=abs src  $(2)=stem  $(3)=sample  $(4)=MODULE
 define TUT_ASM_RULES
-ALL_IHX += $(TUT_DIR)/$(3)/build/hex/$(2).ihx
+ALL_IHX += $(TUT_DIR)/$(3)/build/hex/mn1613/$(2).ihx
 SAMPLE_NAMES += $(3)
 
 .PHONY: $(3)
-$(3): $(TUT_DIR)/$(3)/build/hex/$(2).ihx
+$(3): $(TUT_DIR)/$(3)/build/hex/mn1613/$(2).ihx
 
-$(TUT_DIR)/$(3)/build/obj/$(2).rel: $(1) $(BIOS_INC) | retrocpu-asm-build
+$(TUT_DIR)/$(3)/build/obj/mn1613/$(2).rel: $(1) $(BIOS_INC) | retrocpu-asm-build
 	@mkdir -p $$(dir $$@)
-	node $$(ASM_CLI) --cpu mn1613 $$< -o $$@ --lst $(TUT_DIR)/$(3)/build/obj/$(2).lst --module $(4)
+	node $$(ASM_CLI) --cpu mn1613 $$< -o $$@ --lst $(TUT_DIR)/$(3)/build/obj/mn1613/$(2).lst --module $(4)
 
-$(TUT_DIR)/$(3)/build/hex/$(2).ihx: $(TUT_DIR)/$(3)/build/obj/$(2).rel $$(SDLD_LINK_CLI)
+$(TUT_DIR)/$(3)/build/hex/mn1613/$(2).ihx: $(TUT_DIR)/$(3)/build/obj/mn1613/$(2).rel $$(SDLD_LINK_CLI)
 	@mkdir -p $$(dir $$@)
 	@test -x "$$(SDLD)" || { echo "sdld がありません: $$(SDLD)"; echo "retrocpu_boot_monitor で make sdcc-setup"; exit 1; }
-	node $$(SDLD_LINK_CLI) $$< -o $$@ --cdb $(TUT_DIR)/$(3)/build/hex/$(2).cdb
+	node $$(SDLD_LINK_CLI) $$< -o $$@ --cdb $(TUT_DIR)/$(3)/build/hex/mn1613/$(2).cdb
 	@echo "Wrote $$@"
-	@echo "Wrote $(3)/build/hex/$(2).cdb"
+	@echo "Wrote $(3)/build/hex/mn1613/$(2).cdb"
 endef
 
 $(foreach src,$(ASM_SRCS),$(eval $(call TUT_ASM_RULES,$(src),$(basename $(notdir $(src))),$(firstword $(subst /, ,$(patsubst $(TUT_DIR)/%,%,$(src)))),$(shell echo $(basename $(notdir $(src))) | tr '[:lower:]' '[:upper:]'))))

@@ -21,10 +21,10 @@ export const MONITOR_SRC = path.join(
   "retrocpu_boot_monitor/mn1613/src",
 );
 
-/** retrocpu_boot_monitor/build/hex（mn1613_mon.ihx / .cdb） */
+/** retrocpu_boot_monitor/build/hex/mn1613（mn1613_mon.ihx / .cdb） */
 export const MONITOR_HEX = path.join(
   REPO_ROOT,
-  "retrocpu_boot_monitor/build/hex",
+  "retrocpu_boot_monitor/build/hex/mn1613",
 );
 
 /** retrocpu_boot_monitor/mn1613/test（asm と同列のテスト） */

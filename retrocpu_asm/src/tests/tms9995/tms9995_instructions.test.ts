@@ -7,9 +7,16 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { assemble } from "../main/assembler";
-import { writeRel } from "../main/relWriter";
-import { TMS9995_OPS } from "../main/tms9995/tms9995_encode";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { assemble } from "../../main/assembler";
+import { writeRel } from "../../main/relWriter";
+import { TMS9995_OPS } from "../../main/tms9995/tms9995_encode";
+
+const ALL_INSN_SAMPLE = path.join(
+  __dirname,
+  "../../../sample/tms9995_all_instructions.asm",
+);
 
 function asmWords(src: string): number[] {
   return assemble(`        .org 0\n${src}\n`, "tms9995").words.map(
@@ -263,5 +270,171 @@ describe("TMS9995 全命令セット", () => {
       [...fromCases].sort(),
       [...TMS9995_OPS].sort(),
     );
+  });
+});
+
+/** Format 1 汎用アドレスの 1 オペランド */
+type Fmt1Mode = {
+  asm: string;
+  mode: number;
+  reg: number;
+  extra: "none" | "DATA" | "IDX";
+};
+
+const FMT1_MODES: Fmt1Mode[] = [
+  { asm: "R3", mode: 0, reg: 3, extra: "none" },
+  { asm: "(R4)", mode: 1, reg: 4, extra: "none" },
+  { asm: "(R5)+", mode: 3, reg: 5, extra: "none" },
+  { asm: "DATA", mode: 2, reg: 0, extra: "DATA" },
+  { asm: "IDX(R1)", mode: 2, reg: 1, extra: "IDX" },
+];
+
+/**
+ * Format 1 の命令語を組み立てる。
+ * @param op 基底（MOV=0xC000 など）
+ * @param src ソース
+ * @param dst デスティネーション
+ * @returns 16bit 命令語
+ */
+function packFmt1(op: number, src: Fmt1Mode, dst: Fmt1Mode): number {
+  return (
+    (op |
+      ((dst.mode & 3) << 10) |
+      ((dst.reg & 0xf) << 6) |
+      ((src.mode & 3) << 4) |
+      (src.reg & 0xf)) &
+    0xffff
+  );
+}
+
+/**
+ * 追加ワードのラベル絶対バイトアドレスを求める。
+ * @param insnBytes 命令のバイト長
+ * @param which DATA か IDX（DATA が先）
+ * @returns バイトアドレス
+ */
+function extraAddr(insnBytes: number, which: "DATA" | "IDX"): number {
+  return which === "DATA" ? insnBytes : insnBytes + 2;
+}
+
+describe("TMS9995 Format 1 全アドレッシング（MOV 5×5）", () => {
+  for (const src of FMT1_MODES) {
+    for (const dst of FMT1_MODES) {
+      const title = `MOV ${src.asm}, ${dst.asm}`;
+      test(title, () => {
+        const extraCount =
+          (src.extra === "none" ? 0 : 1) + (dst.extra === "none" ? 0 : 1);
+        const insnBytes = 2 + extraCount * 2;
+        const extras: number[] = [];
+        if (src.extra !== "none") extras.push(extraAddr(insnBytes, src.extra));
+        if (dst.extra !== "none") extras.push(extraAddr(insnBytes, dst.extra));
+        const expected = [packFmt1(0xc000, src, dst), ...extras];
+        const text = [
+          "        .org 0",
+          `        MOV ${src.asm}, ${dst.asm}`,
+          "DATA:   .word 0",
+          "IDX:    .word 0",
+          "",
+        ].join("\n");
+        assert.deepEqual(
+          assemble(text, "tms9995")
+            .words.map((w) => w.value)
+            .slice(0, expected.length),
+          expected,
+        );
+      });
+    }
+  }
+});
+
+describe("TMS9995 Format 6 全アドレッシング（CLR）", () => {
+  test("CLR R0", () => {
+    assert.equal(asm1("        CLR R0"), 0x04c0);
+  });
+  test("CLR (R11)", () => {
+    assert.equal(asm1("        CLR (R11)"), 0x04db);
+  });
+  test("CLR (R12)+", () => {
+    assert.equal(asm1("        CLR (R12)+"), 0x04fc);
+  });
+  test("CLR DATA", () => {
+    const r = assemble(
+      ["        .org 0", "        CLR DATA", "DATA:   .word 0", ""].join("\n"),
+      "tms9995",
+    );
+    assert.deepEqual(
+      r.words.map((w) => w.value).slice(0, 2),
+      [0x04e0, 0x0004],
+    );
+  });
+  test("CLR IDX(R1)", () => {
+    const r = assemble(
+      ["        .org 0", "        CLR IDX(R1)", "IDX:    .word 0", ""].join(
+        "\n",
+      ),
+      "tms9995",
+    );
+    assert.deepEqual(
+      r.words.map((w) => w.value).slice(0, 2),
+      [0x04e1, 0x0004],
+    );
+  });
+});
+
+describe("TMS9995 [] は ( ) と同義", () => {
+  test("MOV [R10], R0 は MOV (R10), R0", () => {
+    assert.equal(asm1("        MOV [R10], R0"), asm1("        MOV (R10), R0"));
+  });
+  test("インデックス addr[R1]", () => {
+    const a = assemble(
+      ["        .org 0", "        MOV TAB[R1], R0", "TAB:    .word 0", ""].join(
+        "\n",
+      ),
+      "tms9995",
+    );
+    const b = assemble(
+      ["        .org 0", "        MOV TAB(R1), R0", "TAB:    .word 0", ""].join(
+        "\n",
+      ),
+      "tms9995",
+    );
+    assert.deepEqual(
+      a.words.map((w) => w.value),
+      b.words.map((w) => w.value),
+    );
+  });
+});
+
+/**
+ * サンプルから命令ニーモニックを集める。
+ * @param src アセンブラソース
+ * @returns 大文字ニーモニック
+ */
+function mnemonicsInAsm(src: string): Set<string> {
+  const ops = new Set<string>();
+  for (const line of src.split("\n")) {
+    let s = line.replace(/;.*$/, "").trim();
+    if (!s || s.startsWith(".")) continue;
+    s = s.replace(/^[A-Za-z_][\w$.]*:\s*/, "");
+    if (!s) continue;
+    const m = s.split(/\s+/)[0]!.toUpperCase();
+    if (TMS9995_OPS.has(m)) ops.add(m);
+  }
+  return ops;
+}
+
+describe("TMS9995 全命令サンプル", () => {
+  test("sample/tms9995_all_instructions.asm がアセンブルできる", () => {
+    const src = fs.readFileSync(ALL_INSN_SAMPLE, "utf8");
+    const r = assemble(src);
+    assert.equal(r.addressUnit, "byte");
+    assert.ok(r.words.length > 50);
+    assert.equal(r.symbols.get("START"), 0x1000);
+  });
+
+  test("サンプルに TMS9995_OPS の全ニーモニックがある", () => {
+    const src = fs.readFileSync(ALL_INSN_SAMPLE, "utf8");
+    const fromSample = mnemonicsInAsm(src);
+    assert.deepEqual([...fromSample].sort(), [...TMS9995_OPS].sort());
   });
 });

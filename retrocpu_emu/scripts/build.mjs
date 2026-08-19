@@ -68,7 +68,10 @@ cpSync(join(root, "src/renderer/styles"), join(root, "dist/renderer/styles"), {
   recursive: true,
 });
 
-const monIhx = join(root, "../retrocpu_boot_monitor/build/hex/mn1613_mon.ihx");
+const monIhx = join(
+  root,
+  "../retrocpu_boot_monitor/build/hex/mn1613/mn1613_mon.ihx",
+);
 const monDestDir = join(root, "dist/assets");
 if (existsSync(monIhx)) {
   mkdirSync(monDestDir, { recursive: true });

@@ -77,11 +77,17 @@ function hexSearchDirs(): string[] {
   add(path.join(moduleDir(), "../../assets"));
   add(path.join(process.cwd(), "assets"));
   add(path.join(process.cwd(), "dist/assets"));
-  add(path.join(process.cwd(), "retrocpu_boot_monitor/build/hex"));
-  add(path.join(process.cwd(), "../retrocpu_boot_monitor/build/hex"));
-  add(path.join(process.cwd(), "../../retrocpu_boot_monitor/build/hex"));
-  add(path.join(moduleDir(), "../../../retrocpu_boot_monitor/build/hex"));
-  add(path.join(moduleDir(), "../../../../retrocpu_boot_monitor/build/hex"));
+  add(path.join(process.cwd(), "retrocpu_boot_monitor/build/hex/mn1613"));
+  add(path.join(process.cwd(), "../retrocpu_boot_monitor/build/hex/mn1613"));
+  add(
+    path.join(process.cwd(), "../../retrocpu_boot_monitor/build/hex/mn1613"),
+  );
+  add(
+    path.join(moduleDir(), "../../../retrocpu_boot_monitor/build/hex/mn1613"),
+  );
+  add(
+    path.join(moduleDir(), "../../../../retrocpu_boot_monitor/build/hex/mn1613"),
+  );
   return dirs;
 }
 

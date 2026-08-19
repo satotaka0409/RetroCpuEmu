@@ -16,8 +16,8 @@ MONITOR_DIR   := $(abspath .)
 MN1613_DIR    := $(MONITOR_DIR)/mn1613
 SRC_DIR       := $(MN1613_DIR)/src
 BUILD_DIR     := $(MONITOR_DIR)/build
-OBJ_DIR       := $(BUILD_DIR)/obj
-HEX_DIR       := $(BUILD_DIR)/hex
+OBJ_DIR       := $(BUILD_DIR)/obj/mn1613
+HEX_DIR       := $(BUILD_DIR)/hex/mn1613
 TOOLS_DIR     := $(MONITOR_DIR)/tools
 
 # --- SDCC（sdld。ihx に必須） ---
