@@ -546,11 +546,12 @@ g_write_cpu_registers:
 	ai	R0, #8
 	st	R0, HSHK_REG_W_SP(X1)
 	; 各レベル OPSW（0:0000/0001 1:0002/0003 2:0004/0005 3:0006/0007）
-	mv 	X1, R1		; 0番地なので単純に左シフトで2倍にするとアドレスになる
-	sl	X1, RE
-	l	R0, 0(X1)
+	; X1 は書き出し先のまま。レベル×2 は X0（SP コピーはもう不要）
+	mv	X0, R1
+	sl	X0, RE
+	l	R0, 0(X0)
 	st	R0, HSHK_REG_W_STR(X1)
-	l	R0, 1(X1)
+	l	R0, 1(X0)
 	st	R0, HSHK_REG_W_IC(X1)
 	; CSBR(OSR0)|SSBR（HandShake: H=CSBR L=SSBR。OSR0=割り込み直前の CSBR）
 	cpyb	R0, OSR0
