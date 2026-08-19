@@ -18,7 +18,6 @@ import {
   findIdentRangesInLine,
 } from "./symbols/occurrences";
 import {
-  mn1610Architecture,
   mn1613Architecture,
 } from "./cpu/mn1613/arch";
 import { tms9995Architecture } from "./cpu/tms9995/arch";
@@ -359,16 +358,14 @@ describe("collectIncludePaths", () => {
 describe("detectArchitecture / preferred CPU", () => {
   test(".mn1610 / .mn1613 / .tms9995 は拡張子優先（ソース無し）", () => {
     setPreferredCpuId("mn1613");
-    assert.equal(detectArchitecture("x.mn1610").id, "mn1610");
-    setPreferredCpuId("mn1610");
+    assert.equal(detectArchitecture("x.mn1610").id, "mn1613");
+    setPreferredCpuId("tms9995");
     assert.equal(detectArchitecture("x.mn1613").id, "mn1613");
     setPreferredCpuId("mn1613");
     assert.equal(detectArchitecture("x.tms9995").id, "tms9995");
   });
 
   test(".asm はステータスバー選択に従う（.cpu 無し）", () => {
-    setPreferredCpuId("mn1610");
-    assert.equal(detectArchitecture("foo.asm").id, "mn1610");
     setPreferredCpuId("mn1613");
     assert.equal(detectArchitecture("foo.asm").id, "mn1613");
     setPreferredCpuId("tms9995");
@@ -376,17 +373,17 @@ describe("detectArchitecture / preferred CPU", () => {
   });
 
   test("先頭の .cpu があれば拡張子・既定より優先", () => {
-    setPreferredCpuId("mn1613");
+    setPreferredCpuId("tms9995");
     assert.equal(
       detectArchitecture("foo.asm", "\t.cpu\tmn1610\n\tH\n").id,
-      "mn1610",
+      "tms9995",
     );
     assert.equal(
       detectArchitecture("foo.asm", "; c\n\t.cpu\ttms9995\n\tH\n").id,
       "tms9995",
     );
     assert.equal(
-      detectArchitecture("x.mn1610", "\t.cpu\tmn1613\n\tH\n").id,
+      detectArchitecture("x.tms9995", "\t.cpu\tmn1613\n\tH\n").id,
       "mn1613",
     );
   });
@@ -394,7 +391,7 @@ describe("detectArchitecture / preferred CPU", () => {
   test("先頭以外・不正な .cpu は無視して既定／拡張子", () => {
     setPreferredCpuId("mn1613");
     assert.equal(
-      detectArchitecture("foo.asm", "\t.org\t0\n\t.cpu\tmn1610\n").id,
+      detectArchitecture("foo.asm", "\t.org\t0\n\t.cpu\ttms9995\n").id,
       "mn1613",
     );
     assert.equal(
@@ -403,9 +400,7 @@ describe("detectArchitecture / preferred CPU", () => {
     );
   });
 
-  test("MN1610 モードでは AWI を未知命令にする", () => {
-    const p10 = parseAsmLine("\tawi\tR0, 1", mn1610Architecture);
-    assert.equal(p10.kind, "unknown");
+  test("MN1613 モードでは AWI を命令にする", () => {
     const p13 = parseAsmLine("\tawi\tR0, 1", mn1613Architecture);
     assert.equal(p13.kind, "instruction");
   });
@@ -427,8 +422,18 @@ describe("scanSourceCpuId", () => {
       scanSourceCpuId: (t: string) => string | undefined;
     };
     assert.equal(scanSourceCpuId("\t.cpu\tmn1613\n"), "mn1613");
-    assert.equal(scanSourceCpuId("; hi\n\n\t.CPU\tMN1610\n"), "mn1610");
+    assert.equal(scanSourceCpuId("; hi\n\n\t.CPU\tMN1610\n"), undefined);
     assert.equal(scanSourceCpuId("\t.org\t0\n\t.cpu\tmn1613\n"), undefined);
     assert.equal(scanSourceCpuId("\t.cpu\n"), undefined);
+  });
+
+  test(".cpu mn1610 は診断エラー", () => {
+    const { findInvalidCpuDirectives } = require("./cpu/parseCpuDirective") as {
+      findInvalidCpuDirectives: (t: string) => Array<{ message: string }>;
+    };
+    const hits = findInvalidCpuDirectives("\t.cpu\tmn1610\n\tH\n");
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0]?.message, "未知の CPU: mn1610");
+    assert.deepEqual(findInvalidCpuDirectives("\t.cpu\tmn1613\n"), []);
   });
 });

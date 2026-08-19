@@ -86,7 +86,7 @@ export function findImmRangeOverflows(
   arch: CpuArchitecture,
   symbols: Map<string, number> = new Map(),
 ): InvalidRegisterHit[] {
-  const isMn161x = arch.id === "mn1610" || arch.id === "mn1613";
+  const isMn161x = arch.id === "mn1613";
   if (!isMn161x && arch.id !== "tms9995") return [];
   if (
     parsed.kind !== "instruction" &&

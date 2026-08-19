@@ -317,23 +317,7 @@ const MN161X_GPR_ONLY_MNEMONICS = [
 /** 共有拡張子（ステータスバー選択の既定 CPU を使う） */
 export const SHARED_ASM_EXTENSIONS = ["asm", "s", "inc", "h"] as const;
 
-/** MN1610 アーキテクチャ定義 */
-export const mn1610Architecture: CpuArchitecture = {
-  id: "mn1610",
-  displayName: "MN1610",
-  extensions: ["asm", "s", "mn1610", "inc", "h"],
-  languageId: "mn1613asm",
-  mnemonics: new Set(MN1610_MNEMONICS),
-  directives: new Set(ASM_DIRECTIVES),
-  registers: new Set(MN1610_REGISTERS),
-  gprRegisters: new Set(MN1610_GPR_REGISTERS),
-  gprOnlyMnemonics: new Set(MN161X_GPR_ONLY_MNEMONICS),
-  callMnemonics: new Set(["BAL"]),
-  labelRefMnemonics: new Set(["B", "BAL", "L", "ST", "IMS", "DMS"]),
-  callingConvention: MN1613_CALLING_CONVENTION,
-};
-
-/** MN1613 アーキテクチャ定義（MN1610 上位互換） */
+/** MN1613 アーキテクチャ定義（MN1610 命令を含む） */
 export const mn1613Architecture: CpuArchitecture = {
   id: "mn1613",
   displayName: "MN1613",

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { findCheckpointComment } from "../comments/checkpoint";
 import { unusedGlobalWarningSuppressed } from "../comments/unwarning";
+import { findInvalidCpuDirectives } from "../cpu/parseCpuDirective";
 import { detectArchitecture } from "../cpu/registry";
 import { MN1613_COPY_SET_MNEMONICS } from "../cpu/mn1613/arch";
 import { findInvalidAddressingOperands } from "./addressingModes";
@@ -20,7 +21,7 @@ import {
 import { findIdentRangesInLine } from "../symbols/occurrences";
 
 /**
- * アセンブリ診断（未定義ラベル / 未使用グローバル / 未知命令 / 不正レジスタオペランド）。
+ * アセンブリ診断（未定義ラベル / 未使用グローバル / 未知命令 / 不正レジスタオペランド / 無効な .cpu）。
  */
 export class AsmDiagnostics {
   private readonly collection: vscode.DiagnosticCollection;
@@ -54,6 +55,16 @@ export class AsmDiagnostics {
     // 未使用 `.global` は、ラベル/`.equ` 定義またはオペランド参照があれば消す。
     // 同じファイルの `name:` は使用箇所とみなす。他 .asm の BALD でも消える。
     const diagnostics: vscode.Diagnostic[] = [];
+
+    for (const hit of findInvalidCpuDirectives(document.getText())) {
+      const d = new vscode.Diagnostic(
+        new vscode.Range(hit.line, hit.start, hit.line, hit.end),
+        hit.message,
+        vscode.DiagnosticSeverity.Error,
+      );
+      d.source = "mn1613asm";
+      diagnostics.push(d);
+    }
 
     for (let lineNo = 0; lineNo < document.lineCount; lineNo += 1) {
       const line = document.lineAt(lineNo);

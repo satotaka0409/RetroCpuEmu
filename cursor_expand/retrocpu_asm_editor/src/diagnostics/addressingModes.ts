@@ -445,7 +445,7 @@ export function findInvalidAddressingOperands(
   arch: CpuArchitecture,
 ): InvalidRegisterHit[] {
   if (parsed.kind !== "instruction" || !parsed.mnemonic) return [];
-  if (arch.id !== "mn1610" && arch.id !== "mn1613") return [];
+  if (arch.id !== "mn1613") return [];
 
   const mnemonic = parsed.mnemonic;
   const stripped = stripAsmComment(line);

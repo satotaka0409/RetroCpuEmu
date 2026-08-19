@@ -15,7 +15,7 @@ import { CpuStatusBar } from "./ui/cpuStatusBar";
  * 拡張機能のエントリポイント。
  * - ワークスペースのラベル / .equ 索引
  * - 未定義ラベル / 未知命令の診断
- * - ステータスバーでの CPU 選択（MN1610 / MN1613 / TMS9995）
+ * - ステータスバーでの CPU 選択（MN1613 / TMS9995）
  * - `.asm` 先頭の `.cpu` による自動切替（asm-rules.mdc）
  * - 定義へ移動（F12） / 参照へ移動（Shift+F12）
  * - グローバルラベルホバー（宣言側コメント。JSDoc 風なら強調）

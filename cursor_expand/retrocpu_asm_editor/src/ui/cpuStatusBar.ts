@@ -129,11 +129,9 @@ export class CpuStatusBar implements vscode.Disposable {
         label: arch.displayName,
         description: arch.id,
         detail:
-          arch.id === "mn1610"
-            ? "MN1610 命令セットのみ解釈"
-            : arch.id === "tms9995"
-              ? "TMS9995（全命令・sdas 構文）を解釈"
-              : "MN1613（MN1610 上位互換）を解釈",
+          arch.id === "tms9995"
+            ? "TMS9995（全命令・sdas 構文）を解釈"
+            : "MN1613 を解釈",
         arch,
       })),
       {

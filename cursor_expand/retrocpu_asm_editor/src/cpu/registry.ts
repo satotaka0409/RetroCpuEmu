@@ -1,6 +1,5 @@
 import type { CpuArchitecture } from "./types";
 import {
-  mn1610Architecture,
   mn1613Architecture,
   SHARED_ASM_EXTENSIONS,
 } from "./mn1613/arch";
@@ -8,7 +7,6 @@ import { scanSourceCpuId } from "./parseCpuDirective";
 import { tms9995Architecture } from "./tms9995/arch";
 
 const ARCHITECTURES: readonly CpuArchitecture[] = [
-  mn1610Architecture,
   mn1613Architecture,
   tms9995Architecture,
 ];
@@ -71,7 +69,7 @@ export function getPreferredArchitecture(): CpuArchitecture {
 /**
  * ファイル名とソースからアーキテクチャを推定する。
  * - 先頭の有効な `.cpu`（asm-rules.mdc）があればそれを最優先
- * - 無ければ `.mn1610` / `.mn1613` / `.tms9995` 拡張子
+ * - 無ければ `.mn1613` / `.mn1610` / `.tms9995` 拡張子（`.mn1610` は MN1613 として解釈）
  * - `.asm` / `.s` / `.inc` / `.h` はステータスバー選択（既定 CPU）
  * @param fileName - ファイル名またはパス
  * @param sourceText - ソース全文（省略時は拡張子／既定のみ）
@@ -93,8 +91,7 @@ export function detectArchitecture(
   const dot = base.lastIndexOf(".");
   const ext = (dot >= 0 ? base.slice(dot + 1) : "").toLowerCase();
 
-  if (ext === "mn1610") return mn1610Architecture;
-  if (ext === "mn1613") return mn1613Architecture;
+  if (ext === "mn1610" || ext === "mn1613") return mn1613Architecture;
   if (ext === "tms9995") return tms9995Architecture;
 
   if ((SHARED_ASM_EXTENSIONS as readonly string[]).includes(ext)) {
