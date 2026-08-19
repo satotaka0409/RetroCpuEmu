@@ -82,6 +82,7 @@ g_int0_handler:
 	ori	STR, #0x0700
 	; 未定義命令 INT0 用レジスタ格納領域を書き出し
 	mvwi	R0, #GL_UNDEF_INST_REG
+	eor	R1, R1				; INT0
 	bald	g_write_cpu_registers
 	; 未定義命令実行通知（13h）を送る
 	mvi	R0, #1
@@ -126,11 +127,6 @@ g_int1_handler:
 	andi	R0, #INT1_CAUSE_MASK
 	st	R0, 1(X1)
 	push	X1
-	; 互換のため INT1 退避を共有退避へミラーする
-	l	R0, *INT1_STR_SAVE
-	st	R0, *HSHK_L2_STR_SAVE
-	l	R0, *INT1_IC_SAVE
-	st	R0, *HSHK_L2_IC_SAVE
 	; 要因分岐（Bit0: 0=比較器ブレイク / 1=ステップ）
 	l	R0, 1(X1)
 	cbi	R0, #INT1_CAUSE_BREAK, NZ
@@ -148,10 +144,9 @@ l_int1_do_step:
 	or	R0, R0, Z
 	b	l_int1_halt
 l_int1_epilogue:
-	pop	X1
 	eor	R0, R0
 	wt	R0, INTERRUPT_BUSY
-	ai	SP, #1
+	ai	SP, #2
 	pop	R1
 	pop	R0
 	setb	R1, TSR1
@@ -161,10 +156,9 @@ l_int1_epilogue:
 	popm
 	lpsw	1
 l_int1_halt:
-	pop	X1
 	eor	R0, R0
 	wt	R0, INTERRUPT_BUSY
-	ai	SP, #1
+	ai	SP, #2
 	pop	R1
 	pop	R0
 	setb	R1, TSR1

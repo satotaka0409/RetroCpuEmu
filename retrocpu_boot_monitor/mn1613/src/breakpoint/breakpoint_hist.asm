@@ -8,6 +8,7 @@
 
 	.cpu	mn1613
 
+	.include "../interrupt_io.inc"
 	.include "../handshake/handshake_io.inc"
 
 	.area	_CODE		(REL,CON)
@@ -173,10 +174,10 @@ l_bp_ha_ct:
 	l	R0, HSHK_BP_SNAP_SP(X0)
 	str	R0, TSR0, (R4)
 	ai	X1, #1
-	l	R0, *HSHK_L2_STR_SAVE
+	l	R0, *INT1_STR_SAVE
 	str	R0, TSR0, (R4)
 	ai	X1, #1
-	l	R0, *HSHK_L2_IC_SAVE
+	l	R0, *INT1_IC_SAVE
 	str	R0, TSR0, (R4)
 	ai	X1, #1
 	cpyb	R0, OSR0

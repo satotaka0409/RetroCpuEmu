@@ -58,7 +58,8 @@ const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const HIST_ENTRY_BYTES = 66;
 /** EOR R0,R0 */
 const OP_EOR_R0 = 0x6000;
-const L2_IC_SAVE = 5;
+/** INT1 IC 退避（比較器ブレイク。interrupt_io.inc INT1_IC_SAVE） */
+const INT1_IC_SAVE = 3;
 const WAIT_REQ1_TIMEOUT_MS = 1200;
 const WAIT_REQ1_POLL_MS = 0;
 
@@ -341,7 +342,7 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
     expect(notify3.slot).toBe(0);
     expect(notify3.addr).toBe(WATCH_BYTE);
     expect(s.readWord(s.wordAddr("GL_BP_HIST_META"))).toBe(1);
-    const userIc = s.readWord(L2_IC_SAVE);
+    const userIc = s.readWord(INT1_IC_SAVE);
     expect(userIc).toBe(WATCH_WORD + 1);
 
     addrComparators.writePort(
@@ -452,7 +453,7 @@ test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行�
       );
 
       const ent = 8;
-      const userIc = s.readWord(L2_IC_SAVE);
+      const userIc = s.readWord(INT1_IC_SAVE);
       expect(userIc).toBe(WATCH_WORD + 1);
       expect(be16(hist, ent + 8)).toBe(OP_EOR_R0);
       expect(be16(hist, ent + 18)).toBe(BASE_REGS.R3);

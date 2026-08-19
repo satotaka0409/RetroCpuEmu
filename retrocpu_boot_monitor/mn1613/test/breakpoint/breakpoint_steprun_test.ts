@@ -32,7 +32,7 @@ const IDLE = 0x1b00;
 const OP_H = 0x2000;
 const STR_IRQ_ENABLE = 0x0700;
 const STEP_COM = 0x2006;
-const IC_SAVE = 5;
+const IC_SAVE = 3;
 const USER_IC = 0x1800;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
@@ -149,7 +149,7 @@ test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", as
 
 test("INT1_CAUSE=1 の停止は 1Bh に監視 IC を載せ履歴は書かない", async () => {
   await withCase(async (s, mock) => {
-    // 要因 4 の INT2 から 1Bh。開始 IC が通知アドレスになる。
+    // 要因 INT1 / CAUSE=1 から 1Bh。開始 IC が通知アドレスになる。
     s.writeWord(USER_IC, OP_H);
     setState({
       STR: STR_IRQ_ENABLE,

@@ -142,8 +142,7 @@ l_work_loop:
 	mvwi	R2, #GL_ALLOC2_DEFAULT_SIZE
 	bald	g_malloc2_init
 ; 	割り込み許可（M0|M1|M2 = STR bit10/9/8 = 0x0700）
-	mvwi	R0, #0b0000011100000000
-	mv	STR, R0
+	ori	STR, #0x0700
 ;       HALT
 l_main_loop:
 	h

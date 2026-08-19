@@ -62,7 +62,6 @@ g_get_rnd_:
 	mv	R0, R0, NZ
 	mvi	R0, #1
 	sr	R0, RE
-; @cp g_get_rnd_
 	tbit	STR, #0, Z
 	eori	R0, #GL_RND_TAP
 	st	R0, *GL_RND_SEED
@@ -522,6 +521,7 @@ l_f2_done:
 ; CPUレジスタの書き出し
 ; あらかじめpushmでスタックに積んでおく
 ; @param R0 - 書き出しエリアアドレス
+; @param R1 - INT レベル番号 0:INT0 1:INT1 2:INT2 3:INT3
 ; @param SP+1 - pushm R4,R3,R2,R1,R0 を積んでおく
 ; @Destruction R0, R1
 ; -------------------------------------------------------
@@ -545,10 +545,12 @@ g_write_cpu_registers:
 	mv	R0, SP
 	ai	R0, #8
 	st	R0, HSHK_REG_W_SP(X1)
-	; レベル0 OPSW（固定 0000/0001）
-	l	R0, *0
+	; 各レベル OPSW（0:0000/0001 1:0002/0003 2:0004/0005 3:0006/0007）
+	mv 	X1, R1		; 0番地なので単純に左シフトで2倍にするとアドレスになる
+	sl	X1, RE
+	l	R0, 0(X1)
 	st	R0, HSHK_REG_W_STR(X1)
-	l	R0, *1
+	l	R0, 1(X1)
 	st	R0, HSHK_REG_W_IC(X1)
 	; CSBR(OSR0)|SSBR（HandShake: H=CSBR L=SSBR。OSR0=割り込み直前の CSBR）
 	cpyb	R0, OSR0
