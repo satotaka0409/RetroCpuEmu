@@ -4,7 +4,6 @@
  */
 import {
   createSessionFromSettings,
-  expect,
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,

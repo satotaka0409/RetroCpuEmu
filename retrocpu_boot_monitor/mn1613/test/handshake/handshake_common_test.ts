@@ -59,7 +59,7 @@ async function waitReq1(
     if (Date.now() - t0 > timeoutMs) {
       throw new Error("timeout waiting HSHK_IN_REQ");
     }
-    await new Promise((r) => setTimeout(r, 1));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -135,7 +135,7 @@ test("CPU→IO 1 バイトが initiate / send / finalize で届く", async () =>
     const received = await cpuToIoBytes(mock, [0xa5]);
     expect(Array.from(received)).toEqual([0xa5]);
     expect(mock.bus.HSHK_ENA).toBe(0);
-    expect(mock.bus.HSHK_REQ_0).toBe(0);
+    expect(mock.bus.HSHK_IN_REQ).toBe(0);
     s.expectRegisters({ R0: HSHK_OK, ...SAVED });
   });
 });

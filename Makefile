@@ -7,6 +7,7 @@
 # エミュは RST でモニタを載せたあと、この IHX を DMA し 1800h から RUN。
 
 SHELL := /bin/bash
+REPO_DIR        := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 ROOT_DIR        := $(abspath ../..)
 TUT_DIR         := $(abspath .)
@@ -36,7 +37,13 @@ CDB             := $(HEX_DIR)/$(TARGET_NAME).cdb
 REL             := $(OBJ_DIR)/$(TARGET_NAME).rel
 BIOS_INC        := $(SRC_DIR)/bios_addrs.inc
 
-.PHONY: all help ihx clean monitor retrocpu-asm-build
+.PHONY: all help ihx clean monitor retrocpu-asm-build \
+	tscheck tscheck-all \
+	tscheck-retrocpu-emu tscheck-retrocpu-test-framework tscheck-retrocpu-boot-monitor \
+	tscheck-retrocpu-asm tscheck-debug-expand tscheck-asm-editor \
+	tstest tstest-all \
+	tstest-retrocpu-asm tstest-retrocpu-test-framework tstest-retrocpu-boot-monitor \
+	tstest-retrocpu-emu tstest-debug-expand tstest-asm-editor
 
 all: ihx
 
@@ -81,3 +88,106 @@ ihx: $(IHX)
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(BIOS_INC)
+
+# Run TypeScript static analysis for all TS subprojects with one command.
+tscheck: tscheck-all
+
+tscheck-all:
+	@failed=0; \
+	for target in \
+		tscheck-retrocpu-emu \
+		tscheck-retrocpu-test-framework \
+		tscheck-retrocpu-boot-monitor \
+		tscheck-retrocpu-asm \
+		tscheck-debug-expand \
+		tscheck-asm-editor; do \
+		$(MAKE) $$target || failed=1; \
+	done; \
+	if [ $$failed -ne 0 ]; then \
+		echo "TypeScript static analysis finished with errors."; \
+		exit 1; \
+	fi; \
+	echo "TypeScript static analysis completed for all projects."
+
+tscheck-retrocpu-emu:
+	@echo "==> retrocpu_emu: npm run typecheck"
+	@cd $(REPO_DIR)/retrocpu_emu && npm run typecheck
+
+tscheck-retrocpu-test-framework:
+	@echo "==> retrocpu_test_framework: npm run typecheck"
+	@cd $(REPO_DIR)/retrocpu_test_framework && npm run typecheck
+
+tscheck-retrocpu-boot-monitor:
+	@echo "==> retrocpu_boot_monitor: npm run typecheck"
+	@cd $(REPO_DIR)/retrocpu_boot_monitor && npm run typecheck
+
+tscheck-retrocpu-asm:
+	@echo "==> retrocpu_asm: npm exec -- tsc -p tsconfig.json --noEmit"
+	@cd $(REPO_DIR)/retrocpu_asm && npm exec -- tsc -p tsconfig.json --noEmit
+
+tscheck-debug-expand:
+	@echo "==> cursor_expand/debug_expand: npm run lint"
+	@cd $(REPO_DIR)/cursor_expand/debug_expand && npm run lint
+
+tscheck-asm-editor:
+	@echo "==> cursor_expand/retrocpu_asm_editor: npm run lint"
+	@cd $(REPO_DIR)/cursor_expand/retrocpu_asm_editor && npm run lint
+
+# Run TypeScript-related test suites for all subprojects with one command.
+TS_TEST_SDCC_BIN_DIR ?= $(HOME)/sdcc-mn1613/sdcc/sdcc/bin
+TS_TEST_SDLD ?= $(TS_TEST_SDCC_BIN_DIR)/sdld
+
+tstest: tstest-all
+
+tstest-all:
+	@failed=0; \
+	for target in \
+		tstest-retrocpu-asm \
+		tstest-retrocpu-test-framework \
+		tstest-retrocpu-boot-monitor \
+		tstest-retrocpu-emu \
+		tstest-debug-expand \
+		tstest-asm-editor; do \
+		$(MAKE) $$target || failed=1; \
+	done; \
+	if [ $$failed -ne 0 ]; then \
+		echo "TypeScript tests finished with errors."; \
+		exit 1; \
+	fi; \
+	echo "TypeScript tests completed for all projects."
+
+tstest-retrocpu-asm:
+	@echo "==> retrocpu_asm: npm test"
+	@cd $(REPO_DIR)/retrocpu_asm && \
+		SDCC_BIN_DIR=$(TS_TEST_SDCC_BIN_DIR) \
+		SDLD=$(TS_TEST_SDLD) \
+		PATH=$(TS_TEST_SDCC_BIN_DIR):$$PATH \
+		npm test
+
+tstest-retrocpu-test-framework:
+	@echo "==> retrocpu_test_framework: npm test"
+	@cd $(REPO_DIR)/retrocpu_test_framework && \
+		SDCC_BIN_DIR=$(TS_TEST_SDCC_BIN_DIR) \
+		SDLD=$(TS_TEST_SDLD) \
+		PATH=$(TS_TEST_SDCC_BIN_DIR):$$PATH \
+		npm test
+
+tstest-retrocpu-boot-monitor:
+	@echo "==> retrocpu_boot_monitor: npm test"
+	@cd $(REPO_DIR)/retrocpu_boot_monitor && \
+		SDCC_BIN_DIR=$(TS_TEST_SDCC_BIN_DIR) \
+		SDLD=$(TS_TEST_SDLD) \
+		PATH=$(TS_TEST_SDCC_BIN_DIR):$$PATH \
+		npm test
+
+tstest-retrocpu-emu:
+	@echo "==> retrocpu_emu: npm test"
+	@cd $(REPO_DIR)/retrocpu_emu && npm test
+
+tstest-debug-expand:
+	@echo "==> cursor_expand/debug_expand: npm test"
+	@cd $(REPO_DIR)/cursor_expand/debug_expand && npm test
+
+tstest-asm-editor:
+	@echo "==> cursor_expand/retrocpu_asm_editor: npm test"
+	@cd $(REPO_DIR)/cursor_expand/retrocpu_asm_editor && npm test

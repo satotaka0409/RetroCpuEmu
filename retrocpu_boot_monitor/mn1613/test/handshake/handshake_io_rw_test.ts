@@ -54,7 +54,7 @@ async function waitReq1(
     if (Date.now() - t0 > timeoutMs) {
       throw new Error("timeout waiting HSHK_IN_REQ");
     }
-    await new Promise((r) => setTimeout(r, 1));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 

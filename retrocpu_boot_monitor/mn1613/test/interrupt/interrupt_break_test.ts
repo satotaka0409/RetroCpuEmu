@@ -143,7 +143,7 @@ async function waitReq1(
     if (Date.now() - t0 > timeoutMs) {
       throw new Error("timeout waiting HSHK_IN_REQ");
     }
-    await new Promise((r) => setTimeout(r, 1));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -458,13 +458,13 @@ test("INT1 ブレイクで停止すると main_loop の H に入る", async () =
 
 test("START 0x1800: 命令ブレイクで停止しレジスタ値を確認", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
-    const testRegs = {
-      0: 0x1111,
-      1: 0x2222,
-      2: 0x1234,
-      3: BASE_REGS.R3,
-      4: BASE_REGS.R4,
-    } as const;
+    const testRegs: [number, number, number, number, number] = [
+      0x1111,
+      0x2222,
+      0x1234,
+      BASE_REGS.R3,
+      BASE_REGS.R4,
+    ];
     const flags = FLAGS_INST | FLAGS_RD | FLAGS_HIST;
     writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
@@ -511,13 +511,13 @@ test("START 0x1800: 命令ブレイクで停止しレジスタ値を確認", asy
 
 test("START 0x1800: MEM WRITEブレイクで停止しレジスタ値と前回書き込み値を確認", async () => {
   await withCase(sessionPrev, async (s, mock) => {
-    const testRegs = {
-      0: 0xaaaa,
-      1: 0xbbbb,
-      2: 0xcccc,
-      3: BASE_REGS.R3,
-      4: BASE_REGS.R4,
-    } as const;
+    const testRegs: [number, number, number, number, number] = [
+      0xaaaa,
+      0xbbbb,
+      0xcccc,
+      BASE_REGS.R3,
+      BASE_REGS.R4,
+    ];
     const flags = FLAGS_WR | FLAGS_HIST;
     writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
@@ -562,13 +562,13 @@ test("START 0x1800: MEM WRITEブレイクで停止しレジスタ値と前回書
 
 test("START 0x1800: IO READブレイクで停止しレジスタ値を確認", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
-    const testRegs = {
-      0: 0x1357,
-      1: 0x2468,
-      2: 0xabcd,
-      3: BASE_REGS.R3,
-      4: BASE_REGS.R4,
-    } as const;
+    const testRegs: [number, number, number, number, number] = [
+      0x1357,
+      0x2468,
+      0xabcd,
+      BASE_REGS.R3,
+      BASE_REGS.R4,
+    ];
     const flags = FLAGS_IO | FLAGS_RD | FLAGS_HIST;
     writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
@@ -615,13 +615,13 @@ test("START 0x1800: IO READブレイクで停止しレジスタ値を確認", as
 
 test("START 0x1800: IO WRITEブレイクで停止しレジスタ値と前回書き込み値を確認", async () => {
   await withCase(sessionPrev, async (s, mock) => {
-    const testRegs = {
-      0: 0x0f0f,
-      1: 0xf0f0,
-      2: 0x55aa,
-      3: BASE_REGS.R3,
-      4: BASE_REGS.R4,
-    } as const;
+    const testRegs: [number, number, number, number, number] = [
+      0x0f0f,
+      0xf0f0,
+      0x55aa,
+      BASE_REGS.R3,
+      BASE_REGS.R4,
+    ];
     const flags = FLAGS_IO | FLAGS_WR | FLAGS_HIST;
     writeSlot(s, 0, [1, flags, 0, 0, WATCH_BYTE, 0]);
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));

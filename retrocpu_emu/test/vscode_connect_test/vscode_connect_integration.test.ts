@@ -34,8 +34,8 @@ import {
 } from "../cpuboard/monitor_hshk_call";
 import { VS_DEBUG_STATUS, VsDebugClient } from "./vscode_debug_client";
 
-const WORD_ADDR = 0x1800;
-const BYTE_ADDR = WORD_ADDR * 2;
+const WORD_ADDR: number = 0x1800;
+const BYTE_ADDR: number = WORD_ADDR * 2;
 
 function loadMonitorOrSkip(): { hex: string; cdb: string } | null {
   try {
@@ -45,12 +45,12 @@ function loadMonitorOrSkip(): { hex: string; cdb: string } | null {
   }
 }
 
-function pumpCpu(steps = 64): void {
-  for (let i = 0; i < steps; i += 1) tickCpu();
+function pumpCpu(steps: number = 64): void {
+  for (let i: number = 0; i < steps; i += 1) tickCpu();
 }
 
-async function waitHalted(timeoutMs = 8000): Promise<void> {
-  const t0 = Date.now();
+async function waitHalted(timeoutMs: number = 8000): Promise<void> {
+  const t0: number = Date.now();
   while (getExecStatus() !== "halted") {
     if (Date.now() - t0 > timeoutMs) {
       throw new Error(
@@ -58,12 +58,13 @@ async function waitHalted(timeoutMs = 8000): Promise<void> {
       );
     }
     pumpCpu(256);
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve, 0));
   }
 }
 
 describe("vscode_connect_test integration (mon.ihx)", () => {
-  const monitorPair = loadMonitorOrSkip();
+  // mon.ihx/cdb が無い環境では integration test を skip する。
+  const monitorPair: { hex: string; cdb: string } | null = loadMonitorOrSkip();
   const runIt = monitorPair ? it : it.skip;
 
   let channel: MessageChannel;
@@ -112,7 +113,7 @@ describe("vscode_connect_test integration (mon.ihx)", () => {
 
   function startPump(): void {
     stopPump?.();
-    let alive = true;
+    let alive: boolean = true;
     const loop = (): void => {
       if (!alive) return;
       pumpCpu(256);
@@ -125,12 +126,14 @@ describe("vscode_connect_test integration (mon.ihx)", () => {
   }
 
   async function bootAndConnect(): Promise<void> {
-    const pair = monitorPair;
+    const pair: { hex: string; cdb: string } | null = monitorPair;
     if (!pair) {
       throw new Error("boot monitor artifact is not available");
     }
 
-    const slice = readBootMonitorDmaSlice(pair.hex);
+    // Boot monitor を DMA で RAM に配置してから CPU を起動する。
+    const slice: { byteAddr: number; data: Uint8Array } =
+      readBootMonitorDmaSlice(pair.hex);
     await boardClient.writeBytes(slice.byteAddr, slice.data);
 
     pulseCpuReset();
@@ -157,7 +160,7 @@ describe("vscode_connect_test integration (mon.ihx)", () => {
           boardClient.memWriteBytes(byteAddr >>> 1, data),
       },
     });
-    const port = await host.listen();
+    const port: number = await host.listen();
     vsClient = new VsDebugClient("127.0.0.1", port);
   }
 
@@ -165,11 +168,13 @@ describe("vscode_connect_test integration (mon.ihx)", () => {
     "83h は mon.ihx + CPU ハンドシェイク経由で RAM を読める",
     async () => {
       await bootAndConnect();
+      const client: VsDebugClient | null = vsClient;
+      if (!client) throw new Error("vsClient is not connected");
 
-      const view = new DataView(getMemory());
+      const view: DataView = new DataView(getMemory());
       view.setUint16(BYTE_ADDR, 0xabcd, false);
 
-      const data = await vsClient!.memRead(BYTE_ADDR, 2);
+      const data: Uint8Array = await client.memRead(BYTE_ADDR, 2);
       expect([...data]).toEqual([0xab, 0xcd]);
     },
     20_000,
@@ -179,17 +184,19 @@ describe("vscode_connect_test integration (mon.ihx)", () => {
     "84h で書いた値を 83h で読める",
     async () => {
       await bootAndConnect();
+      const client: VsDebugClient | null = vsClient;
+      if (!client) throw new Error("vsClient is not connected");
 
-      const status = await vsClient!.memWrite(
+      const status: number = await client.memWrite(
         BYTE_ADDR,
         Uint8Array.from([0x12, 0x34]),
       );
       expect(status).toBe(VS_DEBUG_STATUS.OK);
 
-      const data = await vsClient!.memRead(BYTE_ADDR, 2);
+      const data: Uint8Array = await client.memRead(BYTE_ADDR, 2);
       expect([...data]).toEqual([0x12, 0x34]);
 
-      const view = new DataView(getMemory());
+      const view: DataView = new DataView(getMemory());
       expect(view.getUint16(BYTE_ADDR, false)).toBe(0x1234);
     },
     20_000,

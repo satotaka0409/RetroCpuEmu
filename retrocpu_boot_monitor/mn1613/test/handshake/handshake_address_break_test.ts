@@ -68,7 +68,7 @@ async function waitReq1(
     if (Date.now() - t0 > timeoutMs) {
       throw new Error("timeout waiting HSHK_IN_REQ");
     }
-    await new Promise((r) => setTimeout(r, 1));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -196,11 +196,7 @@ test("11h は指定スロットをクリアして OK を返す", async () => {
       breakSetFrame(0, FLAGS_WRITE_HIST, HIT_COUNT, BREAK_ADDR, BREAK_DATA),
       1,
     );
-    await callHandler(
-      mock,
-      breakSetFrame(1, 0x00, 1, 0x00001800, 0x5555),
-      1,
-    );
+    await callHandler(mock, breakSetFrame(1, 0x00, 1, 0x00001800, 0x5555), 1);
     const reply = await callHandler(mock, Uint8Array.from([0x11, 0x00]), 1);
     expect(Array.from(reply)).toEqual([0x00]);
     expect(readSlot(s, 0)).toEqual([0, 0, 0, 0, 0, 0]);
@@ -223,11 +219,7 @@ test("11h スロット 8 は NG", async () => {
 
 test("R3/R4 は 10h/11h の前後で保たれる", async () => {
   await withCase(async (s, mock) => {
-    await callHandler(
-      mock,
-      breakSetFrame(2, 0x20, 0, 0x0000abcd, 0x1111),
-      1,
-    );
+    await callHandler(mock, breakSetFrame(2, 0x20, 0, 0x0000abcd, 0x1111), 1);
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });
     await callHandler(mock, Uint8Array.from([0x11, 0x02]), 1);
     s.expectRegisters({ R0: 0, R3: BASE_REGS.R3, R4: BASE_REGS.R4 });

@@ -59,6 +59,8 @@ const HIST_ENTRY_BYTES = 66;
 /** EOR R0,R0 */
 const OP_EOR_R0 = 0x6000;
 const L2_IC_SAVE = 5;
+const WAIT_REQ1_TIMEOUT_MS = 1200;
+const WAIT_REQ1_POLL_MS = 0;
 
 const session: Mn1613AsmSession = createSessionFromSettings(
   withMn1613CpuLog(mn1613MonHandshakeSettings, import.meta.url),
@@ -114,14 +116,17 @@ function breakSetFrame(
  */
 async function waitReq1(
   mock: IoBoardHandshakeMock,
-  timeoutMs = 2000,
+  timeoutMs = WAIT_REQ1_TIMEOUT_MS,
 ): Promise<void> {
   const t0 = Date.now();
   while (mock.bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
       throw new Error("timeout waiting HSHK_IN_REQ");
     }
-    await new Promise((r) => setTimeout(r, 1));
+    // 0ms スライスで即次ターンへ回し、待ちポーリングの累積遅延を減らす。
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, WAIT_REQ1_POLL_MS),
+    );
   }
 }
 
