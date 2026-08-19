@@ -1,19 +1,19 @@
 /**
- * IO ボード DebugHost（TCP）へ 13h メモリ読み出しを送る。
- * IO がハンドシェイク 13h で CPU ボードへ問い合わせる。
+ * IO ボード DebugHost（TCP）へ 83h メモリ読み出しを送る。
+ * IO がハンドシェイク 83h で CPU ボードへ問い合わせる。
  * 根拠: HandShake.mdc / retrocpu_debug.mdc（当面コマンド番号は線上と同じ）
  */
 
 import net from "node:net";
 
-/** メモリ読み出しコマンド（IO→CPU 13h） */
-const CMD_MEM_READ = 0x13;
+/** メモリ読み出しコマンド（IO→CPU 83h） */
+const CMD_MEM_READ = 0x83;
 
 /** OK */
 const STATUS_OK = 0x00;
 
 /**
- * 13h 要求フレーム（cmd + addr32 BE + count32 BE）。
+ * 83h 要求フレーム（cmd + addr32 BE + count32 BE）。
  * @param byteAddr 開始バイトアドレス
  * @param byteCount バイト数
  * @returns 9 バイト
@@ -71,7 +71,9 @@ export class DebugIoClient {
       const sock = net.connect({ host: this.host, port: this.port });
       const t = setTimeout(() => {
         sock.destroy();
-        reject(new Error(`debug TCP connect timeout ${this.host}:${this.port}`));
+        reject(
+          new Error(`debug TCP connect timeout ${this.host}:${this.port}`),
+        );
       }, timeoutMs);
       sock.once("connect", () => {
         clearTimeout(t);
@@ -104,7 +106,7 @@ export class DebugIoClient {
   }
 
   /**
-   * ハンドシェイク 13h 相当でメモリを読む。
+   * ハンドシェイク 83h 相当でメモリを読む。
    * @param byteAddr 開始バイトアドレス（偶数）
    * @param byteCount バイト数
    * @returns データ
@@ -167,7 +169,10 @@ export class DebugIoClient {
 
   /** 待ちを満たせるだけ進める */
   private flushWaiters(): void {
-    while (this.waiters.length > 0 && this.buf.length >= this.waiters[0]!.need) {
+    while (
+      this.waiters.length > 0 &&
+      this.buf.length >= this.waiters[0]!.need
+    ) {
       const w = this.waiters.shift()!;
       const slice = this.buf.subarray(0, w.need);
       this.buf = this.buf.subarray(w.need);

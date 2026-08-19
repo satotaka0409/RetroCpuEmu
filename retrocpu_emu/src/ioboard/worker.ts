@@ -7,6 +7,7 @@
  */
 
 import { parentPort, workerData, type MessagePort } from "node:worker_threads";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   attachSharedBoard,
@@ -34,7 +35,10 @@ import {
   setHexKeyHeld,
 } from "./handshake/io_board_mock";
 import { performIoBoardReset, resolveBootMonitorHexPath } from "./io_reset";
-import { CpuToIoCommandDispatcher } from "./handshake/command_cpu_to_io";
+import {
+  CpuToIoCommandDispatcher,
+  type CpuToIoHandlers,
+} from "./handshake/command_cpu_to_io";
 import {
   CMD_CPU_TO_IO,
   intCauseForTimer,
@@ -80,6 +84,114 @@ const settingStorage: SettingAreaStorage =
   createFileSettingAreaStorage(settingAreaPath);
 let settingRaw: Uint8Array | null = null;
 let settingInitPromise: Promise<void> | null = null;
+
+const CPU_TEMP_CACHE_MS = 1000;
+let cachedCpuTempC = 42.0;
+let cachedCpuTempAt = 0;
+
+function toBcd(value: number): number {
+  const v = Math.max(0, Math.min(99, value | 0));
+  return (((Math.floor(v / 10) & 0x0f) << 4) | (v % 10)) & 0xff;
+}
+
+function buildPcf8523RegsFromNow(now = new Date()): Uint8Array {
+  return new Uint8Array([
+    toBcd(now.getSeconds()) & 0x7f,
+    toBcd(now.getMinutes()) & 0x7f,
+    toBcd(now.getHours()) & 0x3f,
+    toBcd(now.getDate()) & 0x3f,
+    now.getDay() & 0x07,
+    toBcd(now.getMonth() + 1) & 0x1f,
+    toBcd(now.getFullYear() % 100),
+  ]);
+}
+
+function readLinuxCpuTempC(): number | null {
+  try {
+    const entries = readdirSync("/sys/class/thermal", {
+      withFileTypes: true,
+    });
+    const zones = entries
+      .filter((e) => e.isDirectory() && e.name.startsWith("thermal_zone"))
+      .map((e) => e.name)
+      .sort();
+    const values: number[] = [];
+    for (const zone of zones) {
+      const raw = readFileSync(
+        `/sys/class/thermal/${zone}/temp`,
+        "utf8",
+      ).trim();
+      const milli = Number.parseInt(raw, 10);
+      if (!Number.isFinite(milli)) continue;
+      const c = milli / 1000;
+      if (c >= -40 && c <= 200) values.push(c);
+    }
+    if (values.length === 0) return null;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  } catch {
+    return null;
+  }
+}
+
+function getHostCpuTempC(nowMs = Date.now()): number {
+  if (nowMs - cachedCpuTempAt <= CPU_TEMP_CACHE_MS) {
+    return cachedCpuTempC;
+  }
+  const sampled = readLinuxCpuTempC();
+  if (sampled !== null) cachedCpuTempC = sampled;
+  cachedCpuTempAt = nowMs;
+  return cachedCpuTempC;
+}
+
+function encodeMcp9808AmbientTempRaw(tempC: number): number {
+  // MCP9808 ambient temperature register (0x05): sign bit 12, 0.0625C/LSB.
+  const clamped = Math.max(-40, Math.min(125, tempC));
+  if (clamped >= 0) {
+    return Math.round(clamped * 16) & 0x0fff;
+  }
+  const encoded = Math.round((clamped + 256) * 16) & 0x0fff;
+  return encoded | 0x1000;
+}
+
+function randomWord(): number {
+  return Math.floor(Math.random() * 0x10000) & 0xffff;
+}
+
+function randomDistanceMm(): number {
+  return (50 + Math.floor(Math.random() * 1951)) & 0xffff;
+}
+
+function createEmulatorSensorHandlers(): Pick<
+  CpuToIoHandlers,
+  "getRtcRaw" | "getTempRaw" | "getLightRaw" | "getDistanceRaw"
+> {
+  return {
+    getRtcRaw() {
+      return { regs: buildPcf8523RegsFromNow(), status: 0x00 };
+    },
+    getTempRaw() {
+      const raw = encodeMcp9808AmbientTempRaw(getHostCpuTempC());
+      return { raw, status: 0x00 };
+    },
+    getLightRaw() {
+      return {
+        clear: randomWord(),
+        red: randomWord(),
+        green: randomWord(),
+        blue: randomWord(),
+        status: 0x00,
+      };
+    },
+    getDistanceRaw() {
+      return {
+        distanceMm: randomDistanceMm(),
+        // Datasheet-style 5-bit range status field
+        rangeStatus: Math.floor(Math.random() * 0x20) & 0x1f,
+        status: 0x00,
+      };
+    },
+  };
+}
 
 /**
  * 設定エリアをストレージから読み、マーク不正なら MN1613 既定で初期化する。
@@ -233,12 +345,14 @@ const wallClock = new IoTimeCounter();
 
 /**
  * CPU→IO コマンド状態と既定ハンドラ。
- * 現在は 10h〜1Bh（HandShake.mdc 概要表の順）を受理する。
+ * 10h〜1Fh（HandShake.mdc 概要表の実装済み範囲）を受理する。
  */
 const cmdState = createIoBoardCommandState();
-const cmdDispatcher = new CpuToIoCommandDispatcher(
-  createDefaultCpuToIoHandlers(cmdState, intervalTimer, wallClock),
-);
+const cmdHandlers: CpuToIoHandlers = {
+  ...createDefaultCpuToIoHandlers(cmdState, intervalTimer, wallClock),
+  ...createEmulatorSensorHandlers(),
+};
+const cmdDispatcher = new CpuToIoCommandDispatcher(cmdHandlers);
 
 /**
  * ハンドシェイク 19h をレンダラのスピーカーへ渡す。
@@ -265,14 +379,6 @@ link.setCpuToIoFrameHandler((frame) => {
       periodMs: state?.periodMs ?? 0,
       count: state?.count ?? 0,
       running: state?.running ?? false,
-      status: response[0],
-    });
-  } else if (cmd === CMD_CPU_TO_IO.UNDEF_LED) {
-    if (response[0] === 0) {
-      consolePanel.setUndefLed(cmdState.undefLed);
-    }
-    log.info("未定義命令LED (13h)", {
-      on: cmdState.undefLed,
       status: response[0],
     });
   } else if (cmd === CMD_CPU_TO_IO.LED_DISPLAY) {
@@ -303,6 +409,41 @@ link.setCpuToIoFrameHandler((frame) => {
       len: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[3] : undefined,
       line0: lcd.lines[0],
       line1: lcd.lines[1],
+    });
+  } else if (cmd === CMD_CPU_TO_IO.UNDEF_NOTIFY) {
+    const n = cmdState.lastUndefNotify;
+    if (response[0] === 0) {
+      consolePanel.setUndefLed(true);
+    }
+    log.info("未定義命令実行通知 (13h)", {
+      status: response[0],
+      addr: n?.addr,
+      ic: n?.ic,
+      npp: n?.npp,
+    });
+  } else if (cmd === CMD_CPU_TO_IO.RTC_GET_RAW) {
+    log.debug("RTC生値取得 (1Ch)", {
+      status: response[7],
+      regs: Array.from(response.slice(0, 7)),
+    });
+  } else if (cmd === CMD_CPU_TO_IO.TEMP_GET_RAW) {
+    log.debug("温度生値取得 (1Dh)", {
+      status: response[2],
+      raw: ((response[0] ?? 0) << 8) | (response[1] ?? 0),
+    });
+  } else if (cmd === CMD_CPU_TO_IO.LIGHT_GET_RAW) {
+    log.debug("光生値取得 (1Eh)", {
+      status: response[8],
+      clear: ((response[0] ?? 0) << 8) | (response[1] ?? 0),
+      red: ((response[2] ?? 0) << 8) | (response[3] ?? 0),
+      green: ((response[4] ?? 0) << 8) | (response[5] ?? 0),
+      blue: ((response[6] ?? 0) << 8) | (response[7] ?? 0),
+    });
+  } else if (cmd === CMD_CPU_TO_IO.DISTANCE_GET_RAW) {
+    log.debug("距離生値取得 (1Fh)", {
+      status: response[3],
+      distanceMm: ((response[0] ?? 0) << 8) | (response[1] ?? 0),
+      rangeStatus: response[2] ?? 0,
     });
   } else {
     log.debug("CPU→IO コマンドを処理", {
@@ -405,10 +546,10 @@ function slice(): void {
     tickIoBoard();
   }
 
-  // UNDEF LED は 13h / RST が正本（IISR ポーリングでは点灯しない）
+  // UNDEF LED は 13h(未定義命令実行通知) / RST が正本（IISR ポーリングでは点灯しない）
   const undefInsn = getUndefLed();
   if (undefInsn !== lastUndefInsn) {
-    if (undefInsn) log.warn("未定義命令LED点灯", { via: "13h" });
+    if (undefInsn) log.warn("未定義命令LED点灯", { via: "13h-undef-notify" });
     lastUndefInsn = undefInsn;
   }
 

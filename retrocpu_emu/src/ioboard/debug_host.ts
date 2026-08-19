@@ -1,6 +1,6 @@
 /**
  * IO ボード側のデバッグ TCP サーバ（PC＝クライアントがつなぐ）。
- * 根拠: retrocpu_debug.mdc。コマンド番号は当面ハンドシェイクと同じ（10h/11h/13h/14h）。
+ * 根拠: retrocpu_debug.mdc。コマンド番号は当面ハンドシェイクと同じ（80h/81h/83h/84h）。
  */
 
 import net from "node:net";
@@ -25,29 +25,29 @@ export const DEBUG_TCP_PORT = 29000;
 /** 待ち受けアドレス。WSL 上のエミュへホスト PC からつなぐため全インタフェース */
 export const DEBUG_TCP_HOST = "0.0.0.0";
 
-/** CPU への 10h/11h/13h/14h 中継（ハンドシェイク結果を待って返す） */
+/** CPU への 80h/81h/83h/84h 中継（ハンドシェイク結果を待って返す） */
 export type DebugHostHandlers = {
   /**
-   * アドレス／IO ブレイク設定（10h）を CPU へ中継する。
+   * アドレス／IO ブレイク設定（80h）を CPU へ中継する。
    * @param payload コマンド除く 9 バイト
    * @returns OK=0 / NG=1
    */
   addrBreakSet: (payload: Uint8Array) => Promise<number>;
   /**
-   * アドレス／IO ブレイク解除（11h）を CPU へ中継する。
+   * アドレス／IO ブレイク解除（81h）を CPU へ中継する。
    * @param slot 設定番号 0–7
    * @returns OK=0 / NG=1
    */
   addrBreakClr: (slot: number) => Promise<number>;
   /**
-   * メモリ読み出し（13h）を CPU ハンドシェイクへ中継する。
+   * メモリ読み出し（83h）を CPU ハンドシェイクへ中継する。
    * @param byteAddr 開始バイトアドレス
    * @param byteCount バイト数
    * @returns 読み出したバイト列
    */
   memRead?: (byteAddr: number, byteCount: number) => Promise<Uint8Array>;
   /**
-   * メモリ書き込み（14h）を CPU ハンドシェイクへ中継する。
+   * メモリ書き込み（84h）を CPU ハンドシェイクへ中継する。
    * @param byteAddr 開始バイトアドレス
    * @param data 書き込むバイト列
    */
@@ -63,7 +63,7 @@ export type DebugHostOptions = {
 };
 
 /**
- * PC（Cursor 拡張）からのバイナリ接続を受け、10h/11h/13h/14h を CPU ハンドシェイクへ中継する。
+ * PC（Cursor 拡張）からのバイナリ接続を受け、80h/81h/83h/84h を CPU ハンドシェイクへ中継する。
  */
 export class DebugHost {
   private readonly handlers: DebugHostHandlers;
@@ -100,11 +100,14 @@ export class DebugHost {
       server.listen(this.listenPort, this.listenHost, () => {
         server.removeListener("error", onErr);
         server.on("error", (err: Error) => {
-          getLogger("io").error("デバッグ TCP サーバエラー", { err: err.message });
+          getLogger("io").error("デバッグ TCP サーバエラー", {
+            err: err.message,
+          });
         });
         this.server = server;
         const addr = server.address();
-        const port = addr && typeof addr === "object" ? addr.port : this.listenPort;
+        const port =
+          addr && typeof addr === "object" ? addr.port : this.listenPort;
         getLogger("io").info("デバッグ TCP 待ち受け開始", {
           host: this.listenHost,
           port,
@@ -180,7 +183,7 @@ export class DebugHost {
   /**
    * 1 フレームを解釈し、CPU ハンドシェイクの結果を待つ。
    * @param frame コマンドを含む受信バイト
-   * @returns 応答（10h/11h/14h は 1 バイト。13h OK は status+長さ+データ）
+   * @returns 応答（80h/81h/84h は 1 バイト。83h OK は status+長さ+データ）
    */
   private async dispatch(frame: Uint8Array): Promise<Uint8Array> {
     const set = parseAddrBreakSetFrame(frame);
@@ -190,7 +193,7 @@ export class DebugHost {
       }
       const payload = addrBreakSetPayload(frame);
       if (!payload) return Uint8Array.from([RESPONSE_CODE.NG]);
-      getLogger("io").info("デバッグ 10h アドレスブレイク設定", {
+      getLogger("io").info("デバッグ 80h アドレスブレイク設定", {
         slot: set.slot,
         flags: set.flags,
         count: set.count,
@@ -204,7 +207,7 @@ export class DebugHost {
       if (!isAddrBreakSlot(slot)) {
         return Uint8Array.from([RESPONSE_CODE.NG]);
       }
-      getLogger("io").info("デバッグ 11h アドレスブレイク解除", { slot });
+      getLogger("io").info("デバッグ 81h アドレスブレイク解除", { slot });
       const status = (await this.handlers.addrBreakClr(slot)) & 0xff;
       return Uint8Array.from([status]);
     }
@@ -216,7 +219,7 @@ export class DebugHost {
       if (rd.byteCount < 1 || rd.byteCount > DEBUG_MEM_MAX_BYTES) {
         return Uint8Array.from([RESPONSE_CODE.NG]);
       }
-      getLogger("io").info("デバッグ 13h メモリ読み出し", {
+      getLogger("io").info("デバッグ 83h メモリ読み出し", {
         byteAddr: `0x${rd.byteAddr.toString(16)}`,
         byteCount: rd.byteCount,
       });
@@ -239,7 +242,7 @@ export class DebugHost {
       if (wr.data.byteLength < 1 || wr.data.byteLength > DEBUG_MEM_MAX_BYTES) {
         return Uint8Array.from([RESPONSE_CODE.NG]);
       }
-      getLogger("io").info("デバッグ 14h メモリ書き込み", {
+      getLogger("io").info("デバッグ 84h メモリ書き込み", {
         byteAddr: `0x${wr.byteAddr.toString(16)}`,
         byteCount: wr.data.byteLength,
       });

@@ -41,7 +41,7 @@ async function withCase(
 }
 
 /**
- * IO が HSHK_REQ_1 を上げるまで待つ（受理より先に依頼を出す）。
+ * IO が HSHK_IN_REQ を上げるまで待つ（受理より先に依頼を出す）。
  * @param mock IO モック
  * @param timeoutMs 上限 ms
  */
@@ -50,9 +50,9 @@ async function waitReq1(
   timeoutMs = 2000,
 ): Promise<void> {
   const t0 = Date.now();
-  while (mock.bus.HSHK_REQ_1 !== 1) {
+  while (mock.bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
-      throw new Error("timeout waiting HSHK_REQ_1");
+      throw new Error("timeout waiting HSHK_IN_REQ");
     }
     await new Promise((r) => setTimeout(r, 1));
   }
@@ -83,7 +83,7 @@ async function callHandler(
 
 test("0x0F（<0x10）はディスパッチせず完了する", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(mock, Uint8Array.from([0x0F]), 0);
+    const reply = await callHandler(mock, Uint8Array.from([0x0f]), 0);
     expect(reply.length).toBe(0);
     s.expectRegisters({ R0: 0, R4: 0x4444 });
   });
@@ -97,11 +97,11 @@ test("0x44 未実装コマンドは NG も返さず完了する", async () => {
   });
 });
 
-test("12h 実行指示は 4B を読み NG を返す", async () => {
+test("12h 実行指示は 5B（pad 含む）を読み NG を返す", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x12, 0, 0, 0x02, 0x00]),
+      Uint8Array.from([0x12, 0, 0, 0x02, 0x00, 0x00]),
       1,
     );
     expect(Array.from(reply)).toEqual([0x01]);

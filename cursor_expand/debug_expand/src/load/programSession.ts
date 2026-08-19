@@ -126,7 +126,7 @@ export class ProgramSession {
       memStart: entry & PHYS_WORD_MASK,
       memCacheLo: win.lo,
       memCacheHi: win.hi,
-      memNote: "handshake 13h 取得待ち（retrocpu_emu が必要）",
+      memNote: "handshake 83h 取得待ち（retrocpu_emu が必要）",
       disasmStart: entry & PHYS_WORD_MASK,
       disasmCacheLo: win.lo,
       disasmCacheHi: win.hi,
@@ -146,7 +146,7 @@ export class ProgramSession {
   }
 
   /**
-   * バイト列をメモリへ重ね書きする（ハンドシェイク 13h の窓）。
+   * バイト列をメモリへ重ね書きする（ハンドシェイク 83h の窓）。
    * @param byteAddr 先頭バイトアドレス
    * @param data ビッグエンディアン
    */
@@ -182,7 +182,7 @@ export class ProgramSession {
       endWord === undefined ? PHYS_WORD_MASK : endWord & PHYS_WORD_MASK;
     const cur =
       currentWord === undefined
-        ? (start & PHYS_WORD_MASK)
+        ? start & PHYS_WORD_MASK
         : currentWord & PHYS_WORD_MASK;
     const lines: DisasmLine[] = [];
     let addr = start & PHYS_WORD_MASK;

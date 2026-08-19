@@ -24,6 +24,13 @@ import {
   RESPONSE_CODE,
 } from "../../shared/handshake/handshake_type";
 
+/** 1Ah ブレイク通知ヘッダ長（コマンド含む） */
+export const BREAK_NOTIFY_HEADER_SIZE = 11;
+/** 履歴 1 エントリのバイト長（87h と同一） */
+export const BREAK_HISTORY_ENTRY_SIZE = 66;
+/** 履歴件数の上限 */
+export const BREAK_HISTORY_MAX_COUNT = 16;
+
 // ─────────────────────────────────────────────
 // 型定義
 // ─────────────────────────────────────────────
@@ -60,6 +67,23 @@ export interface TimerParams {
   periodMs: number;
   /** 割り込み回数。0 で無限 */
   count: number;
+}
+
+/** ステップ通知／未定義命令通知の共通ペイロード（59バイトフレーム） */
+export interface CpuStateNotifyInfo {
+  addr: number;
+  r0: number;
+  r1: number;
+  r2: number;
+  r3: number;
+  r4: number;
+  sp: number;
+  str: number;
+  ic: number;
+  csbrSsbr: number;
+  tsr: number;
+  npp: number;
+  stack: number[];
 }
 
 // ─────────────────────────────────────────────
@@ -107,12 +131,6 @@ export interface CpuToIoHandlers {
   getTime(): { timestamp: Uint8Array; status: number };
 
   /**
-   * 未定義命令LED (cmd=0x13): 砲弾 B (UNDEF) の点灯/消灯。
-   * on=true で点灯、false で消灯。モード不問。
-   */
-  onUndefLed(on: boolean): number;
-
-  /**
    * ブレイク通知 (cmd=0x1A): 比較器ヒットで CPU がモニタへ戻るとき。
    * HandShake.mdc の 1Ah ヘッダをそのまま渡す。
    */
@@ -126,6 +144,8 @@ export interface CpuToIoHandlers {
     breakCount: number;
     /** 履歴件数（0-16） */
     historyCount: number;
+    /** 履歴エントリ生バイト（1件 66B、87h と同一形式） */
+    historyEntries: Uint8Array[];
     addr: number;
   }): number;
 
@@ -133,21 +153,13 @@ export interface CpuToIoHandlers {
    * ステップ通知 (cmd=0x1B): 1 命令実行後。addr はレベル2 IC 退避（バイト相当の 32bit）。
    * レジスタは 16bit。stack は SP+1 から 16 ワード。
    */
-  onStepNotify(info: {
-    addr: number;
-    r0: number;
-    r1: number;
-    r2: number;
-    r3: number;
-    r4: number;
-    sp: number;
-    str: number;
-    ic: number;
-    csbrSsbr: number;
-    tsr: number;
-    npp: number;
-    stack: number[];
-  }): number;
+  onStepNotify(info: CpuStateNotifyInfo): number;
+
+  /**
+   * 未定義命令実行通知 (cmd=0x13): 未定義命令実行時の状態通知。
+   * レイアウトはステップ通知と同一（59バイト）。
+   */
+  onUndefNotify(info: CpuStateNotifyInfo): number;
 
   /**
    * LCD制御 (cmd=0x17): Clear/Home/DisplayCtrl/SetCursor。モード不問。
@@ -160,6 +172,36 @@ export interface CpuToIoHandlers {
    * @param frame コマンドを含む 20 バイト
    */
   onLcdText(frame: Uint8Array): number;
+
+  /**
+   * RTC 生レジスタ取得 (cmd=0x1C): PCF8523 の時刻レジスタ 7 バイトをそのまま返す。
+   * レジスタ順: seconds, minutes, hours, days, weekdays, months, years
+   */
+  getRtcRaw(): { regs: Uint8Array; status: number };
+
+  /**
+   * 温度センサー生レジスタ取得 (cmd=0x1D): MCP9808 Ambient Temperature (0x05)。
+   * 16bit 値をビッグエンディアンで返す（ビット解釈は呼び出し側）。
+   */
+  getTempRaw(): { raw: number; status: number };
+
+  /**
+   * 光センサー生レジスタ取得 (cmd=0x1E): TCS34725 RGBC。
+   * 各値は 16bit。読み出し値をそのまま返す。
+   */
+  getLightRaw(): {
+    clear: number;
+    red: number;
+    green: number;
+    blue: number;
+    status: number;
+  };
+
+  /**
+   * 距離センサー生レジスタ取得 (cmd=0x1F): VL53L1X。
+   * rangeStatus は RESULT__RANGE_STATUS の下位 5bit を返す。
+   */
+  getDistanceRaw(): { distanceMm: number; rangeStatus: number; status: number };
 }
 
 // ─────────────────────────────────────────────
@@ -179,22 +221,30 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.PC_KEY_GET]: 1,
   /** LED表示依頼: cmd(1) + 7seg×12(12) + 砲弾LED×2(2) = 15バイト */
   [CMD_CPU_TO_IO.LED_DISPLAY]: 15,
-  /** BEEP音: cmd(1) + 周波数(2) + 長さ(2) = 5バイト */
-  [CMD_CPU_TO_IO.BEEP]: 5,
+  /** BEEP音: cmd(1) + 周波数(2) + 長さ(2) + pad(1) = 6バイト */
+  [CMD_CPU_TO_IO.BEEP]: 6,
   /** タイマー設定: cmd(1) + タイマー番号(1) + 周期(2) + 回数(2) = 6バイト */
   [CMD_CPU_TO_IO.TIMER_SET]: 6,
   /** 時刻取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.TIME_GET]: 1,
-  /** 未定義命令LED: cmd(1) + Bit0(1) = 2バイト */
-  [CMD_CPU_TO_IO.UNDEF_LED]: 2,
-  /** ブレイク通知: cmd(1)+slot(1)+件数(1)+flags(1)+count(1)+addr32(4)+件数(1)+pad(1)=11バイト */
-  [CMD_CPU_TO_IO.BREAK_NOTIFY]: 11,
+  /** ブレイク通知: ヘッダ 11 バイト + 履歴エントリ(66B)×件数（最小 11 バイト） */
+  [CMD_CPU_TO_IO.BREAK_NOTIFY]: BREAK_NOTIFY_HEADER_SIZE,
   /** LCD制御: cmd(1) + kind(1) + argA(1) + argB(1) + argC(1) = 5バイト */
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
   [CMD_CPU_TO_IO.LCD_TEXT]: 20,
   /** ステップ通知: cmd(1) + addr32(4) + レジスタ 22B + スタック 32B = 59バイト */
   [CMD_CPU_TO_IO.STEP_NOTIFY]: 59,
+  /** 未定義命令実行通知: ステップ通知と同じ 59 バイト */
+  [CMD_CPU_TO_IO.UNDEF_NOTIFY]: 59,
+  /** RTC 生レジスタ取得: cmd(1)のみ */
+  [CMD_CPU_TO_IO.RTC_GET_RAW]: 1,
+  /** 温度生レジスタ取得: cmd(1)のみ */
+  [CMD_CPU_TO_IO.TEMP_GET_RAW]: 1,
+  /** 光センサー生レジスタ取得: cmd(1)のみ */
+  [CMD_CPU_TO_IO.LIGHT_GET_RAW]: 1,
+  /** 距離センサー生レジスタ取得: cmd(1)のみ */
+  [CMD_CPU_TO_IO.DISTANCE_GET_RAW]: 1,
 };
 
 /**
@@ -210,12 +260,44 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.BEEP]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP] - 1,
   [CMD_CPU_TO_IO.TIMER_SET]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET] - 1,
   [CMD_CPU_TO_IO.TIME_GET]: 0,
-  [CMD_CPU_TO_IO.UNDEF_LED]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED] - 1,
   [CMD_CPU_TO_IO.BREAK_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY] - 1,
   [CMD_CPU_TO_IO.LCD_CTRL]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL] - 1,
   [CMD_CPU_TO_IO.LCD_TEXT]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_TEXT] - 1,
   [CMD_CPU_TO_IO.STEP_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY] - 1,
+  [CMD_CPU_TO_IO.UNDEF_NOTIFY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_NOTIFY] - 1,
+  [CMD_CPU_TO_IO.RTC_GET_RAW]: 0,
+  [CMD_CPU_TO_IO.TEMP_GET_RAW]: 0,
+  [CMD_CPU_TO_IO.LIGHT_GET_RAW]: 0,
+  [CMD_CPU_TO_IO.DISTANCE_GET_RAW]: 0,
 };
+
+/**
+ * CPU→IO 受信フレーム（可変長含む）の残余バイト数を返す。
+ * 返値は「現在の frameSoFar に対して、あと何バイト必要か」。
+ * - BREAK_NOTIFY(1Ah): 件数(02h) が読めるまでヘッダ長で待ち、読めたら 66B×件数を加算
+ * - それ以外: 固定長（未定義コマンドは 1 バイト）
+ */
+export function cpuToIoRemainingSize(frameSoFar: Uint8Array): number {
+  if (frameSoFar.length === 0) return 0;
+  const cmd = frameSoFar[0] & 0xff;
+  if (cmd !== CMD_CPU_TO_IO.BREAK_NOTIFY) {
+    const total = CPU_FRAME_SIZE[cmd] ?? 1;
+    return Math.max(0, total - frameSoFar.length);
+  }
+
+  const headerTotal = BREAK_NOTIFY_HEADER_SIZE;
+  if (frameSoFar.length < 3) {
+    return Math.max(0, headerTotal - frameSoFar.length);
+  }
+
+  const historyCount = frameSoFar[2] & 0xff;
+  // 異常値はヘッダ分だけ受けて dispatcher 側で NG 判定する。
+  if (historyCount > BREAK_HISTORY_MAX_COUNT) {
+    return Math.max(0, headerTotal - frameSoFar.length);
+  }
+  const total = headerTotal + historyCount * BREAK_HISTORY_ENTRY_SIZE;
+  return Math.max(0, total - frameSoFar.length);
+}
 
 // ─────────────────────────────────────────────
 // バイト入出力ユーティリティ（内部使用）
@@ -288,8 +370,6 @@ export class CpuToIoCommandDispatcher {
         return this._handleTimerSet(frame);
       case CMD_CPU_TO_IO.TIME_GET:
         return this._handleTimeGet();
-      case CMD_CPU_TO_IO.UNDEF_LED:
-        return this._handleUndefLed(frame);
       case CMD_CPU_TO_IO.BREAK_NOTIFY:
         return this._handleBreakNotify(frame);
       case CMD_CPU_TO_IO.LCD_CTRL:
@@ -298,6 +378,16 @@ export class CpuToIoCommandDispatcher {
         return this._handleLcdText(frame);
       case CMD_CPU_TO_IO.STEP_NOTIFY:
         return this._handleStepNotify(frame);
+      case CMD_CPU_TO_IO.UNDEF_NOTIFY:
+        return this._handleUndefNotify(frame);
+      case CMD_CPU_TO_IO.RTC_GET_RAW:
+        return this._handleRtcGetRaw();
+      case CMD_CPU_TO_IO.TEMP_GET_RAW:
+        return this._handleTempGetRaw();
+      case CMD_CPU_TO_IO.LIGHT_GET_RAW:
+        return this._handleLightGetRaw();
+      case CMD_CPU_TO_IO.DISTANCE_GET_RAW:
+        return this._handleDistanceGetRaw();
       default:
         // 未対応コマンドは仕様通り NG を返す。
         return new Uint8Array([RESPONSE_CODE.NG]);
@@ -420,20 +510,6 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * 未定義命令LED (0x13)
-   * Bit0=0 消灯 / Bit0=1 点灯。それ以外の値は NG。
-   * 応答: 1バイト (OK / NG)
-   */
-  private _handleUndefLed(frame: Uint8Array): Uint8Array {
-    const flag = frame[0x01]!;
-    if (flag !== 0 && flag !== 1) {
-      return new Uint8Array([RESPONSE_CODE.NG]);
-    }
-    const result = this.handlers.onUndefLed(flag === 1);
-    return new Uint8Array([result]);
-  }
-
-  /**
    * ブレイク通知 (0x1A)
    * スロット 0–7。応答: 1バイト (OK / NG)
    */
@@ -443,6 +519,9 @@ export class CpuToIoCommandDispatcher {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
     const historyCount = frame[0x02]! & 0xff;
+    if (historyCount > BREAK_HISTORY_MAX_COUNT) {
+      return new Uint8Array([RESPONSE_CODE.NG]);
+    }
     const flags = frame[0x03]! & 0xff;
     const breakCount = frame[0x04]! & 0xff;
     const addr =
@@ -451,12 +530,25 @@ export class CpuToIoCommandDispatcher {
       ((frame[0x07]! & 0xff) << 8) |
       (frame[0x08]! & 0xff);
     const kind = (flags & 0x40) !== 0 ? 0 : (flags & 0x01) !== 0 ? 2 : 1;
+    const entriesStart = BREAK_NOTIFY_HEADER_SIZE;
+    const availableEntryBytes = Math.max(0, frame.length - entriesStart);
+    const availableEntryCount = Math.floor(
+      availableEntryBytes / BREAK_HISTORY_ENTRY_SIZE,
+    );
+    const parseCount = Math.min(historyCount, availableEntryCount);
+    const historyEntries: Uint8Array[] = [];
+    for (let i = 0; i < parseCount; i += 1) {
+      const from = entriesStart + i * BREAK_HISTORY_ENTRY_SIZE;
+      const to = from + BREAK_HISTORY_ENTRY_SIZE;
+      historyEntries.push(frame.slice(from, to));
+    }
     const result = this.handlers.onBreakNotify({
       kind,
       slot,
       flags,
       breakCount,
       historyCount,
+      historyEntries,
       addr,
     });
     return new Uint8Array([result & 0xff]);
@@ -467,6 +559,27 @@ export class CpuToIoCommandDispatcher {
    * 応答: 1バイト (OK / NG)
    */
   private _handleStepNotify(frame: Uint8Array): Uint8Array {
+    const result = this.handlers.onStepNotify(
+      this._decodeCpuStateNotifyInfo(frame),
+    );
+    return new Uint8Array([result & 0xff]);
+  }
+
+  /**
+   * 未定義命令実行通知 (0x13)
+   * 応答: 1バイト (OK / NG)
+   */
+  private _handleUndefNotify(frame: Uint8Array): Uint8Array {
+    const result = this.handlers.onUndefNotify(
+      this._decodeCpuStateNotifyInfo(frame),
+    );
+    return new Uint8Array([result & 0xff]);
+  }
+
+  /**
+   * 59バイト通知フレーム（1Bh/13h 共通）を構造化データへ展開する。
+   */
+  private _decodeCpuStateNotifyInfo(frame: Uint8Array): CpuStateNotifyInfo {
     const addr =
       ((frame[0x01]! & 0xff) << 24) |
       ((frame[0x02]! & 0xff) << 16) |
@@ -476,7 +589,7 @@ export class CpuToIoCommandDispatcher {
     for (let i = 0; i < 16; i += 1) {
       stack.push(read16(frame, 0x1b + i * 2));
     }
-    const result = this.handlers.onStepNotify({
+    return {
       addr,
       r0: read16(frame, 0x05),
       r1: read16(frame, 0x07),
@@ -490,8 +603,69 @@ export class CpuToIoCommandDispatcher {
       tsr: read16(frame, 0x17),
       npp: frame[0x19]! & 0xff,
       stack,
-    });
-    return new Uint8Array([result & 0xff]);
+    };
+  }
+
+  /**
+   * RTC 生レジスタ取得 (0x1C)
+   * 応答: 8バイト = regs[7] + status
+   */
+  private _handleRtcGetRaw(): Uint8Array {
+    const { regs, status } = this.handlers.getRtcRaw();
+    const response = new Uint8Array(8);
+    const src =
+      regs.length >= 7
+        ? regs
+        : (() => {
+            const padded = new Uint8Array(7);
+            padded.set(regs.slice(0, regs.length));
+            return padded;
+          })();
+    response.set(src.slice(0, 7), 0);
+    response[7] = status & 0xff;
+    return response;
+  }
+
+  /**
+   * 温度センサー生レジスタ取得 (0x1D)
+   * 応答: 3バイト = raw16(BE) + status
+   */
+  private _handleTempGetRaw(): Uint8Array {
+    const { raw, status } = this.handlers.getTempRaw();
+    return new Uint8Array([(raw >>> 8) & 0xff, raw & 0xff, status & 0xff]);
+  }
+
+  /**
+   * 光センサー生レジスタ取得 (0x1E)
+   * 応答: 9バイト = C,R,G,B 各 16bit(BE) + status
+   */
+  private _handleLightGetRaw(): Uint8Array {
+    const { clear, red, green, blue, status } = this.handlers.getLightRaw();
+    return new Uint8Array([
+      (clear >>> 8) & 0xff,
+      clear & 0xff,
+      (red >>> 8) & 0xff,
+      red & 0xff,
+      (green >>> 8) & 0xff,
+      green & 0xff,
+      (blue >>> 8) & 0xff,
+      blue & 0xff,
+      status & 0xff,
+    ]);
+  }
+
+  /**
+   * 距離センサー生レジスタ取得 (0x1F)
+   * 応答: 4バイト = distance16(BE) + rangeStatus + status
+   */
+  private _handleDistanceGetRaw(): Uint8Array {
+    const { distanceMm, rangeStatus, status } = this.handlers.getDistanceRaw();
+    return new Uint8Array([
+      (distanceMm >>> 8) & 0xff,
+      distanceMm & 0xff,
+      rangeStatus & 0x1f,
+      status & 0xff,
+    ]);
   }
 
   /**

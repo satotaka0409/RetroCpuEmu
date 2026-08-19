@@ -1,6 +1,6 @@
 /**
  * g_bios_undef_led（CPU→IO コマンド 13h）
- * 根拠: HandShake.mdc「未定義命令LED」/ boot_monitor.mdc / test_framework.mdc
+ * 根拠: HandShake.mdc「未定義命令実行通知」/ boot_monitor.mdc / test_framework.mdc
  */
 import {
   createSessionFromSettings,
@@ -43,18 +43,17 @@ async function withCase(
 /**
  * g_bios_undef_led を呼び、CPU→IO 1 トランザクションと並行する。
  * @param mock IO モック
- * @param on Bit0（0=消灯 / 1=点灯）
+ * @param on 互換引数（旧 Bit0 指定。現仕様では未使用）
  */
 async function callUndefLed(
   mock: IoBoardHandshakeMock,
   on: number,
 ): Promise<void> {
-  await Promise.all([
-    session.call("g_bios_undef_led", {
-      registers: { ...BASE_REGS, R0: on },
-    }),
-    mock.handleOneRequest(),
-  ]);
+  const io = mock.handleOneRequest();
+  await session.call("g_bios_undef_led", {
+    registers: { ...BASE_REGS, R0: on },
+  });
+  await io;
 }
 
 test("点灯(1)で IO の undefLed が true になる", async () => {
@@ -63,23 +62,26 @@ test("点灯(1)で IO の undefLed が true になる", async () => {
     await callUndefLed(mock, 1);
     s.expectRegisters({ R0: 0 });
     expect(mock.state.undefLed).toBe(true);
+    expect(mock.state.lastUndefNotify !== null).toBe(true);
   });
 });
 
-test("消灯(0)で IO の undefLed が false になる", async () => {
+test("引数 0 でも 13h 通知として処理され、undefLed は true になる", async () => {
   await withCase(async (s, mock) => {
-    mock.state.undefLed = true;
+    expect(mock.state.undefLed).toBe(false);
     await callUndefLed(mock, 0);
     s.expectRegisters({ R0: 0 });
-    expect(mock.state.undefLed).toBe(false);
+    expect(mock.state.undefLed).toBe(true);
+    expect(mock.state.lastUndefNotify !== null).toBe(true);
   });
 });
 
-test("Bit0 以外はマスクして送る（0x03 → 点灯）", async () => {
+test("引数 0x03 でも 13h 通知として処理される", async () => {
   await withCase(async (s, mock) => {
     await callUndefLed(mock, 0x03);
     s.expectRegisters({ R0: 0 });
     expect(mock.state.undefLed).toBe(true);
+    expect(mock.state.lastUndefNotify !== null).toBe(true);
   });
 });
 

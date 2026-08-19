@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのメモリ読み出し（TCP 13h → ハンドシェイク 13h）
+ * Cursor 拡張 ↔ IO ボードのメモリ読み出し（TCP 83h → ハンドシェイク 83h）
  * 根拠: HandShake.mdc メモリ読み出し、retrocpu_debug.mdc メモリダンプ
  */
 
@@ -8,7 +8,7 @@ import {
   MEM_READ_REQ_FRAME_LEN,
 } from "../shared/handshake/handshake_type";
 
-/** 13h 要求（コマンド除く） */
+/** 83h 要求（コマンド除く） */
 export type MemReadReq = {
   /** 開始バイトアドレス */
   byteAddr: number;
@@ -17,7 +17,7 @@ export type MemReadReq = {
 };
 
 /**
- * 13h 要求フレームを組み立てる。
+ * 83h 要求フレームを組み立てる。
  * @param byteAddr 開始バイトアドレス
  * @param byteCount バイト数
  * @returns cmd + addr32 BE + count32 BE
@@ -42,24 +42,18 @@ export function encodeMemReadFrame(
 }
 
 /**
- * 13h 要求を読む。
- * @param frame 先頭が 13h、長さ 9
+ * 83h 要求を読む。
+ * @param frame 先頭が 83h、長さ 9
  * @returns フィールド。不正なら null
  */
 export function parseMemReadFrame(frame: Uint8Array): MemReadReq | null {
   if (frame.length < MEM_READ_REQ_FRAME_LEN) return null;
   if (frame[0] !== CMD_IO_TO_CPU.MEM_READ) return null;
   const byteAddr =
-    ((frame[1]! << 24) |
-      (frame[2]! << 16) |
-      (frame[3]! << 8) |
-      frame[4]!) >>>
+    ((frame[1]! << 24) | (frame[2]! << 16) | (frame[3]! << 8) | frame[4]!) >>>
     0;
   const byteCount =
-    ((frame[5]! << 24) |
-      (frame[6]! << 16) |
-      (frame[7]! << 8) |
-      frame[8]!) >>>
+    ((frame[5]! << 24) | (frame[6]! << 16) | (frame[7]! << 8) | frame[8]!) >>>
     0;
   return { byteAddr, byteCount };
 }

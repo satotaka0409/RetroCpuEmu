@@ -145,7 +145,7 @@ test("g_get_rnd は M系列 1 歩と一致し種も更新する", async () => {
 
 test("g_get_rnd を 10 回呼び、TS 側 LFSR とすべて一致する", async () => {
   await withCase(async (s) => {
-    s.setCpuLogMode("instruction");
+    s.setCpuLogMode("checkpoint");
     try {
       await s.call("g_rnd_init", {
         registers: { ...BASE_REGS, R0: GL_RND_DEFAULT_SEED },

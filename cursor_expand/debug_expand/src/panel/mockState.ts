@@ -193,8 +193,7 @@ export function memNextCenter(
     return null;
   }
   const nearLo = cacheLo > 0 && lo < cacheLo + MEM_REFETCH_MARGIN;
-  const nearHi =
-    cacheHi < PHYS_WORD_MASK && hi > cacheHi - MEM_REFETCH_MARGIN;
+  const nearHi = cacheHi < PHYS_WORD_MASK && hi > cacheHi - MEM_REFETCH_MARGIN;
   if (nearHi && !nearLo) {
     return hi;
   }
@@ -210,7 +209,10 @@ export function memNextCenter(
  * @param bytes 偶数バイト列
  * @returns 16 ワード/行
  */
-export function memDumpFromBeBytes(lo: number, bytes: Uint8Array): MemDumpRow[] {
+export function memDumpFromBeBytes(
+  lo: number,
+  bytes: Uint8Array,
+): MemDumpRow[] {
   const words: number[] = [];
   for (let i = 0; i + 1 < bytes.length; i += 2) {
     words.push(((bytes[i]! << 8) | bytes[i + 1]!) & 0xffff);
@@ -369,7 +371,8 @@ export function createMockDebugState(): DebugViewState {
     memStart,
     memCacheLo: win.lo,
     memCacheHi: win.hi,
-    memNote: "IO 未接続 — retrocpu_emu を起動するとハンドシェイク 13h で読みます",
+    memNote:
+      "IO 未接続 — retrocpu_emu を起動するとハンドシェイク 83h で読みます",
     disasmStart: memStart,
     disasmCacheLo: win.lo,
     disasmCacheHi: win.hi,

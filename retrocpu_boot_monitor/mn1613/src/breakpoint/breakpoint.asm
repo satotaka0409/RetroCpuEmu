@@ -31,7 +31,7 @@
 ;      WRITE 以外／命令は PREV=0000h。IO の AFTER は 0。リング 16、メタは _WORK。
 ;   7. 停止するとき 1Ah を CPU→IO で送り、OK/NG 1B を IO→CPU で受ける。
 ;
-; 1Ah 線上（送信 11B → 受信 1B status）:
+; 1Ah 線上（送信 ヘッダ11B + 履歴66B×件数 → 受信 1B status）:
 ;   1Ah, slot, 履歴件数, flags, count, addr32 BE, 履歴件数, 0(pad)
 ;   ステップ通知は 1Bh（このハンドラでは出さない）。
 ;   応答は IO→CPU なので、待ちの前に INTERRUPT_BUSY を 0 にする。
@@ -377,6 +377,14 @@ l_bp_nt_pad:
 	eor	R0, R0
 	bald	g_hshk_send_byte
 	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_nt_hist
+	bd	l_bp_notify_fail
+l_bp_nt_hist:
+	mv	X0, SP
+	l	R3, 2(X0)		; slot
+	l	R2, 3(X0)		; historyCount
+	bald	l_bp_send_hist_entries
+	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_send_fin
 	bd	l_bp_notify_fail
 l_bp_send_fin:
@@ -419,5 +427,153 @@ l_bp_leave:
 	ai	SP, #BP_FR
 	pop	R4
 	pop	R3
+	ret
+
+; -------------------------------------------------------
+; 1Ah 用: 履歴エントリを件数分（66B×N）送る
+; @param R3 - slot (0-7)
+; @param R2 - historyCount (0-16)
+; @return R0 - HSHK_OK / HSHK_NG
+; @Destruction R0, R1, R2
+; -------------------------------------------------------
+l_bp_send_hist_entries:
+	push	R3
+	push	R4
+	cpyb	R0, TSR0
+	andi	R0, #0x000f
+	push	R0			; 保存 TSR0
+	or	R2, R2, Z
+	b	l_bp_she_go
+	b	l_bp_she_ok
+
+l_bp_she_go:
+	push	R2			; 残り件数
+	; 最新 index = (NEXT-1) & 0x0f
+	mv	R0, R3
+	sl	R0, RE
+	a	R0, R3			; slot*3
+	mvwi	X1, #GL_BP_HIST_META
+	a	X1, R0
+	l	R4, HSHK_BH_MW_NEXT(X1)
+	si	R4, #1
+	andi	R4, #0x000f
+	mvi	R0, #HSHK_BH_SBR
+	setb	R0, TSR0
+
+l_bp_she_lp:
+	mv	X0, SP
+	l	R2, 0(X0)		; 残り件数
+	or	R2, R2, Z
+	b	l_bp_she_build
+	b	l_bp_she_done
+
+l_bp_she_build:
+	; entryAddr = F000h + slot*528 + index*33
+	mv	R0, R4
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE			; *32
+	mv	R1, R0
+	a	R1, R4			; index*33
+
+	mv	R0, R3
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE			; *16
+	mv	R2, R0
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE
+	sl	R0, RE			; *512
+	a	R0, R2			; slot*528
+	a	R1, R0
+	mvwi	R0, #HSHK_BH_BASE
+	a	R1, R0
+
+	; 先頭 16 語（16bit BE）
+	mvi	R2, #16
+l_bp_she_w16:
+	lr	R0, TSR0, (R1)
+	ai	R1, #1
+	push	R1
+	push	R2
+	bald	g_hshk_send_word
+	pop	R2
+	pop	R1
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_she_w16_ok
+	bd	l_bp_she_fail
+l_bp_she_w16_ok:
+	si	R2, #1, Z
+	b	l_bp_she_w16
+
+	; NPP(1B) + pad(1B)
+	lr	R0, TSR0, (R1)
+	ai	R1, #1
+	bswp	R0, R0
+	andi	R0, #0x00ff
+	push	R1
+	bald	g_hshk_send_byte
+	pop	R1
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_she_npp_pad
+	bd	l_bp_she_fail
+l_bp_she_npp_pad:
+	eor	R0, R0
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_she_stk
+	bd	l_bp_she_fail
+
+	; スタック 16 語
+l_bp_she_stk:
+	mvi	R2, #HSHK_BH_STACK_WORDS
+l_bp_she_stk_lp:
+	lr	R0, TSR0, (R1)
+	ai	R1, #1
+	push	R1
+	push	R2
+	bald	g_hshk_send_word
+	pop	R2
+	pop	R1
+	cwi	R0, #HSHK_OK, NZ
+	b	l_bp_she_stk_ok
+	bd	l_bp_she_fail
+l_bp_she_stk_ok:
+	si	R2, #1, Z
+	b	l_bp_she_stk_lp
+
+	; index = (index-1) & 0x0f
+	si	R4, #1
+	andi	R4, #0x000f
+	mv	X0, SP
+	l	R2, 0(X0)
+	si	R2, #1
+	st	R2, 0(X0)
+	b	l_bp_she_lp
+
+l_bp_she_done:
+	ai	SP, #1			; 残り件数
+	b	l_bp_she_ok
+
+l_bp_she_fail:
+	ai	SP, #1			; 残り件数
+	mvi	R0, #HSHK_NG
+	b	l_bp_she_restore
+
+l_bp_she_ok:
+	mvi	R0, #HSHK_OK
+
+l_bp_she_restore:
+	mv	R2, R0
+	pop	R1			; 保存 TSR0
+	setb	R1, TSR0
+	pop	R4
+	pop	R3
+	mv	R0, R2
 	ret
 

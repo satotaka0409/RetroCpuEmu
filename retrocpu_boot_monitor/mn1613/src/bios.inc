@@ -20,3 +20,7 @@ g_bios_led_display	.equ	0x012A
 g_bios_lcd_control	.equ	0x012C
 g_bios_lcd_text		.equ	0x012E
 g_bios_beep		.equ	0x0130
+g_bios_rtc_get_raw	.equ	0x0132
+g_bios_temp_get_raw	.equ	0x0134
+g_bios_light_get_raw	.equ	0x0136
+g_bios_distance_get_raw	.equ	0x0138

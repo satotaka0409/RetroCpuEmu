@@ -26,6 +26,10 @@
 	.global	g_bios_lcd_control
 	.global	g_bios_lcd_text
 	.global	g_bios_beep
+	.global	g_bios_rtc_get_raw
+	.global	g_bios_temp_get_raw
+	.global	g_bios_light_get_raw
+	.global	g_bios_distance_get_raw
 	.global	g_get_rnd_
 	.global	g_mem_cpy_
 	.global g_malloc_
@@ -41,6 +45,10 @@
 	.global	g_bios_lcd_control_
 	.global	g_bios_lcd_text_
 	.global	g_bios_beep_
+	.global	g_bios_rtc_get_raw_
+	.global	g_bios_temp_get_raw_
+	.global	g_bios_light_get_raw_
+	.global	g_bios_distance_get_raw_
 
 	.global g_int0_handler
 	.global g_int1_handler
@@ -95,6 +103,10 @@ g_bios_led_display:	bd	g_bios_led_display_		; 0x12a
 g_bios_lcd_control:	bd	g_bios_lcd_control_		; 0x12c
 g_bios_lcd_text:	bd	g_bios_lcd_text_		; 0x12e
 g_bios_beep:		bd	g_bios_beep_			; 0x130
+g_bios_rtc_get_raw:	bd	g_bios_rtc_get_raw_		; 0x132
+g_bios_temp_get_raw:	bd	g_bios_temp_get_raw_		; 0x134
+g_bios_light_get_raw:	bd	g_bios_light_get_raw_		; 0x136
+g_bios_distance_get_raw:	bd	g_bios_distance_get_raw_	; 0x138
 
 	.area	_CODE		(REL,CON)
 l_main:

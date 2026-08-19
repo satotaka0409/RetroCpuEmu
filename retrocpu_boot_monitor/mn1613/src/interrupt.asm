@@ -80,12 +80,12 @@ g_int0_handler:
 	; @cp copy_registers
 	; 割り込みマスクを再許可（main.asm の COLD と同じ M0|M1|M2）
 	ori	STR, #0x0700
-	; UNDEF LED を点灯
-	mvi	R0, #1
-	bald	g_bios_undef_led
 	; 未定義命令 INT0 用レジスタ格納領域を書き出し
 	mvwi	R0, #GL_UNDEF_INST_REG
 	bald	g_write_cpu_registers
+	; 未定義命令実行通知（13h）を送る
+	mvi	R0, #1
+	bald	g_bios_undef_led
 	; IISR 未定義命令フラグクリア
 	eor	R0, R0
 	seth	R0, IISR

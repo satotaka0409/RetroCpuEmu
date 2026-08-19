@@ -151,8 +151,8 @@ export const CMD_CPU_TO_IO = {
   TIME_GET: 0x11,
   /** タイマー割り込み設定 */
   TIMER_SET: 0x12,
-  /** 未定義命令LED 点灯/消灯（Bit0: 0=消灯 / 1=点灯） */
-  UNDEF_LED: 0x13,
+  /** 未定義命令実行通知（未定義命令実行時の状態通知） */
+  UNDEF_NOTIFY: 0x13,
   /** 16進キー入力状態を取得（フリーモード時） */
   HEX_KEY_GET: 0x14,
   /** PCのキー入力を中継してキー入力状態を取得 */
@@ -169,28 +169,36 @@ export const CMD_CPU_TO_IO = {
   BREAK_NOTIFY: 0x1a,
   /** ステップ通知（1 命令実行後の状態。比較器ヒットの 1Ah とは別） */
   STEP_NOTIFY: 0x1b,
+  /** RTC 生レジスタ取得（PCF8523 の時刻レジスタ） */
+  RTC_GET_RAW: 0x1c,
+  /** 温度センサー生レジスタ取得（MCP9808 Ambient Temperature） */
+  TEMP_GET_RAW: 0x1d,
+  /** 光センサー生レジスタ取得（TCS34725 RGBC） */
+  LIGHT_GET_RAW: 0x1e,
+  /** 距離センサー生レジスタ取得（VL53L1X） */
+  DISTANCE_GET_RAW: 0x1f,
 } as const;
 
 /** I/O -> CPU 方向コマンド（HandShake.mdc 概要表の順。番号は CPU→IO と独立） */
 export const CMD_IO_TO_CPU = {
   /** 比較器ブレイク設定（命令／メモリ／IO、スロット 0–7） */
-  BREAK_MEM_IO_SET: 0x10,
+  BREAK_MEM_IO_SET: 0x80,
   /** 比較器ブレイク解除（スロット 0–7） */
-  BREAK_MEM_IO_CLR: 0x11,
+  BREAK_MEM_IO_CLR: 0x81,
   /** アドレスを渡してプログラムを実行する */
-  EXEC: 0x12,
+  EXEC: 0x82,
   /** アドレスとバイト数を渡してメモリを読み込む */
-  MEM_READ: 0x13,
+  MEM_READ: 0x83,
   /** アドレスとバイト数、データを渡してメモリを書き込む */
-  MEM_WRITE: 0x14,
+  MEM_WRITE: 0x84,
   /** アドレスとバイト数を渡してIOを読み込む */
-  IO_READ: 0x15,
+  IO_READ: 0x85,
   /** アドレスとバイト数、データを渡してIOを書き込む */
-  IO_WRITE: 0x16,
+  IO_WRITE: 0x86,
   /** 履歴設定スロットの履歴を取得する */
-  BREAK_HIST_GET: 0x17,
+  BREAK_HIST_GET: 0x87,
   /** ブレイクから復帰して実行する（0=通常 / 1=ステップ） */
-  BREAK_RESUME: 0x18,
+  BREAK_RESUME: 0x88,
   /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */
   BREAK_INST_SET: 0x42,
   /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */
@@ -218,28 +226,28 @@ export const MODE = {
 /** アドレス／IO ブレイクスロット数（番号 0–7。比較器 8 本すべてユーザ） */
 export const ADDR_BREAK_SLOT_COUNT = 8;
 
-/** 10h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
+/** 80h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
 export const ADDR_BREAK_SET_PAYLOAD_LEN = 9;
 
-/** 10h の線上／TCP 全長（コマンド含む） */
+/** 80h の線上／TCP 全長（コマンド含む） */
 export const ADDR_BREAK_SET_FRAME_LEN = 1 + ADDR_BREAK_SET_PAYLOAD_LEN;
 
-/** 11h の線上／TCP 全長（コマンド＋スロット） */
+/** 81h の線上／TCP 全長（コマンド＋スロット） */
 export const ADDR_BREAK_CLR_FRAME_LEN = 2;
 
-/** 13h メモリ読み出し要求（cmd + addr32 BE + count32 BE）。TCP／論理ヘッダ。線上は末尾にパッド 1B */
+/** 83h メモリ読み出し要求（cmd + addr32 BE + count32 BE）。TCP／論理ヘッダ。線上は末尾にパッド 1B */
 export const MEM_READ_REQ_FRAME_LEN = 9;
 
-/** 14h メモリ書き込み要求ヘッダ（cmd + addr32 BE + count32 BE。続けて data）。TCP／論理。線上はパッド 1B のあと data */
+/** 84h メモリ書き込み要求ヘッダ（cmd + addr32 BE + count32 BE。続けて data）。TCP／論理。線上はパッド 1B のあと data */
 export const MEM_WRITE_REQ_HEADER_LEN = 9;
 
-/** 13h/14h 線上ヘッダ長（cmd + addr32 + count32 + パッド 0） */
+/** 83h/84h 線上ヘッダ長（cmd + addr32 + count32 + パッド 0） */
 export const MEM_RW_WIRE_HEADER_LEN = 10;
 
 /** 15h/16h の最大転送バイト数 */
 export const HSHK_IO_MAX_BYTES = 254;
 
-/** TCP 13h/14h の 1 回あたり最大バイト数 */
+/** TCP 83h/84h の 1 回あたり最大バイト数 */
 export const DEBUG_MEM_MAX_BYTES = 65536;
 
 /** ブレイク対象 */
@@ -267,10 +275,10 @@ export const BREAK_CONDITION = {
 // チェックサム・ブロック分割ユーティリティ
 // ─────────────────────────────────────────────
 
-/** メモリ R/W（13h/14h）のブロック長（HandShake.mdc。端数はパディングしない） */
+/** メモリ R/W（83h/84h）のブロック長（HandShake.mdc。端数はパディングしない） */
 export const HSHK_MEM_BLOCK = 256;
 
-/** 13h/14h チェックサム不一致時の同一ブロック再送回数上限 */
+/** 83h/84h チェックサム不一致時の同一ブロック再送回数上限 */
 export const HSHK_MEM_RETRY_MAX = 10;
 
 /**

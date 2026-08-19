@@ -91,7 +91,7 @@ export type BoardLinkResponse = {
 };
 
 /**
- * CPU→IO コマンド（10h〜1Bh）のフレーム転送要求。
+ * CPU→IO コマンド（10h〜1Fh、20h は未実装）のフレーム転送要求。
  *
  * 実機では 1階ボードが線を直接読む。エミュでは CPU ボード Worker が
  * ビットレベルのハンドシェイクでフレームを組み立て、これで IO ボード Worker へ渡す。

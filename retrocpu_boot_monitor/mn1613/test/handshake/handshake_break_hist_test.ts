@@ -41,7 +41,7 @@ async function withCase(
 }
 
 /**
- * IO が HSHK_REQ_1 を上げるまで待つ。
+ * IO が HSHK_IN_REQ を上げるまで待つ。
  * @param mock IO モック
  * @param timeoutMs 上限 ms
  */
@@ -50,9 +50,9 @@ async function waitReq1(
   timeoutMs = 2000,
 ): Promise<void> {
   const t0 = Date.now();
-  while (mock.bus.HSHK_REQ_1 !== 1) {
+  while (mock.bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
-      throw new Error("timeout waiting HSHK_REQ_1");
+      throw new Error("timeout waiting HSHK_IN_REQ");
     }
     await new Promise((r) => setTimeout(r, 1));
   }

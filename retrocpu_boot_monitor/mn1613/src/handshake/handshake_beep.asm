@@ -2,7 +2,7 @@
 ; BEEP音（ハンドシェイク 19h）
 ; 根拠: HandShake.mdc「BEEP音」/ boot_monitor.mdc
 ;
-; 線上 送信 5B: 19h, freqH, freqL, durH, durL → 受信 1B: status
+; 線上 送信 6B: 19h, freqH, freqL, durH, durL, pad(0) → 受信 1B: status
 ; 周波数 0 で停止、長さ 0 で無限。モード不問。
 ;
 ; 引数は第1=R0、第2=R1（asm-rules.mdc の呼び出し規約）。
@@ -26,7 +26,7 @@
 	.global g_hshk_recv_byte
 	.global g_hshk_finalize_recv
 
-BIOS_BEEP_FRAME_LEN	.equ	5
+BIOS_BEEP_FRAME_LEN	.equ	6
 
 ; -------------------------------------------------------
 ; BEEP音（19h）
@@ -58,6 +58,8 @@ g_bios_beep_:
 	mv	R0, R1
 	andi	R0, #0x00ff
 	st	R0, 5(X0)
+	eor	R0, R0
+	st	R0, 6(X0)
 
 	bald	g_hshk_initiate_send
 	mv	R1, R0

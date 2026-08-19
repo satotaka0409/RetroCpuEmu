@@ -34,7 +34,11 @@ export type CpuHandshakeAgentOptions = {
   /** ハンドシェイク各段のタイムアウト (ms) */
   timeoutMs?: number;
   /** 転送 1 件ごとの通知（ログ用） */
-  onTransaction?: (cmd: number, frame: Uint8Array, response: Uint8Array) => void;
+  onTransaction?: (
+    cmd: number,
+    frame: Uint8Array,
+    response: Uint8Array,
+  ) => void;
   /** 転送失敗の通知（ログ用。ループは継続する） */
   onError?: (err: Error) => void;
   /**

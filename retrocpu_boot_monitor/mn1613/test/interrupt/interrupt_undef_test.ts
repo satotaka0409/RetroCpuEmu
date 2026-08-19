@@ -111,10 +111,9 @@ async function runUndefUntilMainLoop(
     IISR: 0,
   });
 
-  const [status] = await Promise.all([
-    run(UNDEF_WORD_ADDR, s.maxCycles),
-    mock.handleOneRequest(),
-  ]);
+  const io = mock.handleOneRequest();
+  const status = await run(UNDEF_WORD_ADDR, s.maxCycles);
+  await io;
   expect(status).toBe("halted");
 }
 

@@ -12,10 +12,7 @@ import {
   PHYS_WORD_MASK,
   type DebugViewState,
 } from "./mockState";
-import {
-  pickAndLoadProgram,
-  ProgramSession,
-} from "../load/loadProgramUi";
+import { pickAndLoadProgram, ProgramSession } from "../load/loadProgramUi";
 import { entryLabelName } from "../load/programSession";
 import { DebugIoClient } from "../net/debugIo";
 
@@ -153,7 +150,7 @@ export class DebugPanel {
   }
 
   /**
-   * 初期表示を g_main（または HEX 最小）から逆アセンブルし、handshake 13h で読む。
+   * 初期表示を g_main（または HEX 最小）から逆アセンブルし、handshake 83h で読む。
    */
   private async onWebviewReady(): Promise<void> {
     const entry = await this.entryReady;
@@ -199,7 +196,7 @@ export class DebugPanel {
         session.loadHex(Buffer.from(ihxBytes).toString("utf8"), ihxPath);
         this.log?.appendLine(`hex: ${ihxPath}`);
       } catch {
-        this.log?.appendLine(`hex: ${ihxPath} なし（13h 待ち）`);
+        this.log?.appendLine(`hex: ${ihxPath} なし（83h 待ち）`);
       }
       const cdbText = Buffer.from(
         await vscode.workspace.fs.readFile(cdbUri),
@@ -207,13 +204,13 @@ export class DebugPanel {
       session.loadCdb(cdbText, cdbUri.fsPath);
       const word = (session.entryWord || DEFAULT_ENTRY_WORD) & PHYS_WORD_MASK;
       const name = entryLabelName(session) ?? "HEX最小";
-      this.log?.appendLine(
-        `entry: ${cdbUri.fsPath} ${name}=${hex5(word)}h`,
-      );
+      this.log?.appendLine(`entry: ${cdbUri.fsPath} ${name}=${hex5(word)}h`);
       return word;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.log?.appendLine(`entry: 読込失敗 ${msg} → ${hex5(DEFAULT_ENTRY_WORD)}h`);
+      this.log?.appendLine(
+        `entry: 読込失敗 ${msg} → ${hex5(DEFAULT_ENTRY_WORD)}h`,
+      );
       session.entryWord = DEFAULT_ENTRY_WORD;
       return DEFAULT_ENTRY_WORD;
     }
@@ -242,10 +239,7 @@ export class DebugPanel {
       return;
     }
     const win = memFetchRange(center);
-    if (
-      win.lo === this.state.memCacheLo &&
-      win.hi === this.state.memCacheHi
-    ) {
+    if (win.lo === this.state.memCacheLo && win.hi === this.state.memCacheHi) {
       return;
     }
     void this.requestMemWindow(center, firstAddr & PHYS_WORD_MASK);
@@ -284,7 +278,7 @@ export class DebugPanel {
   }
 
   /**
-   * 進行中の 13h が終わったら、残っているダンプ／逆アセンブル要求を続ける。
+   * 進行中の 83h が終わったら、残っているダンプ／逆アセンブル要求を続ける。
    */
   private drainIoQueue(): void {
     const mem = this.memQueued;
@@ -326,7 +320,10 @@ export class DebugPanel {
    * @param centerWord 窓の中心
    * @param scrollTo 再描画後に合わせるワード
    */
-  async requestDisasmWindow(centerWord: number, scrollTo: number): Promise<void> {
+  async requestDisasmWindow(
+    centerWord: number,
+    scrollTo: number,
+  ): Promise<void> {
     const center = centerWord & PHYS_WORD_MASK;
     const scroll = scrollTo & PHYS_WORD_MASK;
     if (this.ioBusy) {
@@ -343,7 +340,7 @@ export class DebugPanel {
   }
 
   /**
-   * IO→CPU ハンドシェイク 13h で窓を読む。失敗時は 0 埋め（モックは出さない）。
+   * IO→CPU ハンドシェイク 83h で窓を読む。失敗時は 0 埋め（モックは出さない）。
    * @param centerWord 中心
    * @param scrollTo スクロール先
    */
@@ -373,7 +370,7 @@ export class DebugPanel {
   }
 
   /**
-   * 13h で窓を読み、その範囲を逆アセンブルする。
+   * 83h で窓を読み、その範囲を逆アセンブルする。
    * @param centerWord 中心
    * @param scrollTo スクロール先
    */
@@ -409,7 +406,7 @@ export class DebugPanel {
   }
 
   /**
-   * 物理ワード窓を 13h で読む。ダンプ行も返す。
+   * 物理ワード窓を 83h で読む。ダンプ行も返す。
    * @param win 取得範囲
    * @param kind ログ用
    * @returns ダンプとメモ
@@ -430,12 +427,12 @@ export class DebugPanel {
     try {
       const io = this.requireIo(host, port);
       this.log?.appendLine(
-        `${kind} 13h ${host}:${port} word ${hex5(win.lo)}–${hex5(win.hi)} (${win.wordCount} words)`,
+        `${kind} 83h ${host}:${port} word ${hex5(win.lo)}–${hex5(win.hi)} (${win.wordCount} words)`,
       );
       const bytes = await io.memRead(win.lo * 2, win.wordCount * 2);
       dump = memDumpFromBeBytes(win.lo, bytes);
       this.ensureSession().patchBytes(win.lo * 2, bytes);
-      memNote = `handshake 13h OK  ${hex5(win.lo)}–${hex5(win.hi)}`;
+      memNote = `handshake 83h OK  ${hex5(win.lo)}–${hex5(win.hi)}`;
       this.log?.appendLine(memNote);
     } catch (e) {
       this.io?.close();
@@ -478,7 +475,10 @@ export class DebugPanel {
     this.state = loaded.state;
     void this.panel.webview.postMessage({ type: "state", state: this.state });
     void this.requestMemWindow(this.state.memStart, this.state.memStart);
-    void this.requestDisasmWindow(this.state.disasmStart, this.state.disasmStart);
+    void this.requestDisasmWindow(
+      this.state.disasmStart,
+      this.state.disasmStart,
+    );
     const cdbNote = this.session.cdbPath
       ? pathBase(this.session.cdbPath)
       : "CDB なし";

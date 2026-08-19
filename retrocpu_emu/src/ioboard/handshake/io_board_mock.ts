@@ -14,9 +14,10 @@ import {
 } from "../../cpuboard/mn1613/mn1613";
 import type { CpuIoSignals } from "../../cpuboard/mn1613/mn1613ioport";
 import {
+  cpuToIoRemainingSize,
   CpuToIoCommandDispatcher,
-  CPU_PAYLOAD_REMAINING_SIZE,
   type BeepParams,
+  type CpuStateNotifyInfo,
   type CpuToIoHandlers,
   type LedDisplayData,
   type TimerParams,
@@ -64,7 +65,7 @@ export type IoBoardMockState = {
   pcKey: { ascii: number; keyCode: number };
   lastBeep: BeepParams | null;
   lastTimer: TimerParams | null;
-  /** 未定義命令LED（13h）。true=点灯 */
+  /** 未定義命令LED（未定義命令通知で点灯）。true=点灯 */
   undefLed: boolean;
   addrBreakNo: number;
   /** 直近のブレイク通知（1Ah）。未受信は null */
@@ -74,26 +75,31 @@ export type IoBoardMockState = {
     flags: number;
     breakCount: number;
     historyCount: number;
+    historyEntries: Uint8Array[];
     addr: number;
   } | null;
   /** 直近のステップ通知（1Bh）。未受信は null */
-  lastStepNotify: {
-    addr: number;
-    r0: number;
-    r1: number;
-    r2: number;
-    r3: number;
-    r4: number;
-    sp: number;
-    str: number;
-    ic: number;
-    csbrSsbr: number;
-    tsr: number;
-    npp: number;
-    stack: number[];
-  } | null;
+  lastStepNotify: CpuStateNotifyInfo | null;
+  /** 直近の未定義命令通知（13h）。未受信は null */
+  lastUndefNotify: CpuStateNotifyInfo | null;
   /** 64bit タイマー（上位バイトが [0]） */
   timestamp: Uint8Array;
+  /** 1Ch: PCF8523 生レジスタ（seconds..years の 7 バイト） */
+  rtcRaw: Uint8Array;
+  /** 1Dh: MCP9808 Ambient Temperature (0x05) 生値 */
+  tempRaw: number;
+  /** 1Eh: TCS34725 RGBC 生値 */
+  lightRaw: {
+    clear: number;
+    red: number;
+    green: number;
+    blue: number;
+  };
+  /** 1Fh: VL53L1X 生値 */
+  distanceRaw: {
+    distanceMm: number;
+    rangeStatus: number;
+  };
   log: IoBoardMockLogEntry[];
 };
 
@@ -139,7 +145,12 @@ export function createIoBoardCommandState(): IoBoardMockState {
     addrBreakNo: 0,
     lastBreakNotify: null,
     lastStepNotify: null,
+    lastUndefNotify: null,
     timestamp: new Uint8Array(8),
+    rtcRaw: new Uint8Array(7),
+    tempRaw: 0,
+    lightRaw: { clear: 0, red: 0, green: 0, blue: 0 },
+    distanceRaw: { distanceMm: 0, rangeStatus: 0 },
     log: [],
   };
 }
@@ -161,7 +172,12 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
   state.addrBreakNo = fresh.addrBreakNo;
   state.lastBreakNotify = fresh.lastBreakNotify;
   state.lastStepNotify = fresh.lastStepNotify;
+  state.lastUndefNotify = fresh.lastUndefNotify;
   state.timestamp = fresh.timestamp;
+  state.rtcRaw = fresh.rtcRaw;
+  state.tempRaw = fresh.tempRaw;
+  state.lightRaw = fresh.lightRaw;
+  state.distanceRaw = fresh.distanceRaw;
   state.log = fresh.log;
   resetUndefLed();
   resetLcdConsole();
@@ -211,6 +227,24 @@ export function createDefaultCpuToIoHandlers(
   timer?: IoTimer | null,
   timeSource?: IoTimeSource,
 ): CpuToIoHandlers {
+  const normalizeCpuStateNotify = (
+    info: CpuStateNotifyInfo,
+  ): CpuStateNotifyInfo => ({
+    addr: info.addr >>> 0,
+    r0: info.r0 & 0xffff,
+    r1: info.r1 & 0xffff,
+    r2: info.r2 & 0xffff,
+    r3: info.r3 & 0xffff,
+    r4: info.r4 & 0xffff,
+    sp: info.sp & 0xffff,
+    str: info.str & 0xffff,
+    ic: info.ic & 0xffff,
+    csbrSsbr: info.csbrSsbr & 0xffff,
+    tsr: info.tsr & 0xffff,
+    npp: info.npp & 0xff,
+    stack: info.stack.slice(0, 16),
+  });
+
   return {
     onModeSet(mode) {
       state.mode = mode;
@@ -265,11 +299,6 @@ export function createDefaultCpuToIoHandlers(
         status: RESPONSE_CODE.OK,
       };
     },
-    onUndefLed(on) {
-      state.undefLed = on;
-      applyUndefLedCommand(on);
-      return RESPONSE_CODE.OK;
-    },
     onBreakNotify(info) {
       state.lastBreakNotify = {
         kind: info.kind & 0xff,
@@ -277,26 +306,19 @@ export function createDefaultCpuToIoHandlers(
         flags: info.flags & 0xff,
         breakCount: info.breakCount & 0xff,
         historyCount: info.historyCount & 0xff,
+        historyEntries: info.historyEntries.map((ent) => ent.slice()),
         addr: info.addr >>> 0,
       };
       return RESPONSE_CODE.OK;
     },
     onStepNotify(info) {
-      state.lastStepNotify = {
-        addr: info.addr >>> 0,
-        r0: info.r0 & 0xffff,
-        r1: info.r1 & 0xffff,
-        r2: info.r2 & 0xffff,
-        r3: info.r3 & 0xffff,
-        r4: info.r4 & 0xffff,
-        sp: info.sp & 0xffff,
-        str: info.str & 0xffff,
-        ic: info.ic & 0xffff,
-        csbrSsbr: info.csbrSsbr & 0xffff,
-        tsr: info.tsr & 0xffff,
-        npp: info.npp & 0xff,
-        stack: info.stack.slice(0, 16),
-      };
+      state.lastStepNotify = normalizeCpuStateNotify(info);
+      return RESPONSE_CODE.OK;
+    },
+    onUndefNotify(info) {
+      state.lastUndefNotify = normalizeCpuStateNotify(info);
+      state.undefLed = true;
+      applyUndefLedCommand(true);
       return RESPONSE_CODE.OK;
     },
     onLcdControl(frame) {
@@ -304,6 +326,34 @@ export function createDefaultCpuToIoHandlers(
     },
     onLcdText(frame) {
       return lcdConsole.handleTextFrame(frame);
+    },
+    getRtcRaw() {
+      return {
+        regs: state.rtcRaw.slice(0, 7),
+        status: RESPONSE_CODE.OK,
+      };
+    },
+    getTempRaw() {
+      return {
+        raw: state.tempRaw & 0xffff,
+        status: RESPONSE_CODE.OK,
+      };
+    },
+    getLightRaw() {
+      return {
+        clear: state.lightRaw.clear & 0xffff,
+        red: state.lightRaw.red & 0xffff,
+        green: state.lightRaw.green & 0xffff,
+        blue: state.lightRaw.blue & 0xffff,
+        status: RESPONSE_CODE.OK,
+      };
+    },
+    getDistanceRaw() {
+      return {
+        distanceMm: state.distanceRaw.distanceMm & 0xffff,
+        rangeStatus: state.distanceRaw.rangeStatus & 0x1f,
+        status: RESPONSE_CODE.OK,
+      };
     },
   };
 }
@@ -514,9 +564,7 @@ export class IoBoardHandshakeMock {
    */
   handleOneRequest(): Promise<Uint8Array> {
     return this.withBusLock(async () => {
-      const frame = await this.io.receiveFramed(
-        (cmd) => CPU_PAYLOAD_REMAINING_SIZE[cmd] ?? 0,
-      );
+      const frame = await this.io.receiveFramedAdaptive(cpuToIoRemainingSize);
       const response = this.dispatcher.dispatch(frame);
       this.pushLog({
         at: Date.now(),

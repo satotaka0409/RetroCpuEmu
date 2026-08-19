@@ -56,10 +56,7 @@ describe("loadIntelHex + ProgramSession", () => {
     const hex = wordsToIntelHex(0x0108, [0x2000, 0x2000]);
     const s = new ProgramSession();
     s.loadHex(hex, "t.ihx");
-    s.loadCdb(
-      "L:G$g_main$0$0:0210\nL:F$l_skip$0$0:0212\n",
-      "t.cdb",
-    );
+    s.loadCdb("L:G$g_main$0$0:0210\nL:F$l_skip$0$0:0212\n", "t.cdb");
     const lines = s.buildDisasm(0x108, 4);
     assert.equal(lines[0]!.label, "g_main");
     assert.equal(lines[0]!.addr, "00108");
@@ -80,7 +77,7 @@ describe("loadIntelHex + ProgramSession", () => {
     assert.equal(lines[0]!.current, false);
   });
 
-  test("patchBytes は 13h 窓を重ね書きする", () => {
+  test("patchBytes は 83h 窓を重ね書きする", () => {
     const s = new ProgramSession();
     s.patchBytes(0x0108 * 2, Uint8Array.from([0x20, 0x00]));
     assert.equal(s.readWord(0x108), 0x2000);

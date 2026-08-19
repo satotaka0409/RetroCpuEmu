@@ -46,7 +46,7 @@ async function withCase(
 }
 
 /**
- * IO が HSHK_REQ_1 を上げるまで待つ。
+ * IO が HSHK_IN_REQ を上げるまで待つ。
  * @param mock IO モック
  * @param timeoutMs 上限 ms
  */
@@ -55,9 +55,9 @@ async function waitReq1(
   timeoutMs = 2000,
 ): Promise<void> {
   const t0 = Date.now();
-  while (mock.bus.HSHK_REQ_1 !== 1) {
+  while (mock.bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
-      throw new Error("timeout waiting HSHK_REQ_1");
+      throw new Error("timeout waiting HSHK_IN_REQ");
     }
     await new Promise((r) => setTimeout(r, 1));
   }
@@ -197,7 +197,7 @@ test("IO→CPU 1 バイトが accept / recv / finalize で R1 に入る", async 
     const got = await ioToCpuBytes(mock, [0xc3]);
     expect(got).toEqual([0xc3]);
     expect(mock.bus.HSHK_ENA).toBe(0);
-    expect(mock.bus.HSHK_REQ_1).toBe(0);
+    expect(mock.bus.HSHK_IN_REQ).toBe(0);
     s.expectRegisters({ R0: HSHK_OK, ...SAVED });
   });
 });
@@ -212,7 +212,7 @@ test("IO→CPU 2 バイトを連続受信する", async () => {
 
 test("g_hshk_wait_req1_1 は REQ_1=1 なら OK", async () => {
   await withCase(async (s, mock) => {
-    mock.bus.HSHK_REQ_1 = 1;
+    mock.bus.HSHK_IN_REQ = 1;
     const r = await s.call("g_hshk_wait_req1_1", {
       registers: { ...BASE_REGS },
     });
@@ -223,7 +223,7 @@ test("g_hshk_wait_req1_1 は REQ_1=1 なら OK", async () => {
 
 test("g_hshk_wait_req1_1 は REQ_1 が来なければ NG", async () => {
   await withCase(async (s, mock) => {
-    mock.bus.HSHK_REQ_1 = 0;
+    mock.bus.HSHK_IN_REQ = 0;
     const r = await s.call("g_hshk_wait_req1_1", {
       registers: { ...BASE_REGS },
     });

@@ -29,13 +29,17 @@ export function withMn1613CpuLog(
   testMetaUrl: string,
   opts?: { cpuLogMode?: CpuLogMode },
 ): JsonTestSettings {
+  const envMode = process.env.MN1613_CPU_LOG_MODE;
+  const envCpuLogMode: CpuLogMode | undefined =
+    envMode === "checkpoint" || envMode === "instruction" ? envMode : undefined;
+  const selectedMode = opts?.cpuLogMode ?? envCpuLogMode;
   const stem = path
     .basename(fileURLToPath(testMetaUrl))
     .replace(/_test\.ts$/i, "");
   return {
     ...settings,
     cpuLogFile: path.join(MN1613_TEST_LOG_DIR, `${stem}.log`),
-    ...(opts?.cpuLogMode ? { cpuLogMode: opts.cpuLogMode } : {}),
+    ...(selectedMode ? { cpuLogMode: selectedMode } : {}),
   };
 }
 

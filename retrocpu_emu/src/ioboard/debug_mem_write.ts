@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのメモリ書き込み（TCP 14h → ハンドシェイク 14h）
+ * Cursor 拡張 ↔ IO ボードのメモリ書き込み（TCP 84h → ハンドシェイク 84h）
  * 根拠: HandShake.mdc メモリ書き込み、retrocpu_debug.mdc メモリダンプ
  */
 
@@ -9,7 +9,7 @@ import {
   MEM_WRITE_REQ_HEADER_LEN,
 } from "../shared/handshake/handshake_type";
 
-/** 14h 要求（ヘッダ＋データ） */
+/** 84h 要求（ヘッダ＋データ） */
 export type MemWriteReq = {
   /** 開始バイトアドレス */
   byteAddr: number;
@@ -18,7 +18,7 @@ export type MemWriteReq = {
 };
 
 /**
- * 14h 要求フレームを組み立てる。
+ * 84h 要求フレームを組み立てる。
  * @param byteAddr 開始バイトアドレス
  * @param data 書き込むバイト列
  * @returns cmd + addr32 BE + count32 BE + data
@@ -44,24 +44,18 @@ export function encodeMemWriteFrame(
 }
 
 /**
- * 14h 要求を読む。
- * @param frame 先頭が 14h、長さ 9+count
+ * 84h 要求を読む。
+ * @param frame 先頭が 84h、長さ 9+count
  * @returns フィールド。不正なら null
  */
 export function parseMemWriteFrame(frame: Uint8Array): MemWriteReq | null {
   if (frame.length < MEM_WRITE_REQ_HEADER_LEN) return null;
   if (frame[0] !== CMD_IO_TO_CPU.MEM_WRITE) return null;
   const byteAddr =
-    ((frame[1]! << 24) |
-      (frame[2]! << 16) |
-      (frame[3]! << 8) |
-      frame[4]!) >>>
+    ((frame[1]! << 24) | (frame[2]! << 16) | (frame[3]! << 8) | frame[4]!) >>>
     0;
   const byteCount =
-    ((frame[5]! << 24) |
-      (frame[6]! << 16) |
-      (frame[7]! << 8) |
-      frame[8]!) >>>
+    ((frame[5]! << 24) | (frame[6]! << 16) | (frame[7]! << 8) | frame[8]!) >>>
     0;
   if (byteCount > DEBUG_MEM_MAX_BYTES) return null;
   if (frame.length < MEM_WRITE_REQ_HEADER_LEN + byteCount) return null;

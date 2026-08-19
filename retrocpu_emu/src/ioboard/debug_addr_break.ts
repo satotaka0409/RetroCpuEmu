@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（10h / 11h）
+ * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（80h / 81h）
  * 根拠: retrocpu_debug.mdc「アドレスブレイク設定」「メモリ/IOブレイク解除」
  * 線上レイアウトは HandShake.mdc と同じ。TCP も同じバイナリを載せる。
  */
@@ -16,7 +16,7 @@ import {
   RESPONSE_CODE,
 } from "../shared/handshake/handshake_type";
 
-/** 10h 設定フレーム（コマンド除くフィールド） */
+/** 80h 設定フレーム（コマンド除くフィールド） */
 export type AddrBreakSetFields = {
   /** スロット 0–7 */
   slot: number;
@@ -31,11 +31,13 @@ export type AddrBreakSetFields = {
 };
 
 /**
- * 10h の TCP／線上フレーム（10 バイト）を組み立てる。
+ * 80h の TCP／線上フレーム（10 バイト）を組み立てる。
  * @param fields スロット・フラグ・アドレス・比較データ
  * @returns cmd + 9 バイト
  */
-export function encodeAddrBreakSetFrame(fields: AddrBreakSetFields): Uint8Array {
+export function encodeAddrBreakSetFrame(
+  fields: AddrBreakSetFields,
+): Uint8Array {
   const addr = fields.addr >>> 0;
   const data = fields.data & 0xffff;
   return Uint8Array.from([
@@ -53,8 +55,8 @@ export function encodeAddrBreakSetFrame(fields: AddrBreakSetFields): Uint8Array 
 }
 
 /**
- * 10h フレームからフィールドを読む。長さ・コマンドが違うと null。
- * @param frame 受信バイト（先頭が 10h、長さ 10）
+ * 80h フレームからフィールドを読む。長さ・コマンドが違うと null。
+ * @param frame 受信バイト（先頭が 80h、長さ 10）
  * @returns フィールド。不正なら null
  */
 export function parseAddrBreakSetFrame(
@@ -67,17 +69,14 @@ export function parseAddrBreakSetFrame(
     flags: frame[2]! & 0xff,
     count: frame[3]! & 0xff,
     addr:
-      ((frame[4]! << 24) |
-        (frame[5]! << 16) |
-        (frame[6]! << 8) |
-        frame[7]!) >>>
+      ((frame[4]! << 24) | (frame[5]! << 16) | (frame[6]! << 8) | frame[7]!) >>>
       0,
     data: ((frame[8]! << 8) | frame[9]!) & 0xffff,
   };
 }
 
 /**
- * 10h のコマンド除く 9 バイトを取り出す。
+ * 80h のコマンド除く 9 バイトを取り出す。
  * @param frame 10 バイトフレーム
  * @returns payload。不正なら null
  */
@@ -87,7 +86,7 @@ export function addrBreakSetPayload(frame: Uint8Array): Uint8Array | null {
 }
 
 /**
- * 11h フレーム（cmd + slot）を組み立てる。
+ * 81h フレーム（cmd + slot）を組み立てる。
  * @param slot ブレイク設定番号（0–7）
  * @returns 2 バイト
  */
@@ -96,8 +95,8 @@ export function encodeAddrBreakClrFrame(slot: number): Uint8Array {
 }
 
 /**
- * 11h のスロット番号を読む。
- * @param frame 受信バイト（先頭が 11h、長さ 2）
+ * 81h のスロット番号を読む。
+ * @param frame 受信バイト（先頭が 81h、長さ 2）
  * @returns スロット。不正なら null
  */
 export function parseAddrBreakClrSlot(frame: Uint8Array): number | null {
@@ -117,7 +116,7 @@ export function isAddrBreakSlot(slot: number): boolean {
 
 /**
  * 受信バッファから次フレームの必要長を返す。ヘッダ不足なら null。
- * 14h は count がヘッダに入ってから全長が決まる。
+ * 84h は count がヘッダに入ってから全長が決まる。
  * @param buf 未処理受信
  * @returns 必要バイト数。まだ足りないときは null
  */
@@ -137,7 +136,7 @@ export function debugPcNeededBytes(buf: Uint8Array): number | null {
 /**
  * コマンド先頭バイトから、続きを含めた必要バイト数を返す。
  * 未知コマンドは 1（そのバイトだけ消費して NG）。
- * 14h は可変長なので {@link debugPcNeededBytes} を使う。
+ * 84h は可変長なので {@link debugPcNeededBytes} を使う。
  * @param cmd 先頭バイト
  * @returns フレーム全長
  */

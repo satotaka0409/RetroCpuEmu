@@ -108,7 +108,7 @@ function breakSetFrame(
 }
 
 /**
- * IO が HSHK_REQ_1 を上げるまで待つ。
+ * IO が HSHK_IN_REQ を上げるまで待つ。
  * @param mock IO モック
  * @param timeoutMs 上限 ms
  */
@@ -117,9 +117,9 @@ async function waitReq1(
   timeoutMs = 2000,
 ): Promise<void> {
   const t0 = Date.now();
-  while (mock.bus.HSHK_REQ_1 !== 1) {
+  while (mock.bus.HSHK_IN_REQ !== 1) {
     if (Date.now() - t0 > timeoutMs) {
-      throw new Error("timeout waiting HSHK_REQ_1");
+      throw new Error("timeout waiting HSHK_IN_REQ");
     }
     await new Promise((r) => setTimeout(r, 1));
   }
@@ -170,7 +170,7 @@ function be16(buf: Uint8Array, off: number): number {
 }
 
 /**
- * 監視アドレスへ自己分岐を置き、INT2 許可で実行する。
+ * 監視アドレスへ自己分岐を置き、INT1 許可で実行する。
  * @param s セッション
  */
 function loadSelfLoop(s: Mn1613AsmSession): void {
@@ -200,7 +200,7 @@ async function withCase(
   }
 }
 
-test("命令ブレイク（通常）はフェッチで INT2 し 1Ah を送る", async () => {
+test("命令ブレイク（通常）はフェッチで INT1 し 1Ah を送る", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
@@ -319,13 +319,7 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
       CSBR: 0,
       SSBR: 0,
       IISR: 0,
-      R: {
-        0: 0x1111,
-        1: 0x1001,
-        2: BASE_REGS.R2,
-        3: BASE_REGS.R3,
-        4: BASE_REGS.R4,
-      },
+      R: [0x1111, 0x1001, BASE_REGS.R2, BASE_REGS.R3, BASE_REGS.R4],
     });
     armCpldFetchBreak(0, WATCH_WORD);
     mock.start();
@@ -424,13 +418,7 @@ test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行�
         CSBR: 0,
         SSBR: 0,
         IISR: 0,
-        R: {
-          0: 0x1234,
-          1: 0x5678,
-          2: BASE_REGS.R2,
-          3: BASE_REGS.R3,
-          4: BASE_REGS.R4,
-        },
+        R: [0x1234, 0x5678, BASE_REGS.R2, BASE_REGS.R3, BASE_REGS.R4],
       });
 
       armCpldFetchBreak(0, WATCH_WORD);

@@ -67,9 +67,9 @@ describe("IoBoardHandshakeMock", () => {
     expect(mock.state.mode).toBe(MODE.FREE);
   });
 
-  it("BEEP(0x14)で lastBeep を保持する", () => {
+  it("BEEP(0x19)で lastBeep を保持する", () => {
     const resp = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x01, 0xb8, 0x00, 0x64]),
+      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x01, 0xb8, 0x00, 0x64, 0x00]),
     );
     expect(resp[0]).toBe(RESPONSE_CODE.OK);
     expect(mock.state.lastBeep).toEqual({ frequencyHz: 440, durationMs: 100 });
@@ -127,18 +127,19 @@ describe("IoBoardHandshakeMock", () => {
     expect(resp[8]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("未定義命令LED(0x13)で state.undefLed を更新する", () => {
+  it("未定義命令通知(0x13)で lastUndefNotify を保持し UNDEF LED を点灯する", () => {
     expect(mock.state.undefLed).toBe(false);
-    const on = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 1]),
-    );
-    expect(on[0]).toBe(RESPONSE_CODE.OK);
+    const frame = new Uint8Array(59);
+    frame[0] = CMD_CPU_TO_IO.UNDEF_NOTIFY;
+    frame[3] = 0x18;
+    frame[4] = 0x10;
+    frame[0x13] = 0x18;
+    frame[0x14] = 0x10;
+    const resp = dispatcher.dispatch(frame);
+    expect(resp[0]).toBe(RESPONSE_CODE.OK);
+    expect(mock.state.lastUndefNotify).not.toBeNull();
+    expect(mock.state.lastUndefNotify?.addr).toBe(0x00001810);
     expect(mock.state.undefLed).toBe(true);
-    const off = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 0]),
-    );
-    expect(off[0]).toBe(RESPONSE_CODE.OK);
-    expect(mock.state.undefLed).toBe(false);
   });
 
   it("18h で共有 LCD の表示が更新される", () => {

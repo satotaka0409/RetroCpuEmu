@@ -99,7 +99,7 @@ export class IoControlHandshake {
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
-        CMD_IO_TO_CPU.MEM_READ,
+        this.toWireIoToCpuCmd(CMD_IO_TO_CPU.MEM_READ),
         ...u32be(byteAddr >>> 0),
         ...u32be(count),
         0,
@@ -123,7 +123,7 @@ export class IoControlHandshake {
       return RESPONSE_CODE.NG;
     }
     const frame = new Uint8Array(ADDR_BREAK_SET_FRAME_LEN);
-    frame[0] = CMD_IO_TO_CPU.BREAK_MEM_IO_SET;
+    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.BREAK_MEM_IO_SET);
     frame.set(payload, 1);
     const reply = await this.sendReceive(frame, 1);
     return (reply[0] ?? RESPONSE_CODE.NG) & 0xff;
@@ -136,7 +136,7 @@ export class IoControlHandshake {
    */
   async addrBreakClr(slot: number): Promise<number> {
     const frame = Uint8Array.from([
-      CMD_IO_TO_CPU.BREAK_MEM_IO_CLR,
+      this.toWireIoToCpuCmd(CMD_IO_TO_CPU.BREAK_MEM_IO_CLR),
       slot & 0xff,
     ]);
     const reply = await this.sendReceive(frame, 1);
@@ -151,7 +151,7 @@ export class IoControlHandshake {
   async memWrite(byteAddr: number, data: Uint8Array): Promise<void> {
     const n = data.length >>> 0;
     const frame = new Uint8Array(10 + n);
-    frame[0] = CMD_IO_TO_CPU.MEM_WRITE;
+    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.MEM_WRITE);
     frame.set(u32be(byteAddr >>> 0), 1);
     frame.set(u32be(n), 5);
     frame[9] = 0;
@@ -179,7 +179,7 @@ export class IoControlHandshake {
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
-        CMD_IO_TO_CPU.IO_READ,
+        this.toWireIoToCpuCmd(CMD_IO_TO_CPU.IO_READ),
         (ioAddr >>> 8) & 0xff,
         ioAddr & 0xff,
         count,
@@ -204,7 +204,7 @@ export class IoControlHandshake {
       throw new Error("handshake 16h count");
     }
     const frame = new Uint8Array(4 + n);
-    frame[0] = CMD_IO_TO_CPU.IO_WRITE;
+    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.IO_WRITE);
     frame[1] = (ioAddr >>> 8) & 0xff;
     frame[2] = ioAddr & 0xff;
     frame[3] = n & 0xff;
@@ -244,6 +244,42 @@ export class IoControlHandshake {
     frame[0] = first;
     frame.set(rest, 1);
     return frame;
+  }
+
+  /**
+   * 先頭から可変長ルールで CPU→IO フレーム全体を受信する。
+   * 線上は 2 バイト単位だが、返却は論理バイト列（末尾パディング除去）。
+   *
+   * @param remainingFromSoFar 現在までの論理バイト列に対し、残り必要バイト数を返す
+   */
+  async receiveFramedAdaptive(
+    remainingFromSoFar: (frameSoFar: Uint8Array) => number,
+  ): Promise<Uint8Array> {
+    await this.waitForCpuRequest();
+
+    const [first, second] = await this.receiveUnitFromCpu();
+    const bytes: number[] = [first & 0xff];
+    const pending: number[] = [second & 0xff];
+
+    while (true) {
+      const soFar = Uint8Array.from(bytes);
+      const rem = Math.max(0, remainingFromSoFar(soFar) | 0);
+      if (rem === 0) break;
+
+      if (pending.length === 0) {
+        try {
+          const [b0, b1] = await this.receiveUnitFromCpu();
+          pending.push(b0 & 0xff, b1 & 0xff);
+        } catch {
+          // 可変長拡張が来ない実装とも相互運用できるよう、ここまでで確定する。
+          break;
+        }
+      }
+      bytes.push(pending.shift()!);
+    }
+
+    await this.finalizeReceive();
+    return Uint8Array.from(bytes);
   }
 
   /** CPU の REQ_0 を待って依頼を受理する（DACK=0 → ENA=1 → REQ_0=0 待ち） */
@@ -345,5 +381,17 @@ export class IoControlHandshake {
   /** CPU が ENA=0 にするのを待って送信完了とする */
   private async finalizeSend(): Promise<void> {
     await this.wait(() => this.bus.HSHK_ENA === 0);
+  }
+
+  /**
+   * IO→CPU コマンドIDを線上値へ正規化する。
+   * 高位 API では 0x80-0x88 を使うが、ハンドシェイク線上は 0x10-0x18。
+   */
+  private toWireIoToCpuCmd(cmd: number): number {
+    const v = cmd & 0xff;
+    if (v >= 0x80 && v <= 0x88) {
+      return (v - 0x70) & 0xff;
+    }
+    return v;
   }
 }

@@ -41,11 +41,31 @@ function makeMockHandlers(): CpuToIoHandlers {
       timestamp: new Uint8Array(8),
       status: RESPONSE_CODE.OK,
     }),
-    onUndefLed: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onBreakNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onStepNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
+    onUndefNotify: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdControl: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
     onLcdText: vi.fn().mockReturnValue(RESPONSE_CODE.OK),
+    getRtcRaw: vi.fn().mockReturnValue({
+      regs: new Uint8Array([0x45, 0x59, 0x23, 0x31, 0x00, 0x12, 0x24]),
+      status: RESPONSE_CODE.OK,
+    }),
+    getTempRaw: vi.fn().mockReturnValue({
+      raw: 0x0190,
+      status: RESPONSE_CODE.OK,
+    }),
+    getLightRaw: vi.fn().mockReturnValue({
+      clear: 0x1234,
+      red: 0x2345,
+      green: 0x3456,
+      blue: 0x4567,
+      status: RESPONSE_CODE.OK,
+    }),
+    getDistanceRaw: vi.fn().mockReturnValue({
+      distanceMm: 0x007b,
+      rangeStatus: 0x09,
+      status: RESPONSE_CODE.OK,
+    }),
   };
 }
 
@@ -60,23 +80,28 @@ describe("CPU_FRAME_SIZE", () => {
   it("LED表示依頼は 15 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(15);
   });
-  it("BEEP は 5 バイト、タイマーは番号込みで 6 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]).toBe(5);
+  it("BEEP は 6 バイト（pad 含む）、タイマーは番号込みで 6 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]).toBe(6);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET]).toBe(6);
   });
   it("時刻取得はコマンドのみ 1 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIME_GET]).toBe(1);
   });
-  it("未定義命令LED は 2 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_LED]).toBe(2);
-  });
-  it("ブレイク通知は 11 バイト、ステップ通知は 59 バイト", () => {
+  it("ブレイク通知は 11 バイト、ステップ/未定義通知は 59 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(11);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(59);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_NOTIFY]).toBe(59);
   });
   it("LCD制御は 5 バイト、文字列表示は 20 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(5);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_TEXT]).toBe(20);
+  });
+
+  it("センサー系 1Ch〜1Fh はコマンドのみ 1 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.RTC_GET_RAW]).toBe(1);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TEMP_GET_RAW]).toBe(1);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LIGHT_GET_RAW]).toBe(1);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.DISTANCE_GET_RAW]).toBe(1);
   });
 });
 
@@ -248,7 +273,7 @@ describe("CpuToIoCommandDispatcher — BEEP音(0x19)", () => {
 
   it("onBeep が呼ばれ OK を返す", () => {
     const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x01, 0xb8, 0x01, 0xf4]),
+      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x01, 0xb8, 0x01, 0xf4, 0x00]),
     );
     expect(handlers.onBeep).toHaveBeenCalledOnce();
     expect(response[0]).toBe(RESPONSE_CODE.OK);
@@ -256,7 +281,7 @@ describe("CpuToIoCommandDispatcher — BEEP音(0x19)", () => {
 
   it("onBeep に渡される周波数・長さが正確", () => {
     dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x12, 0x34, 0xab, 0xcd]),
+      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x12, 0x34, 0xab, 0xcd, 0x00]),
     );
     const received = vi.mocked(handlers.onBeep).mock.calls[0][0];
     expect(received.frequencyHz).toBe(0x1234);
@@ -265,7 +290,7 @@ describe("CpuToIoCommandDispatcher — BEEP音(0x19)", () => {
 
   it("frequencyHz=0 は停止指示として正しく渡される", () => {
     dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x00, 0x00, 0x00, 0x00]),
+      new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x00, 0x00, 0x00, 0x00, 0x00]),
     );
     const received = vi.mocked(handlers.onBeep).mock.calls[0][0];
     expect(received.frequencyHz).toBe(0);
@@ -339,37 +364,6 @@ describe("CpuToIoCommandDispatcher — 時刻取得(0x11)", () => {
   });
 });
 
-describe("CpuToIoCommandDispatcher — 未定義命令LED(0x13)", () => {
-  let handlers: CpuToIoHandlers;
-  let dispatcher: CpuToIoCommandDispatcher;
-
-  beforeEach(() => {
-    handlers = makeMockHandlers();
-    dispatcher = new CpuToIoCommandDispatcher(handlers);
-  });
-
-  it("Bit0=1 で onUndefLed(true) が呼ばれ OK を返す", () => {
-    const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 1]),
-    );
-    expect(handlers.onUndefLed).toHaveBeenCalledWith(true);
-    expect(response[0]).toBe(RESPONSE_CODE.OK);
-  });
-
-  it("Bit0=0 で onUndefLed(false) が呼ばれる", () => {
-    dispatcher.dispatch(new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 0]));
-    expect(handlers.onUndefLed).toHaveBeenCalledWith(false);
-  });
-
-  it("0/1 以外は NG で onUndefLed は呼ばれない", () => {
-    const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.UNDEF_LED, 2]),
-    );
-    expect(handlers.onUndefLed).not.toHaveBeenCalled();
-    expect(response[0]).toBe(RESPONSE_CODE.NG);
-  });
-});
-
 describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
@@ -379,18 +373,18 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     dispatcher = new CpuToIoCommandDispatcher(handlers);
   });
 
-  it("1Ah を onBreakNotify へ渡し OK を返す", () => {
+  it("1Ah ヘッダ（件数0）を onBreakNotify へ渡し OK を返す", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
       3,
-      4,
+      0,
       0xc2,
       9,
       0x00,
       0x00,
       0x30,
       0x00,
-      4,
+      0,
       0,
     ]);
     const response = dispatcher.dispatch(frame);
@@ -399,39 +393,84 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
       slot: 3,
       flags: 0xc2,
       breakCount: 9,
-      historyCount: 4,
+      historyCount: 0,
+      historyEntries: [],
       addr: 0x00003000,
     });
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("historyCount=16（満杯）をそのまま通知できる", () => {
-    const frame = new Uint8Array([
-      CMD_CPU_TO_IO.BREAK_NOTIFY,
-      7,
-      16,
-      0x82,
+  it("履歴エントリを件数分そのまま通知できる", () => {
+    const count = 2;
+    const entries = new Uint8Array(count * 66);
+    entries[0] = 0xaa;
+    entries[65] = 0xbb;
+    entries[66] = 0xcc;
+    entries[131] = 0xdd;
+
+    const frame = new Uint8Array(11 + entries.length);
+    frame.set(
+      [
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        7,
+        count,
+        0x82,
+        0,
+        0x00,
+        0x00,
+        0x40,
+        0x00,
+        count,
+        0,
+      ],
       0,
-      0x00,
-      0x00,
-      0x40,
-      0x00,
-      16,
-      0,
-    ]);
+    );
+    frame.set(entries, 11);
+
     const response = dispatcher.dispatch(frame);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith({
       kind: 1,
       slot: 7,
       flags: 0x82,
       breakCount: 0,
-      historyCount: 16,
+      historyCount: count,
+      historyEntries: [entries.slice(0, 66), entries.slice(66, 132)],
       addr: 0x00004000,
     });
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
+  it("historyCount=16（満杯）をそのまま通知できる", () => {
+    const count = 16;
+    const entries = new Uint8Array(count * 66);
+    const frame = new Uint8Array(11 + entries.length);
+    frame.set(
+      [
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        2,
+        count,
+        0xc2,
+        3,
+        0x00,
+        0x00,
+        0x30,
+        0x00,
+        0,
+        0xff,
+      ],
+      0,
+    );
+    frame.set(entries, 11);
+    dispatcher.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        historyCount: 16,
+      }),
+    );
+  });
+
   it("履歴件数はヘッダ位置(02h)を優先し、末尾の重複値(09h)に影響されない", () => {
+    const entries = new Uint8Array(16 * 66);
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
       2,
@@ -445,7 +484,10 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
       0,
       0xff,
     ]);
-    dispatcher.dispatch(frame);
+    const full = new Uint8Array(11 + entries.length);
+    full.set(frame, 0);
+    full.set(entries, 11);
+    dispatcher.dispatch(full);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith(
       expect.objectContaining({
         historyCount: 16,
@@ -519,6 +561,31 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     expect(handlers.onBreakNotify).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);
   });
+
+  it("履歴件数に対してエントリ不足でもヘッダ情報は通知できる（後方互換）", () => {
+    const response = dispatcher.dispatch(
+      new Uint8Array([
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ]),
+    );
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        historyCount: 1,
+        historyEntries: [],
+      }),
+    );
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
 });
 
 describe("CpuToIoCommandDispatcher — ステップ通知(0x1B)", () => {
@@ -562,6 +629,44 @@ describe("CpuToIoCommandDispatcher — ステップ通知(0x1B)", () => {
   });
 });
 
+describe("CpuToIoCommandDispatcher — 未定義命令通知(0x13)", () => {
+  let handlers: CpuToIoHandlers;
+  let dispatcher: CpuToIoCommandDispatcher;
+
+  beforeEach(() => {
+    handlers = makeMockHandlers();
+    dispatcher = new CpuToIoCommandDispatcher(handlers);
+  });
+
+  it("13h を onUndefNotify へ渡し OK を返す", () => {
+    const frame = new Uint8Array(59);
+    frame[0] = CMD_CPU_TO_IO.UNDEF_NOTIFY;
+    frame[3] = 0x18;
+    frame[4] = 0x02;
+    frame[5] = 0x22;
+    frame[6] = 0x22;
+    frame[0x13] = 0x18;
+    frame[0x14] = 0x02;
+    frame[0x19] = 0x05;
+    frame[0x1b] = 0xde;
+    frame[0x1c] = 0xad;
+    const response = dispatcher.dispatch(frame);
+    expect(handlers.onUndefNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        addr: 0x00001802,
+        r0: 0x2222,
+        ic: 0x1802,
+        npp: 0x05,
+      }),
+    );
+    const arg = (handlers.onUndefNotify as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as { stack: number[] };
+    expect(arg.stack[0]).toBe(0xdead);
+    expect(arg.stack).toHaveLength(16);
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
+});
+
 describe("CpuToIoCommandDispatcher — LCD(0x17/0x18)", () => {
   let handlers: CpuToIoHandlers;
   let dispatcher: CpuToIoCommandDispatcher;
@@ -592,6 +697,68 @@ describe("CpuToIoCommandDispatcher — LCD(0x17/0x18)", () => {
     );
     expect(handlers.onLcdControl).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);
+  });
+});
+
+describe("CpuToIoCommandDispatcher — センサー生値(0x1C-0x1F)", () => {
+  let handlers: CpuToIoHandlers;
+  let dispatcher: CpuToIoCommandDispatcher;
+
+  beforeEach(() => {
+    handlers = makeMockHandlers();
+    dispatcher = new CpuToIoCommandDispatcher(handlers);
+  });
+
+  it("1Ch: RTC 生レジスタ 7 バイト + status を返す", () => {
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.RTC_GET_RAW]),
+    );
+    expect(handlers.getRtcRaw).toHaveBeenCalledOnce();
+    expect(response).toEqual(
+      new Uint8Array([0x45, 0x59, 0x23, 0x31, 0x00, 0x12, 0x24, 0x00]),
+    );
+  });
+
+  it("1Dh: 温度生値 raw16(BE) + status を返す", () => {
+    vi.mocked(handlers.getTempRaw).mockReturnValue({
+      raw: 0x1f90,
+      status: RESPONSE_CODE.OK,
+    });
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.TEMP_GET_RAW]),
+    );
+    expect(handlers.getTempRaw).toHaveBeenCalledOnce();
+    expect(response).toEqual(new Uint8Array([0x1f, 0x90, 0x00]));
+  });
+
+  it("1Eh: RGBC 生値 (各16bit BE) + status を返す", () => {
+    vi.mocked(handlers.getLightRaw).mockReturnValue({
+      clear: 0xabcd,
+      red: 0x0123,
+      green: 0x4567,
+      blue: 0x89ef,
+      status: RESPONSE_CODE.OK,
+    });
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.LIGHT_GET_RAW]),
+    );
+    expect(handlers.getLightRaw).toHaveBeenCalledOnce();
+    expect(response).toEqual(
+      new Uint8Array([0xab, 0xcd, 0x01, 0x23, 0x45, 0x67, 0x89, 0xef, 0x00]),
+    );
+  });
+
+  it("1Fh: 距離 raw16(BE) + rangeStatus(下位5bit) + status", () => {
+    vi.mocked(handlers.getDistanceRaw).mockReturnValue({
+      distanceMm: 0x0102,
+      rangeStatus: 0xff,
+      status: RESPONSE_CODE.OK,
+    });
+    const response = dispatcher.dispatch(
+      new Uint8Array([CMD_CPU_TO_IO.DISTANCE_GET_RAW]),
+    );
+    expect(handlers.getDistanceRaw).toHaveBeenCalledOnce();
+    expect(response).toEqual(new Uint8Array([0x01, 0x02, 0x1f, 0x00]));
   });
 });
 

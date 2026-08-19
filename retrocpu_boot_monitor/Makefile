@@ -64,9 +64,10 @@ ASM_SRCS := \
 	$(SRC_DIR)/handshake/handshake_beep.asm \
 	$(SRC_DIR)/handshake/handshake_timer.asm \
 	$(SRC_DIR)/handshake/handshake_get_time.asm \
-	$(SRC_DIR)/handshake/handshake_undef_led.asm \
+	$(SRC_DIR)/handshake/handshake_undef.asm \
 	$(SRC_DIR)/handshake/handshake_lcd1.asm \
 	$(SRC_DIR)/handshake/handshake_lcd2.asm \
+	$(SRC_DIR)/handshake/handshake_sensor_raw.asm \
 	$(SRC_DIR)/handshake/handshake_read_memory.asm \
 	$(SRC_DIR)/handshake/handshake_write_memory.asm \
 	$(SRC_DIR)/handshake/handshake_io_rw.asm \
@@ -90,12 +91,13 @@ REL_HSHK_GT   := $(OBJ_DIR)/handshake_get_time.rel
 REL_HSHK_UL   := $(OBJ_DIR)/handshake_undef_led.rel
 REL_HSHK_LCD1 := $(OBJ_DIR)/handshake_lcd1.rel
 REL_HSHK_LCD2 := $(OBJ_DIR)/handshake_lcd2.rel
+REL_HSHK_SR   := $(OBJ_DIR)/handshake_sensor_raw.rel
 REL_HSHK_RM   := $(OBJ_DIR)/handshake_read_memory.rel
 REL_HSHK_WM   := $(OBJ_DIR)/handshake_write_memory.rel
 REL_HSHK_IO   := $(OBJ_DIR)/handshake_io_rw.rel
 REL_HSHK_BH   := $(OBJ_DIR)/handshake_break_hist.rel
 REL_BIOS      := $(OBJ_DIR)/bios_common.rel
-RELS          := $(REL_MAIN) $(REL_INT) $(REL_BP) $(REL_BP_H) $(REL_BP_S) $(REL_BIOS) $(REL_HSHK_C) $(REL_HSHK_M) $(REL_HSHK_AB) $(REL_HSHK_CM) $(REL_HSHK_K) $(REL_HSHK_PK) $(REL_HSHK_L) $(REL_HSHK_B) $(REL_HSHK_T) $(REL_HSHK_GT) $(REL_HSHK_UL) $(REL_HSHK_LCD1) $(REL_HSHK_LCD2) $(REL_HSHK_RM) $(REL_HSHK_WM) $(REL_HSHK_IO) $(REL_HSHK_BH)
+RELS          := $(REL_MAIN) $(REL_INT) $(REL_BP) $(REL_BP_H) $(REL_BP_S) $(REL_BIOS) $(REL_HSHK_C) $(REL_HSHK_M) $(REL_HSHK_AB) $(REL_HSHK_CM) $(REL_HSHK_K) $(REL_HSHK_PK) $(REL_HSHK_L) $(REL_HSHK_B) $(REL_HSHK_T) $(REL_HSHK_GT) $(REL_HSHK_UL) $(REL_HSHK_LCD1) $(REL_HSHK_LCD2) $(REL_HSHK_SR) $(REL_HSHK_RM) $(REL_HSHK_WM) $(REL_HSHK_IO) $(REL_HSHK_BH)
 $(RELS): $(ASM_CLI)
 
 INC_DEPS := \
@@ -210,7 +212,7 @@ $(REL_HSHK_T): $(SRC_DIR)/handshake/handshake_timer.asm $(INC_DEPS) | retrocpu-a
 $(REL_HSHK_GT): $(SRC_DIR)/handshake/handshake_get_time.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_GET_TIME
 
-$(REL_HSHK_UL): $(SRC_DIR)/handshake/handshake_undef_led.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
+$(REL_HSHK_UL): $(SRC_DIR)/handshake/handshake_undef.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_UNDEF_LED
 
 $(REL_HSHK_LCD1): $(SRC_DIR)/handshake/handshake_lcd1.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
@@ -218,6 +220,9 @@ $(REL_HSHK_LCD1): $(SRC_DIR)/handshake/handshake_lcd1.asm $(INC_DEPS) | retrocpu
 
 $(REL_HSHK_LCD2): $(SRC_DIR)/handshake/handshake_lcd2.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_LCD2
+
+$(REL_HSHK_SR): $(SRC_DIR)/handshake/handshake_sensor_raw.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_SENSOR_RAW
 
 $(REL_HSHK_RM): $(SRC_DIR)/handshake/handshake_read_memory.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
 	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module HSHK_READ_MEM
