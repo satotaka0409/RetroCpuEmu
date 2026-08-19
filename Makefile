@@ -1,96 +1,60 @@
-# LCD HELLO WORLD チュートリアル（MN1613）
+# RetroCpuEmu リポジトリ（ワークスペース）
 #
-#   make ihx     … hello_lcd.ihx / .cdb（開始ワード 1800h）
-#   make clean
+#   make / make all / make ihx
+#         ブートモニタ IHX + チュートリアル全サンプル
+#   make monitor      ブートモニタだけ（エミュ F7 RST に必要）
+#   make tutorial     tutorial/ 配下の全プログラム
+#   make cursor_expand  Cursor 拡張（debug_expand / retrocpu_asm_editor）
+#   make tscheck      各 TS プロジェクトの型チェック
+#   make tstest       各 TS プロジェクトのテスト
+#   make help
 #
-# ブートモニタの CDB から BIOS アドレスを取り、ユーザ IHX だけ出す。
-# エミュは RST でモニタを載せたあと、この IHX を DMA し 1800h から RUN。
+# チュートリアル単体は tutorial/ で make。モニタ単体は retrocpu_boot_monitor/ で make ihx。
+# 拡張単体は cursor_expand/ で make。
 
 SHELL := /bin/bash
-REPO_DIR        := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-ROOT_DIR        := $(abspath ../..)
-TUT_DIR         := $(abspath .)
-SRC_DIR         := $(TUT_DIR)/src/mn1613
-BUILD_DIR       := $(TUT_DIR)/build
-OBJ_DIR         := $(BUILD_DIR)/obj
-HEX_DIR         := $(BUILD_DIR)/hex
-TOOLS_DIR       := $(TUT_DIR)/tools
-
-MONITOR_DIR     := $(ROOT_DIR)/retrocpu_boot_monitor
-MONITOR_CDB     := $(MONITOR_DIR)/build/hex/mn1613_mon.cdb
-MONITOR_IHX     := $(MONITOR_DIR)/build/hex/mn1613_mon.ihx
-
-RETROCPU_ASM_DIR ?= $(ROOT_DIR)/retrocpu_asm
-ASM_CLI         := $(RETROCPU_ASM_DIR)/dist/main/cli.js
-SDLD_LINK_CLI   := $(RETROCPU_ASM_DIR)/dist/main/sdldLinkCli.js
-
-SDCC_SRC_DIR    ?= $(HOME)/sdcc-mn1613/sdcc/build/sdcc
-SDCC_BIN_DIR    ?= $(SDCC_SRC_DIR)/bin
-export PATH := $(SDCC_BIN_DIR):$(PATH)
-export SDCC_BIN_DIR
-export SDLD := $(SDCC_BIN_DIR)/sdld
-
-TARGET_NAME     := hello_lcd
-IHX             := $(HEX_DIR)/$(TARGET_NAME).ihx
-CDB             := $(HEX_DIR)/$(TARGET_NAME).cdb
-REL             := $(OBJ_DIR)/$(TARGET_NAME).rel
-BIOS_INC        := $(SRC_DIR)/bios_addrs.inc
-
-.PHONY: all help ihx clean monitor retrocpu-asm-build \
+.PHONY: all help ihx monitor tutorial cursor_expand clean \
 	tscheck tscheck-all \
 	tscheck-retrocpu-emu tscheck-retrocpu-test-framework tscheck-retrocpu-boot-monitor \
 	tscheck-retrocpu-asm tscheck-debug-expand tscheck-asm-editor \
 	tstest tstest-all \
 	tstest-retrocpu-asm tstest-retrocpu-test-framework tstest-retrocpu-boot-monitor \
-	tstest-retrocpu-emu tstest-debug-expand tstest-asm-editor
+	tstest-retrocpu-emu tstest-debug-expand tstest-asm-editor \
+	typescript
 
 all: ihx
 
 help:
-	@echo "tutorial/console_lcd"
-	@echo "  make ihx     $(IHX) と $(CDB)"
-	@echo "  make clean   ビルド成果物を削除"
-
-retrocpu-asm-build:
-	@if [ ! -f "$(ASM_CLI)" ] || [ ! -f "$(SDLD_LINK_CLI)" ]; then \
-		echo "==> building retrocpu_asm"; \
-		cd $(RETROCPU_ASM_DIR) && npm install && npm run build; \
-	fi
-	@test -f "$(ASM_CLI)"
-	@test -f "$(SDLD_LINK_CLI)"
+	@echo "RetroCpuEmu"
+	@echo "  make / make all / make ihx   ブートモニタ + チュートリアル"
+	@echo "  make monitor                 retrocpu_boot_monitor の IHX"
+	@echo "  make tutorial                tutorial/ の全サンプル"
+	@echo "  make cursor_expand           Cursor 拡張 2 件を compile"
+	@echo "  make tscheck                 TypeScript 静的解析"
+	@echo "  make tstest                  TypeScript テスト"
+	@echo "  make clean                   モニタ・チュートリアル・拡張の成果物を削除"
 
 monitor:
-	@$(MAKE) -C $(MONITOR_DIR) ihx
+	@$(MAKE) -C $(REPO_DIR)/retrocpu_boot_monitor ihx
 
-$(MONITOR_CDB):
-	@$(MAKE) -C $(MONITOR_DIR) ihx
+tutorial:
+	@$(MAKE) -C $(REPO_DIR)/tutorial ihx
 
-$(OBJ_DIR):
-	@mkdir -p $@
+cursor_expand:
+	@$(MAKE) -C $(REPO_DIR)/cursor_expand compile
 
-$(HEX_DIR):
-	@mkdir -p $@
-
-$(BIOS_INC): $(MONITOR_CDB) $(TOOLS_DIR)/gen_bios_addrs.mjs
-	node $(TOOLS_DIR)/gen_bios_addrs.mjs $(MONITOR_CDB) > $@
-
-$(REL): $(SRC_DIR)/hello_lcd.asm $(BIOS_INC) | retrocpu-asm-build $(OBJ_DIR)
-	node $(ASM_CLI) --cpu mn1613 $< -o $@ --lst $(basename $@).lst --module HELLO_LCD
-
-$(IHX): $(REL) $(SDLD_LINK_CLI) | $(HEX_DIR)
-	node $(SDLD_LINK_CLI) $(REL) -o $@ --cdb $(CDB)
-
-ihx: $(IHX)
-	@echo "Wrote $(IHX)"
-	@echo "Wrote $(CDB)"
+ihx: monitor tutorial
 
 clean:
-	rm -rf $(BUILD_DIR)
-	rm -f $(BIOS_INC)
+	@$(MAKE) -C $(REPO_DIR)/retrocpu_boot_monitor clean
+	@$(MAKE) -C $(REPO_DIR)/tutorial clean
+	@$(MAKE) -C $(REPO_DIR)/cursor_expand clean
 
 # Run TypeScript static analysis for all TS subprojects with one command.
 tscheck: tscheck-all
+typescript: tscheck
 
 tscheck-all:
 	@failed=0; \

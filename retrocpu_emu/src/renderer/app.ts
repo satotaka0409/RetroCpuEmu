@@ -146,12 +146,17 @@ function initDom(): void {
 
   mountHexKeyboard(kbRoot, {
     onHexClick: (v) => window.emuApi.keyHex(v),
-    onHexDown: (v) => window.emuApi.keyHexHold(v, true),
+    onHexDown: (v) => {
+      beepPlayer.unlock();
+      window.emuApi.keyHexHold(v, true);
+    },
     onHexUp: (v) => window.emuApi.keyHexHold(v, false),
     onFunctionClick: (fn) => {
       beepPlayer.unlock();
       window.emuApi.keyFn(fn);
     },
+    onFunctionDown: (fn) => window.emuApi.keyFnHold(fn, true),
+    onFunctionUp: (fn) => window.emuApi.keyFnHold(fn, false),
     onFunctionLongPress: (fn) => {
       if (fn === "F0") window.emuApi.keyAdsLongPress();
     },

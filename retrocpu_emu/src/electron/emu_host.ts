@@ -184,6 +184,16 @@ export class EmuHost {
     this.io?.postMessage({ type: "key:fn", fn });
   }
 
+  /**
+   * ファンクションキーの押し続けを IO Worker へ送る（14h ビットマップ）。
+   * @param fn "F0"〜"F7"
+   * @param down true=押下、false=離す
+   */
+  keyFnHold(fn: string, down: boolean): void {
+    log.debug("ファンクションキー押下", { fn, down });
+    this.io?.postMessage({ type: "key:fn:hold", fn, down });
+  }
+
   /** ADS 長押し（設定モードの入退）を IO Worker へ送る */
   keyAdsLongPress(): void {
     log.debug("ADS 長押し");

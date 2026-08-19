@@ -103,7 +103,14 @@ describe("IoBoardHandshakeMock", () => {
     expect(ok[8]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("setHexKeyHeld は 4×4 の列ビットを立てて落とす", () => {
+  it("モニターへ戻すと 14h ビットマップを消す", () => {
+    mock.setHexKeys([0x01, 0, 0, 0, 0, 0, 0, 0]);
+    dispatcher.dispatch(new Uint8Array([CMD_CPU_TO_IO.MODE_SET, MODE.FREE]));
+    dispatcher.dispatch(new Uint8Array([CMD_CPU_TO_IO.MODE_SET, MODE.MONITOR]));
+    expect([...mock.state.hexKeys]).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("setHexKeyHeld は HandShake 列0/列3 の Bit0–1 を立てて落とす", () => {
     const state = createIoBoardCommandState();
     setHexKeyHeld(state, 0, true);
     setHexKeyHeld(state, 7, true);

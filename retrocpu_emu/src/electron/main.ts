@@ -252,6 +252,9 @@ if (gotLock) {
       host?.keyHexHold(digit, down),
     );
     ipcMain.on("emu:keyFn", (_e, fn: string) => host?.keyFn(fn));
+    ipcMain.on("emu:keyFnHold", (_e, fn: string, down: boolean) =>
+      host?.keyFnHold(fn, down),
+    );
     ipcMain.on("emu:keyAdsLongPress", () => host?.keyAdsLongPress());
     ipcMain.handle("emu:loadIntelHex", (_e, hex: string) =>
       host!.loadIntelHex(hex),

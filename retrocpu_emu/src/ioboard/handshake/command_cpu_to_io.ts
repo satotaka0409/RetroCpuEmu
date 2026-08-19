@@ -100,7 +100,7 @@ export interface CpuToIoHandlers {
 
   /**
    * 16進キー入力取得 (cmd=0x14): フリーモード時のみ有効。
-   * columns: 列0〜7のキー状態（各バイトの各Bitが1=ON）
+   * columns: 列0〜7のキー状態。Bit3–0 の配置は HandShake.mdc（列0=C 8 4 0）。
    */
   getHexKeys(): { columns: Uint8Array; status: number };
 
@@ -412,7 +412,7 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * 16進キー入力取得 (0x14)
-   * フリーモード時のみ有効。
+   * フリーモードのときのみ有効。モニターは列 0 + NG_MODE_ERROR。
    * 応答: 9バイト = 列0〜7のキー状態(8) + ステータス(1)
    */
   private _handleHexKeyGet(): Uint8Array {

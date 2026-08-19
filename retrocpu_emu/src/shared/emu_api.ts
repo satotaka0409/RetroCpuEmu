@@ -75,6 +75,12 @@ export type EmuApi = {
    */
   keyHexHold: (digit: string, down: boolean) => void;
   keyFn: (fn: string) => void;
+  /**
+   * ファンクションキーの押し続け（ハンドシェイク 14h ビットマップ）。
+   * @param fn "F0"〜"F7"
+   * @param down true=押下、false=離す
+   */
+  keyFnHold: (fn: string, down: boolean) => void;
   keyAdsLongPress: () => void;
   loadIntelHex: (hex: string) => Promise<{
     bytesWritten: number;

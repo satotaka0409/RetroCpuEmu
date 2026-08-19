@@ -34,6 +34,7 @@ import {
   waitCondition,
 } from "../../shared/handshake/handshake_type";
 import { createHandshakeIoPortBridge } from "../../cpuboard/handshake/io_port_bridge";
+import { panelKeyColumnMask } from "../hex_keyboard/key_matrix";
 import { applyLedDisplayCommand } from "../seven_led/io_led";
 import {
   applyUndefLedCommand,
@@ -185,7 +186,7 @@ export function resetIoBoardCommandState(state: IoBoardMockState): void {
 
 /**
  * 16進キー 0–F をハンドシェイク 14h の列ビットへ写す。
- * 4×4 配置: 列 = 下位 2bit、ビット番号 = 上位 2bit（0–3 が bit0、4–7 が bit1）。
+ * 根拠: HandShake.mdc キー配置（列0 = C 8 4 0 が Bit3–0）。
  * @param digit キー番号 0–15
  * @returns 列 0–3 とビットマスク。範囲外は null
  */
@@ -193,11 +194,32 @@ export function hexDigitColumnMask(
   digit: number,
 ): { col: number; mask: number } | null {
   if (!Number.isInteger(digit) || digit < 0 || digit > 15) return null;
-  return { col: digit & 3, mask: 1 << ((digit >> 2) & 3) };
+  return panelKeyColumnMask(digit.toString(16).toUpperCase());
+}
+
+/**
+ * 14h 用のパネルキー押下ビットを更新する（押している間 ON）。
+ * キーマトリクスはモードに関係なく保持する（14h の応答だけフリー専用）。
+ * @param state IO ボード状態
+ * @param key "0"–"F" または "F0"–"F7"
+ * @param held true=押下、false=離す
+ */
+export function setPanelKeyHeld(
+  state: IoBoardMockState,
+  key: string,
+  held: boolean,
+): void {
+  const loc = panelKeyColumnMask(key);
+  if (!loc) return;
+  const cur = state.hexKeys[loc.col] ?? 0;
+  state.hexKeys[loc.col] = held
+    ? (cur | loc.mask) & 0xff
+    : cur & ~loc.mask & 0xff;
 }
 
 /**
  * 14h 用の 16進キー押下ビットを更新する（押している間 ON）。
+ * マトリクスはモード不問。14h で読むときだけフリー必須。
  * @param state IO ボード状態
  * @param digit キー番号 0–15
  * @param held true=押下、false=離す
@@ -207,12 +229,8 @@ export function setHexKeyHeld(
   digit: number,
   held: boolean,
 ): void {
-  const loc = hexDigitColumnMask(digit);
-  if (!loc) return;
-  const cur = state.hexKeys[loc.col] ?? 0;
-  state.hexKeys[loc.col] = held
-    ? (cur | loc.mask) & 0xff
-    : cur & ~loc.mask & 0xff;
+  if (!Number.isInteger(digit) || digit < 0 || digit > 15) return;
+  setPanelKeyHeld(state, digit.toString(16).toUpperCase(), held);
 }
 
 /**
@@ -248,6 +266,9 @@ export function createDefaultCpuToIoHandlers(
   return {
     onModeSet(mode) {
       state.mode = mode;
+      if (mode !== MODE.FREE) {
+        state.hexKeys.fill(0);
+      }
       return RESPONSE_CODE.OK;
     },
     getHexKeys() {

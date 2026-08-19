@@ -3,6 +3,7 @@
 ; 根拠: HandShake.mdc「16進キー入力取得」/ boot_monitor.mdc
 ;
 ; 線上 送信 1B: 14h → 受信 9B: col0..col7 + status
+; 列ビットは HandShake.mdc キー配置（列0 Bit3–0 = C 8 4 0、列4 = F0 F2 F4 F6）。
 ; フリーモード専用。モニターモードは IO が 01h（モードエラー）を返す。
 ;
 ; 結果バッファはワードアドレス、1 ワード 1 バイト（下位 8bit、列 0–7）。

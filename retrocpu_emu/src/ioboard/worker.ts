@@ -32,7 +32,7 @@ import {
   createDefaultCpuToIoHandlers,
   createIoBoardCommandState,
   resetIoBoardCommandState,
-  setHexKeyHeld,
+  setPanelKeyHeld,
 } from "./handshake/io_board_mock";
 import { performIoBoardReset, resolveBootMonitorHexPath } from "./io_reset";
 import {
@@ -42,6 +42,7 @@ import {
 import {
   CMD_CPU_TO_IO,
   intCauseForTimer,
+  MODE,
 } from "../shared/handshake/handshake_type";
 import { DebugHost } from "./debug_host";
 import {
@@ -696,10 +697,9 @@ parentPort?.on(
         reply: true,
       });
     } else if (msg?.type === "key:hex" && msg.digit) {
-      consolePanel.onHex(msg.digit);
+      if (cmdState.mode !== MODE.FREE) consolePanel.onHex(msg.digit);
     } else if (msg?.type === "key:hex:hold" && msg.digit) {
-      const n = Number.parseInt(msg.digit, 16);
-      setHexKeyHeld(cmdState, n, msg.down === true);
+      setPanelKeyHeld(cmdState, msg.digit, msg.down === true);
     } else if (msg?.type === "key:fn" && msg.fn) {
       const fn = msg.fn;
       void consolePanel.onFunction(fn).catch((e: unknown) => {
@@ -708,6 +708,8 @@ parentPort?.on(
           err: e instanceof Error ? e.message : String(e),
         });
       });
+    } else if (msg?.type === "key:fn:hold" && msg.fn) {
+      setPanelKeyHeld(cmdState, msg.fn, msg.down === true);
     } else if (msg?.type === "key:ads:long") {
       consolePanel.onAdsLongPress();
     } else if (

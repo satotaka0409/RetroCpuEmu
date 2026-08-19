@@ -6,11 +6,11 @@
 ;  1) LCD 1行目: "ARE YOU READY?"
 ;  2) 1秒後に LCD 2行目: "GO"
 ;  3) 20ターン実施
-;     - アドレス部 8桁のランダム位置に 0-F を 0.3秒表示
+;     - アドレス部 8桁のランダム位置に 0-F を 0.5秒表示
 ;     - 表示中に同じ 16進キーを押せば成功、未入力/別キーは失敗
 ;     - データ部 4桁に score 表示（左2桁=失敗、右2桁=成功）
 ;     - ターン間は 0.5〜1.0秒（10000tick 単位のランダム待機）
-;  4) 終了時に LCD をクリア
+;  4) 終了時に LCD をクリアし、スコアを 5 秒表示して HALT
 
 	.cpu	mn1613
 
@@ -29,7 +29,8 @@ LED_WORDS	.equ	14
 
 GAME_TURNS	.equ	20
 WAIT_100MS_TICKS	.equ	10000
-POLL_STEPS	.equ	3		; 3 x 100ms = 0.3s
+; 0.5秒（10µs/tick）。LPZ は符号なし比較なので 32767 超でも可
+POLL_WINDOW_TICKS	.equ	50000
 
 	.area	_CODE		(REL,CON)
 	.org	0x1800
@@ -45,6 +46,17 @@ g_user_main:
 	mvi	R0, #MODE_FREE
 	bald	g_bios_mode_set
 
+	; スコアはデータ部 左2桁=失敗、右2桁=成功。最初から 00 00
+	eor	R0, R0
+	std	R0, score_ok
+	std	R0, score_ng
+	mvi	R0, #GAME_TURNS
+	std	R0, turns_left
+	bald	l_led_buf_clear
+	bald	l_update_score_digits
+	mvwi	R0, #led_buf
+	bald	g_bios_led_display
+
 	; LCD 初期表示
 	bald	l_lcd_init
 	bald	l_lcd_ready
@@ -56,14 +68,9 @@ g_user_main:
 	; 2行目に GO
 	bald	l_lcd_go
 
-	; 初期化
-	eor	R0, R0
-	std	R0, score_ok
-	std	R0, score_ng
-	mvi	R0, #GAME_TURNS
-	std	R0, turns_left
-
 l_game_loop:
+	; 数字を出す前に離鍵。表示中の正解押しを捨てない
+	bald	l_wait_keys_up
 	bald	l_led_buf_clear
 	bald	l_update_score_digits
 	bald	l_pick_target
@@ -95,11 +102,11 @@ l_turn_tail:
 	mvwi	R0, #led_buf
 	bald	g_bios_led_display
 
-	; 残りターン
+	; 残りターン（0 になったら終了。Z のとき次命令をスキップ）
 	ld	R0, turns_left
 	si	R0, #1
 	std	R0, turns_left
-	cwi	R0, #0, Z
+	cwi	R0, #0, NZ
 	b	l_game_end
 
 	; 0.5〜1.0秒待ち（100ms x (5 + extra[0..5])）
@@ -107,12 +114,15 @@ l_turn_tail:
 	b	l_game_loop
 
 l_game_end:
-	; 終了時に LCD をクリア
+	; LCD / デバッガコンソールをクリア（17h Clear）
 	eor	R0, R0
 	eor	R1, R1
 	eor	R2, R2
 	bald	g_bios_lcd_control
-	bd	g_main_loop
+	; スコアを 5 秒出したまま HALT
+	mvi	R0, #50
+	bald	l_wait_100ms_chunks
+	h
 
 ; -------------------------------------------------------
 ; LCD 初期化（Clear + Display On）
@@ -150,7 +160,7 @@ l_update_score_digits:
 	push	R3
 	push	R4
 
-	; fail
+	; fail → データ桁 0,1（l_to_decimal が X0 を壊すので毎回付け直す）
 	ld	R0, score_ng
 	bald	l_to_decimal_2digits	; R1=tens, R2=ones
 	mvwi	X0, #led_buf
@@ -158,9 +168,11 @@ l_update_score_digits:
 	st	R1, 0(X0)
 	st	R2, 1(X0)
 
-	; success
+	; success → データ桁 2,3
 	ld	R0, score_ok
-	bald	l_to_decimal_2digits	; R1=tens, R2=ones
+	bald	l_to_decimal_2digits
+	mvwi	X0, #led_buf
+	ai	X0, #8
 	st	R1, 2(X0)
 	st	R2, 3(X0)
 
@@ -216,17 +228,21 @@ l_draw_target:
 	ret
 
 ; -------------------------------------------------------
-; 0.3秒間の入力判定
+; 0.5秒間の入力判定（開始時刻からの経過で打ち切る）
 ; @return R0 - 1:成功 / 0:失敗
 ; -------------------------------------------------------
 l_poll_target_window:
 	push	R3
 	push	R4
-	mvi	R4, #POLL_STEPS
+	si	SP, #4
+	bald	g_hshk_get_time
+	mv	X1, SP
+	l	R0, 4(X1)
+	std	R0, poll_t0
 l_poll_step:
 	bald	l_read_hex_key
-	or	R0, R0, Z
-	b	l_poll_wait
+	or	R0, R0, NZ
+	b	l_poll_check_time	; キーなしは経過を見る
 
 	; 入力あり: R1=key
 	ld	R0, target_val
@@ -239,71 +255,76 @@ l_poll_miss:
 	eor	R0, R0
 	b	l_poll_done
 
-l_poll_wait:
-	bald	l_wait_100ms
-	si	R4, #1
-	cwi	R4, #0, Z
-	b	l_poll_timeout
+l_poll_check_time:
+	bald	g_hshk_get_time
+	mv	X1, SP
+	l	R0, 4(X1)
+	ld	R1, poll_t0
+	s	R0, R1
+	cwi	R0, #POLL_WINDOW_TICKS, LPZ
 	b	l_poll_step
-
-l_poll_timeout:
 	eor	R0, R0
 l_poll_done:
+	ai	SP, #4
 	pop	R4
 	pop	R3
 	ret
 
 ; -------------------------------------------------------
-; 16進キーを1回読む
+; 全 16進キーが離されるまで待つ（表示前。押しっぱなしを次ターンに持ち越さない）
+; -------------------------------------------------------
+l_wait_keys_up:
+	bald	l_read_hex_key
+	or	R0, R0, Z
+	b	l_wait_keys_up
+	ret
+
+; -------------------------------------------------------
+; 16進キーを1回読む（piano.asm と同じ 14h 走査）
 ; @return R0 - 1:キーあり / 0:なし
 ; @return R1 - key(0..15)。なし時は不定
-; 備考: 8列×8bit のうち、先頭に見つかった列の bit0/bit1 を key 化
-;       key = col*2 + row
+; 根拠: HandShake.mdc 14h。key = 列 + bit*4（列0 Bit0=0, Bit1=4, Bit2=8, Bit3=C）
 ; -------------------------------------------------------
 l_read_hex_key:
+	push	R3
+	push	R4
 	mvwi	R0, #key_cols
 	bald	g_bios_hex_key_get
 	cwi	R0, #0, Z
 	b	l_rhk_none
-
-	eor	R3, R3			; col 0..7
+	eor	R2, R2			; key 0..15
+l_rhk_lp:
+	mv	R0, R2
+	andi	R0, #0x0003		; col
 	mvwi	X0, #key_cols
-l_rhk_col_lp:
-	l	R0, 0(X0)
-	andi	R0, #0x00ff
-	or	R0, R0, Z
-	b	l_rhk_next_col
-
-	; bit0 or bit1 を row とする（押下なし/不正配置はなし扱い）
-	mv	R1, R0
-	andi	R1, #0x0001
-	or	R1, R1, Z
-	b	l_rhk_row0
-	mv	R1, R0
-	andi	R1, #0x0002
-	or	R1, R1, Z
-	b	l_rhk_none
-	mvi	R1, #1
-	b	l_rhk_make_key
-
-l_rhk_row0:
-	eor	R1, R1
-
-l_rhk_make_key:
-	mv	R0, R3
-	sl	R0
-	a	R1, R0
-	mvi	R0, #1
-	ret
-
-l_rhk_next_col:
-	ai	X0, #1
-	ai	R3, #1
-	cwi	R3, #8, M
-	b	l_rhk_col_lp
-
+	a	X0, R0
+	l	R1, 0(X0)
+	mv	R0, R2
+	mvi	R4, #1			; mask = 1 << (key/4)
+l_rhk_mask:
+	cwi	R0, #4, M
+	b	l_rhk_mask_sh
+	b	l_rhk_mask_ok
+l_rhk_mask_sh:
+	si	R0, #4
+	sl	R4
+	b	l_rhk_mask
+l_rhk_mask_ok:
+	and	R1, R4, Z
+	b	l_rhk_hit
+	ai	R2, #1
+	cwi	R2, #16, Z
+	b	l_rhk_lp
 l_rhk_none:
 	eor	R0, R0
+	pop	R4
+	pop	R3
+	ret
+l_rhk_hit:
+	mv	R1, R2
+	mvi	R0, #1
+	pop	R4
+	pop	R3
 	ret
 
 ; -------------------------------------------------------
@@ -410,6 +431,8 @@ score_ng:
 target_val:
 	.ds	1
 target_pos:
+	.ds	1
+poll_t0:
 	.ds	1
 
 ; g_bios_hex_key_get の受け取り先（8ワード、各下位8bit）

@@ -51,6 +51,14 @@ contextBridge.exposeInMainWorld("emuApi", {
   keyFn(fn: string): void {
     ipcRenderer.send("emu:keyFn", fn);
   },
+  /**
+   * ファンクションキーの押し続けをメインへ送る（14h ビットマップ）。
+   * @param fn "F0"〜"F7"
+   * @param down true=押下、false=離す
+   */
+  keyFnHold(fn: string, down: boolean): void {
+    ipcRenderer.send("emu:keyFnHold", fn, down);
+  },
   keyAdsLongPress(): void {
     ipcRenderer.send("emu:keyAdsLongPress");
   },

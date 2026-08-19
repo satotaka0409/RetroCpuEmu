@@ -6,9 +6,9 @@
 ; 開始ワード 1800h。BIOS はブートモニタを BALD する。
 ; 根拠: boot_monitor.mdc / HandShake.mdc 14h・19h / asm_rules.mdc
 ;
-; キー配置（14h 列ビット、4×4）:
-;   列 = キー番号 下位 2bit、ビット番号 = キー番号 >> 2
-;   0–3 は列 0–3 の bit0、4–7 は列 0–3 の bit1（画面下 2 段）
+; キー配置（HandShake.mdc 14h）:
+;   列0 Bit3–0 = C 8 4 0、列1 = D 9 5 1、列2 = E A 6 2、列3 = F B 7 3
+;   0–3 は列 0–3 の bit0、4–7 は列 0–3 の bit1
 ; 複数押しは番号の小さい音を優先。g_bios_beep は duration=0 で鳴り続け、freq=0 で停止。
 ;
 ; 実行:
@@ -26,6 +26,8 @@
 MODE_FREE	.equ	1
 NOTE_NONE	.equ	0xffff
 NOTE_COUNT	.equ	8
+; 14h が空でも連続しないと離鍵にしない（ハンドシェイク失敗の隙間）
+RELEASE_HITS	.equ	3
 
 	.area	_CODE		(REL,CON)
 	.org	0x1800
@@ -38,6 +40,8 @@ g_user_main:
 	bald	g_bios_mode_set
 	mvwi	R0, #NOTE_NONE
 	std	R0, last_note
+	eor	R0, R0
+	std	R0, miss_count
 
 l_loop:
 	bald	l_scan_note
@@ -65,7 +69,8 @@ l_start:
 	bald	g_bios_beep
 	b	l_loop
 
-; 押下中の 0–7 を返す。無し／取得失敗は NOTE_NONE
+; 押下中の 0–7 を返す。無しは NOTE_NONE。
+; 14h NG、または空が RELEASE_HITS 回未満なら last_note のまま。
 ; @return R0 - キー番号 0–7、または 0xFFFF
 ; @Destruction R0, R1, R2
 l_scan_note:
@@ -74,7 +79,7 @@ l_scan_note:
 	mvwi	R0, #key_cols
 	bald	g_bios_hex_key_get
 	cwi	R0, #0, Z
-	b	l_scan_none
+	b	l_scan_keep
 	eor	R2, R2
 l_scan_lp:
 	mv	R0, R2
@@ -95,10 +100,20 @@ l_scan_col:
 	ai	R2, #1
 	cwi	R2, #NOTE_COUNT, Z
 	b	l_scan_lp
+	ld	R0, miss_count
+	ai	R0, #1
+	std	R0, miss_count
+	cwi	R0, #RELEASE_HITS, M
+	b	l_scan_none
+l_scan_keep:
+	ld	R0, last_note
+	b	l_scan_done
 l_scan_none:
 	mvwi	R0, #NOTE_NONE
 	b	l_scan_done
 l_scan_hit:
+	eor	R0, R0
+	std	R0, miss_count
 	mv	R0, R2
 l_scan_done:
 	pop	R4
@@ -119,6 +134,8 @@ note_freq:
 
 	.area	_WORK		(REL,NOLOAD)
 last_note:
+	.ds	1
+miss_count:
 	.ds	1
 key_cols:
 	.ds	8

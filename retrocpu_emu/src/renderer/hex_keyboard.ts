@@ -1,13 +1,11 @@
-/** 16進＋ファンクションキー（ioboard.mdc） */
+/** 16進＋ファンクションキー（HandShake.mdc 14h キー配置） */
 
-const HEX_KEYS: string[][] = [
-  ["C", "D", "E", "F"],
-  ["8", "9", "A", "B"],
-  ["4", "5", "6", "7"],
-  ["0", "1", "2", "3"],
-];
+import { HEX_KEY_COL_BIT3_TO_0 } from "../ioboard/hex_keyboard/key_matrix";
 
-const FUNCTION_KEYS = ["F0", "F1", "F2", "F3", "F4", "F5", "F6", "F7"] as const;
+/** 画面上段→下段。列 0–3 の Bit3–0（C 8 4 0 …） */
+const HEX_KEYS: string[][] = [0, 1, 2, 3].map((fromTop) =>
+  [0, 1, 2, 3].map((col) => HEX_KEY_COL_BIT3_TO_0[col]![fromTop]!),
+);
 
 export type HexKeyboardHandlers = {
   onHexClick?: (value: string) => void;
@@ -16,12 +14,25 @@ export type HexKeyboardHandlers = {
   /** 16進キーを離した */
   onHexUp?: (value: string) => void;
   onFunctionClick?: (fn: string) => void;
+  /** ファンクションキーを押し始めた（14h 押し続け） */
+  onFunctionDown?: (fn: string) => void;
+  /** ファンクションキーを離した */
+  onFunctionUp?: (fn: string) => void;
   onFunctionLongPress?: (fn: string) => void;
   /** F0→ADS など表示ラベル */
   functionLabels?: Record<string, string>;
 };
 
 const LONG_PRESS_MS = 700;
+
+/**
+ * ポインタが本当に離れたか（WSLg では押し続け中に pointercancel が来ることがある）。
+ * @param ev ポインタイベント
+ * @returns 主ボタンが上がっていれば true
+ */
+function isPointerReleased(ev: PointerEvent): boolean {
+  return (ev.buttons & 1) === 0;
+}
 
 /**
  * 16進 16 キーとファンクション 8 キーを描画する（既存の子要素は差し替える）。
@@ -49,8 +60,12 @@ export function mountHexKeyboard(
         btn.setPointerCapture(ev.pointerId);
         handlers.onHexDown?.(key);
       });
-      btn.addEventListener("pointerup", () => handlers.onHexUp?.(key));
-      btn.addEventListener("pointercancel", () => handlers.onHexUp?.(key));
+      btn.addEventListener("pointerup", (ev) => {
+        if (isPointerReleased(ev)) handlers.onHexUp?.(key);
+      });
+      btn.addEventListener("pointercancel", (ev) => {
+        if (isPointerReleased(ev)) handlers.onHexUp?.(key);
+      });
       btn.addEventListener("click", () => handlers.onHexClick?.(key));
       rowEl.appendChild(btn);
     }
@@ -63,7 +78,11 @@ export function mountHexKeyboard(
   for (let row = 0; row < 4; row++) {
     const rowEl = document.createElement("div");
     rowEl.className = "function-key-row";
-    for (const fn of FUNCTION_KEYS.slice(row * 2, row * 2 + 2)) {
+    const rowFns = [
+      HEX_KEY_COL_BIT3_TO_0[4]![row]!,
+      HEX_KEY_COL_BIT3_TO_0[5]![row]!,
+    ];
+    for (const fn of rowFns) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "function-key";
@@ -80,7 +99,9 @@ export function mountHexKeyboard(
         }
       };
 
-      btn.addEventListener("pointerdown", () => {
+      btn.addEventListener("pointerdown", (ev) => {
+        btn.setPointerCapture(ev.pointerId);
+        handlers.onFunctionDown?.(fn);
         longPressed = false;
         clearLongTimer();
         longTimer = setTimeout(() => {
@@ -89,9 +110,14 @@ export function mountHexKeyboard(
           handlers.onFunctionLongPress?.(fn);
         }, LONG_PRESS_MS);
       });
-      btn.addEventListener("pointerup", clearLongTimer);
-      btn.addEventListener("pointerleave", clearLongTimer);
-      btn.addEventListener("pointercancel", clearLongTimer);
+      btn.addEventListener("pointerup", (ev) => {
+        clearLongTimer();
+        if (isPointerReleased(ev)) handlers.onFunctionUp?.(fn);
+      });
+      btn.addEventListener("pointercancel", (ev) => {
+        clearLongTimer();
+        if (isPointerReleased(ev)) handlers.onFunctionUp?.(fn);
+      });
       btn.addEventListener("click", () => handlers.onFunctionClick?.(fn));
       btn.addEventListener(
         "click",

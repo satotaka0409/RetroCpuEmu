@@ -94,6 +94,7 @@ Cursor とは拡張機能を使って TCP/IP Socket で通信する<br>
 > **エミュレータ実装メモ**
 >
 > - キーボードからのメモリ読み書き（RD / INC / DEC / WINC）はハンドシェイク **13h / 14h**。実行（RUN）は **12h**。
+> - CPU→IO **14h（16進キー入力取得）** は **フリーモードのみ**。モニター／設定エリアでは NG（01h）。前面キーの押下そのものは常に保持し、フリー移行後の 14h で読める。
 > - **DMA は IO→CPU 書き込み専用**（読み込み不可）。メモリ読みは 13h のみ。
 > - Cursor からの Intel HEX ロードは **DMA 書き込み**（ハンドシェイクではない）。HALT / RESET 時のみ。
 > - **F7 RST / 電源投入**: ブートモニタ IHX（`boot_monitor.ihx` / `mn1613_mon.ihx`）を DMA で 2階 RAM に書いてから CPU リセット。`RESET_VECTOR`（IO:0）は **0x0108**。パスは `RETROCPU_BOOT_MONITOR_HEX` または `retrocpu_emu/dist/assets/boot_monitor.ihx`。
