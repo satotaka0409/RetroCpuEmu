@@ -62,7 +62,7 @@ async function waitHalted(timeoutMs: number = 8000): Promise<void> {
   }
 }
 
-describe("vscode_connect_test integration (mon.ihx)", () => {
+describe("vscode_connect integration (mon.ihx)", () => {
   // mon.ihx/cdb が無い環境では integration test を skip する。
   const monitorPair: { hex: string; cdb: string } | null = loadMonitorOrSkip();
   const runIt = monitorPair ? it : it.skip;

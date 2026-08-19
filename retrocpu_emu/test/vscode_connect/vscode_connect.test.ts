@@ -4,7 +4,7 @@ import { DebugHost } from "../../src/ioboard/debug_host";
 import { RESPONSE_CODE } from "../../src/shared/handshake/handshake_type";
 import { VsDebugClient, VS_DEBUG_STATUS } from "./vscode_debug_client";
 
-describe("vscode_connect_test", () => {
+describe("vscode_connect", () => {
   let host: DebugHost | null = null;
   let client: VsDebugClient | null = null;
 
