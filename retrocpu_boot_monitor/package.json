@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "description": "MN1613 ブートモニタ／BIOS",
   "scripts": {
-    "test": "npm --prefix ../retrocpu_test_framework run build:asm && ../retrocpu_test_framework/node_modules/.bin/tsx ../retrocpu_test_framework/src/cli.ts mn1613/test",
+    "test": "npm run test:mn1613 && npm run test:tms9995",
+    "test:mn1613": "npm --prefix ../retrocpu_test_framework run build:asm && ../retrocpu_test_framework/node_modules/.bin/tsx ../retrocpu_test_framework/src/cli.ts test/mn1613",
+    "test:tms9995": "npm --prefix ../retrocpu_test_framework run build:asm && ../retrocpu_test_framework/node_modules/.bin/tsx ../retrocpu_test_framework/src/cli.ts test/tms9995",
     "typecheck": "../retrocpu_test_framework/node_modules/.bin/tsc -p tsconfig.json --noEmit"
   }
 }

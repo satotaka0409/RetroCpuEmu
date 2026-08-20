@@ -14,5 +14,5 @@
     "types": ["node"],
     "typeRoots": ["../retrocpu_test_framework/node_modules/@types"]
   },
-  "include": ["mn1613/test/**/*.ts"]
+  "include": ["test/mn1613/**/*.ts", "test/tms9995/**/*.ts"]
 }

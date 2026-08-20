@@ -1,0 +1,10 @@
+	.cpu	tms9995
+	.include "../memmap.inc"
+	.include "handshake_io.inc"
+
+	.global g_bios_lcd_control_
+
+	.area	_CODE		(REL,CON)
+g_bios_lcd_control_:
+	LI	R1, #HSHK_NG
+	B	(R11)

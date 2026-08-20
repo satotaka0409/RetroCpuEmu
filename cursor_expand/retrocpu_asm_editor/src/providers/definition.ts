@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { pickDefinitionSymbols } from "../symbols/definitionPick";
 import type { SymbolIndex } from "../symbols/index";
+import { isAsmLanguageId } from "../languageIds";
 
 const IDENT_RE = /[A-Za-z_.$][A-Za-z0-9_.$]*/;
 
@@ -11,26 +12,33 @@ const IDENT_RE = /[A-Za-z_.$][A-Za-z0-9_.$]*/;
  * @return DefinitionProvider
  */
 export function createDefinitionProvider(
-  index: SymbolIndex,
+	index: SymbolIndex,
 ): vscode.DefinitionProvider {
-  return {
-    provideDefinition(document, position) {
-      if (document.languageId !== "mn1613asm") return undefined;
+	return {
+		provideDefinition(document, position) {
+			if (!isAsmLanguageId(document.languageId))
+				return undefined;
 
-      const wordRange = document.getWordRangeAtPosition(position, IDENT_RE);
-      if (!wordRange) return undefined;
+			const wordRange = document.getWordRangeAtPosition(
+				position,
+				IDENT_RE,
+			);
+			if (!wordRange) return undefined;
 
-      const name = document.getText(wordRange).toUpperCase();
-      const defs = pickDefinitionSymbols(index.lookup(name));
-      if (defs.length === 0) return undefined;
+			const name = document.getText(wordRange).toUpperCase();
+			const defs = pickDefinitionSymbols(index.lookup(name));
+			if (defs.length === 0) return undefined;
 
-      return defs.map(
-        (sym) =>
-          new vscode.Location(
-            vscode.Uri.parse(sym.uri),
-            new vscode.Position(sym.line, 0),
-          ),
-      );
-    },
-  };
+			return defs.map(
+				(sym) =>
+					new vscode.Location(
+						vscode.Uri.parse(sym.uri),
+						new vscode.Position(
+							sym.line,
+							0,
+						),
+					),
+			);
+		},
+	};
 }

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 /** リンカ結合すべきソース拡張子（.include 禁止） */
-const SOURCE_EXTS = new Set([".asm", ".s", ".mn1610", ".mn1613", ".tms9995"]);
+const SOURCE_EXTS = new Set([".asm", ".s", ".mn1613", ".tms9995"]);
 
 /**
  * 行からコメントを除く（`;` / `//`）。

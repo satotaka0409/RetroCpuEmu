@@ -92,7 +92,6 @@
       "*.asm": "mn1613asm",
       "*.s": "mn1613asm",
       "*.mn1613": "mn1613asm",
-      "*.mn1610": "mn1613asm",
       "*.tms9995": "mn1613asm",
       "*.inc": "mn1613asm",
     },

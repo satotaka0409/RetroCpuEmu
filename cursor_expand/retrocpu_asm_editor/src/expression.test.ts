@@ -8,59 +8,61 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { tryEvalExpr } from "./expression";
 import {
-  collectEquDefs,
-  isEquDefinitionLine,
-  matchEquDef,
+	collectEquDefs,
+	isEquDefinitionLine,
+	matchEquDef,
 } from "./symbols/equParse";
-import { isAsmBuiltinCall, parseAsmLine, parseGlobalDirectiveNames } from "./symbols/parseLine";
 import {
-  collectSymbolOccurrences,
-  findIdentRangesInLine,
+	isAsmBuiltinCall,
+	parseAsmLine,
+	parseGlobalDirectiveNames,
+} from "./symbols/parseLine";
+import {
+	collectSymbolOccurrences,
+	findIdentRangesInLine,
 } from "./symbols/occurrences";
-import {
-  mn1613Architecture,
-} from "./cpu/mn1613/arch";
+import { mn1613Architecture } from "./cpu/mn1613/arch";
 import { tms9995Architecture } from "./cpu/tms9995/arch";
-import {
-  detectArchitecture,
-  setPreferredCpuId,
-} from "./cpu/registry";
+import { detectArchitecture, setPreferredCpuId } from "./cpu/registry";
 
 describe("tryEvalExpr（.equ ホバー用）", () => {
-  const empty = new Map<string, number>();
+	const empty = new Map<string, number>();
 
-  test("10進・16進リテラル", () => {
-    assert.equal(tryEvalExpr("7", empty), 7);
-    assert.equal(tryEvalExpr("0x10", empty), 0x10);
-    assert.equal(tryEvalExpr("0FFH", empty), 0xff);
-    assert.equal(tryEvalExpr("0x0000011100000000", empty), 0x11100000000);
-  });
+	test("10進・16進リテラル", () => {
+		assert.equal(tryEvalExpr("7", empty), 7);
+		assert.equal(tryEvalExpr("0x10", empty), 0x10);
+		assert.equal(tryEvalExpr("0FFH", empty), 0xff);
+		assert.equal(
+			tryEvalExpr("0x0000011100000000", empty),
+			0x11100000000,
+		);
+	});
 
-  test("演算", () => {
-    assert.equal(tryEvalExpr("1 + 2 * 3", empty), 7);
-    assert.equal(tryEvalExpr("(1 + 2) * 3", empty), 9);
-    assert.equal(tryEvalExpr("1 << 4", empty), 16);
-    assert.equal(tryEvalExpr("0xFF & 0x0F", empty), 0x0f);
-  });
+	test("演算", () => {
+		assert.equal(tryEvalExpr("1 + 2 * 3", empty), 7);
+		assert.equal(tryEvalExpr("(1 + 2) * 3", empty), 9);
+		assert.equal(tryEvalExpr("1 << 4", empty), 16);
+		assert.equal(tryEvalExpr("0xFF & 0x0F", empty), 0x0f);
+	});
 
-  test("シンボル参照", () => {
-    const sym = new Map<string, number>([
-      ["BASE", 0x10],
-      ["SIZE", 2],
-    ]);
-    assert.equal(tryEvalExpr("BASE + SIZE", sym), 0x12);
-    assert.equal(tryEvalExpr("base + size", sym), 0x12);
-  });
+	test("シンボル参照", () => {
+		const sym = new Map<string, number>([
+			["BASE", 0x10],
+			["SIZE", 2],
+		]);
+		assert.equal(tryEvalExpr("BASE + SIZE", sym), 0x12);
+		assert.equal(tryEvalExpr("base + size", sym), 0x12);
+	});
 
-  test("未定義シンボルは undefined", () => {
-    assert.equal(tryEvalExpr("UNDEF", empty), undefined);
-    assert.equal(tryEvalExpr("1 + UNDEF", empty), undefined);
-  });
+	test("未定義シンボルは undefined", () => {
+		assert.equal(tryEvalExpr("UNDEF", empty), undefined);
+		assert.equal(tryEvalExpr("1 + UNDEF", empty), undefined);
+	});
 });
 
 describe("collectEquDefs / .equ NAME, value", () => {
-  test("3形式をすべて拾う", () => {
-    const text = `
+	test("3形式をすべて拾う", () => {
+		const text = `
 .equ A, 1
 B: .equ 2
 C .equ 3
@@ -68,372 +70,402 @@ D equ 4 ; comment
 LABEL:
         H
 `;
-    const defs = collectEquDefs(text);
-    const map = new Map(defs.map((d) => [d.name, d.expr]));
-    assert.equal(map.get("A"), "1");
-    assert.equal(map.get("B"), "2");
-    assert.equal(map.get("C"), "3");
-    assert.equal(map.get("D"), "4");
-    assert.equal(defs.length, 4);
-  });
+		const defs = collectEquDefs(text);
+		const map = new Map(defs.map((d) => [d.name, d.expr]));
+		assert.equal(map.get("A"), "1");
+		assert.equal(map.get("B"), "2");
+		assert.equal(map.get("C"), "3");
+		assert.equal(map.get("D"), "4");
+		assert.equal(defs.length, 4);
+	});
 
-  test(".equ NAME , value（カンマ前後スペース）", () => {
-    const m = matchEquDef(".equ INTERRUPT_BUSY , 0x20");
-    assert.deepEqual(m, { name: "INTERRUPT_BUSY", expr: "0x20" });
-  });
+	test(".equ NAME , value（カンマ前後スペース）", () => {
+		const m = matchEquDef(".equ INTERRUPT_BUSY , 0x20");
+		assert.deepEqual(m, { name: "INTERRUPT_BUSY", expr: "0x20" });
+	});
 
-  test(".equ NAME value（カンマなし）", () => {
-    const m = matchEquDef(".equ PORT 7");
-    assert.deepEqual(m, { name: "PORT", expr: "7" });
-  });
+	test(".equ NAME value（カンマなし）", () => {
+		const m = matchEquDef(".equ PORT 7");
+		assert.deepEqual(m, { name: "PORT", expr: "7" });
+	});
 
-  test("タブ区切り .equ NAME, value", () => {
-    const m = matchEquDef(".equ\tHSHK_ACK,\t0x22");
-    assert.deepEqual(m, { name: "HSHK_ACK", expr: "0x22" });
-  });
+	test("タブ区切り .equ NAME, value", () => {
+		const m = matchEquDef(".equ\tHSHK_ACK,\t0x22");
+		assert.deepEqual(m, { name: "HSHK_ACK", expr: "0x22" });
+	});
 
-  test("式付き SDAS 流", () => {
-    const defs = collectEquDefs("BASE .equ 0x10\nSIZE .equ BASE + 2\n");
-    assert.equal(defs[0]!.name, "BASE");
-    assert.equal(defs[0]!.expr, "0x10");
-    assert.equal(defs[1]!.name, "SIZE");
-    assert.equal(defs[1]!.expr, "BASE + 2");
-  });
+	test("式付き SDAS 流", () => {
+		const defs = collectEquDefs(
+			"BASE .equ 0x10\nSIZE .equ BASE + 2\n",
+		);
+		assert.equal(defs[0]!.name, "BASE");
+		assert.equal(defs[0]!.expr, "0x10");
+		assert.equal(defs[1]!.name, "SIZE");
+		assert.equal(defs[1]!.expr, "BASE + 2");
+	});
 
-  test("収集した式を tryEvalExpr で解決", () => {
-    const defs = collectEquDefs("BASE .equ 0x10\nSIZE .equ BASE + 2\n");
-    const values = new Map<string, number>();
-    for (let pass = 0; pass < 4; pass += 1) {
-      for (const d of defs) {
-        if (values.has(d.name)) continue;
-        const v = tryEvalExpr(d.expr, values);
-        if (v !== undefined) values.set(d.name, v);
-      }
-    }
-    assert.equal(values.get("BASE"), 0x10);
-    assert.equal(values.get("SIZE"), 0x12);
-  });
+	test("収集した式を tryEvalExpr で解決", () => {
+		const defs = collectEquDefs(
+			"BASE .equ 0x10\nSIZE .equ BASE + 2\n",
+		);
+		const values = new Map<string, number>();
+		for (let pass = 0; pass < 4; pass += 1) {
+			for (const d of defs) {
+				if (values.has(d.name)) continue;
+				const v = tryEvalExpr(d.expr, values);
+				if (v !== undefined) values.set(d.name, v);
+			}
+		}
+		assert.equal(values.get("BASE"), 0x10);
+		assert.equal(values.get("SIZE"), 0x12);
+	});
 });
 
 describe("parseAsmLine: .equ は未知命令にしない", () => {
-  const arch = mn1613Architecture;
+	const arch = mn1613Architecture;
 
-  const equLines = [
-    ".equ INTERRUPT_BUSY, 0x20",
-    ".equ INTERRUPT_BUSY , 0x20",
-    ".equ\tHSHK_ACK,\t0x22",
-    "INTERRUPT_BUSY .equ 0x20",
-    "INTERRUPT_BUSY\t.equ\t0x20",
-    "PORT: .equ 7",
-    "PORT equ 7",
-  ];
+	const equLines = [
+		".equ INTERRUPT_BUSY, 0x20",
+		".equ INTERRUPT_BUSY , 0x20",
+		".equ\tHSHK_ACK,\t0x22",
+		"INTERRUPT_BUSY .equ 0x20",
+		"INTERRUPT_BUSY\t.equ\t0x20",
+		"PORT: .equ 7",
+		"PORT equ 7",
+	];
 
-  for (const line of equLines) {
-    test(`directive: ${JSON.stringify(line)}`, () => {
-      assert.equal(isEquDefinitionLine(line), true);
-      const p = parseAsmLine(line, arch);
-      assert.equal(p.kind, "directive");
-      assert.notEqual(p.kind, "unknown");
-    });
-  }
+	for (const line of equLines) {
+		test(`directive: ${JSON.stringify(line)}`, () => {
+			assert.equal(isEquDefinitionLine(line), true);
+			const p = parseAsmLine(line, arch);
+			assert.equal(p.kind, "directive");
+			assert.notEqual(p.kind, "unknown");
+		});
+	}
 
-  test("通常の未知命令は unknown のまま", () => {
-    const p = parseAsmLine("        FOOBAR R0, 1", arch);
-    assert.equal(p.kind, "unknown");
-    assert.equal(p.mnemonic, "FOOBAR");
-  });
+	test("通常の未知命令は unknown のまま", () => {
+		const p = parseAsmLine("        FOOBAR R0, 1", arch);
+		assert.equal(p.kind, "unknown");
+		assert.equal(p.mnemonic, "FOOBAR");
+	});
 
-  test("LABEL: .ds n はディレクティブ（未知命令にしない）", () => {
-    const p = parseAsmLine("GL_HSHK_RECV_DATA:\t.ds\t1\t; 受信 1 バイト", arch);
-    assert.equal(p.kind, "directive");
-    assert.equal(p.mnemonic?.replace(/^\./, ""), "DS");
-  });
+	test("LABEL: .ds n はディレクティブ（未知命令にしない）", () => {
+		const p = parseAsmLine(
+			"GL_HSHK_RECV_DATA:\t.ds\t1\t; 受信 1 バイト",
+			arch,
+		);
+		assert.equal(p.kind, "directive");
+		assert.equal(p.mnemonic?.replace(/^\./, ""), "DS");
+	});
 
-  test(".blkw もディレクティブ", () => {
-    const p = parseAsmLine("BUF:\t.blkw\t6", arch);
-    assert.equal(p.kind, "directive");
-    assert.equal(p.mnemonic?.replace(/^\./, ""), "BLKW");
-  });
+	test(".blkw もディレクティブ", () => {
+		const p = parseAsmLine("BUF:\t.blkw\t6", arch);
+		assert.equal(p.kind, "directive");
+		assert.equal(p.mnemonic?.replace(/^\./, ""), "BLKW");
+	});
 
-  test("一覧に無い .foo も未知命令にしない", () => {
-    const p = parseAsmLine("\t.foo\t1", arch);
-    assert.equal(p.kind, "directive");
-  });
+	test("一覧に無い .foo も未知命令にしない", () => {
+		const p = parseAsmLine("\t.foo\t1", arch);
+		assert.equal(p.kind, "directive");
+	});
 });
 
 describe("parseAsmLine: ラベル参照抽出", () => {
-  const arch = mn1613Architecture;
+	const arch = mn1613Architecture;
 
-  test(".dw 未定義ラベルを refs に含める", () => {
-    const p = parseAsmLine("\t.dw\ttimer1_interrupt_handler", arch);
-    assert.equal(p.kind, "directive");
-    assert.deepEqual(p.refs, ["TIMER1_INTERRUPT_HANDLER"]);
-  });
+	test(".dw 未定義ラベルを refs に含める", () => {
+		const p = parseAsmLine("\t.dw\ttimer1_interrupt_handler", arch);
+		assert.equal(p.kind, "directive");
+		assert.deepEqual(p.refs, ["TIMER1_INTERRUPT_HANDLER"]);
+	});
 
-  test("B 未定義ラベルを refs に含める", () => {
-    const p = parseAsmLine("\tb\tmissing_label", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, ["MISSING_LABEL"]);
-  });
+	test("B 未定義ラベルを refs に含める", () => {
+		const p = parseAsmLine("\tb\tmissing_label", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, ["MISSING_LABEL"]);
+	});
 
-  test("式 LABEL+2 から識別子を拾う", () => {
-    const p = parseAsmLine("\tb\tUNDEF+2", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, ["UNDEF"]);
-  });
+	test("式 LABEL+2 から識別子を拾う", () => {
+		const p = parseAsmLine("\tb\tUNDEF+2", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, ["UNDEF"]);
+	});
 
-  test("インデックス LABEL(R1) から識別子を拾う", () => {
-    const p = parseAsmLine("\tl\tR0, LAB(R1)", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, ["LAB"]);
-  });
+	test("インデックス LABEL(R1) から識別子を拾う", () => {
+		const p = parseAsmLine("\tl\tR0, LAB(R1)", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, ["LAB"]);
+	});
 
-  test("len(label) の LEN は refs にしない（引数ラベルだけ拾う）", () => {
-    const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg2)", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, ["HELLO_MSG2"]);
-  });
+	test("len(label) の LEN は refs にしない（引数ラベルだけ拾う）", () => {
+		const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg2)", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, ["HELLO_MSG2"]);
+	});
 
-  test("hello_lcd の #len(hello_msg1) も LEN を refs にしない", () => {
-    const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg1)", arch);
-    assert.equal(p.kind, "instruction");
-    assert.ok(!p.refs.includes("LEN"));
-    assert.deepEqual(p.refs, ["HELLO_MSG1"]);
-  });
+	test("hello_lcd の #len(hello_msg1) も LEN を refs にしない", () => {
+		const p = parseAsmLine("\tmvwi\tR1, #len(hello_msg1)", arch);
+		assert.equal(p.kind, "instruction");
+		assert.ok(!p.refs.includes("LEN"));
+		assert.deepEqual(p.refs, ["HELLO_MSG1"]);
+	});
 
-  test("isAsmBuiltinCall は len( だけ真", () => {
-    assert.equal(isAsmBuiltinCall("len", "(hello_msg1)"), true);
-    assert.equal(isAsmBuiltinCall("LEN", " (msg)"), true);
-    assert.equal(isAsmBuiltinCall("len", ""), false);
-    assert.equal(isAsmBuiltinCall("hello_msg1", "("), false);
-  });
+	test("isAsmBuiltinCall は len( だけ真", () => {
+		assert.equal(isAsmBuiltinCall("len", "(hello_msg1)"), true);
+		assert.equal(isAsmBuiltinCall("LEN", " (msg)"), true);
+		assert.equal(isAsmBuiltinCall("len", ""), false);
+		assert.equal(isAsmBuiltinCall("hello_msg1", "("), false);
+	});
 
-  test("len ラベル単独参照は refs に残す", () => {
-    const p = parseAsmLine("\tb\tlen", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, ["LEN"]);
-  });
+	test("len ラベル単独参照は refs に残す", () => {
+		const p = parseAsmLine("\tb\tlen", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, ["LEN"]);
+	});
 
-  test(".include の文字列は refs にしない", () => {
-    const p = parseAsmLine('\t.include "interrupt_io.inc"', arch);
-    assert.equal(p.kind, "directive");
-    assert.deepEqual(p.refs, []);
-  });
+	test(".include の文字列は refs にしない", () => {
+		const p = parseAsmLine('\t.include "interrupt_io.inc"', arch);
+		assert.equal(p.kind, "directive");
+		assert.deepEqual(p.refs, []);
+	});
 
-  test(".global / .globl は未定義ラベル refs にしない", () => {
-    const g = parseAsmLine("\t.global gl_hshk_initiate_send", arch);
-    assert.equal(g.kind, "directive");
-    assert.deepEqual(g.refs, []);
-    const gl = parseAsmLine("\t.globl foo, bar", arch);
-    assert.equal(gl.kind, "directive");
-    assert.deepEqual(gl.refs, []);
-  });
+	test(".global / .globl は未定義ラベル refs にしない", () => {
+		const g = parseAsmLine("\t.global gl_hshk_initiate_send", arch);
+		assert.equal(g.kind, "directive");
+		assert.deepEqual(g.refs, []);
+		const gl = parseAsmLine("\t.globl foo, bar", arch);
+		assert.equal(gl.kind, "directive");
+		assert.deepEqual(gl.refs, []);
+	});
 
-  test("parseGlobalDirectiveNames は外部宣言名を返す", () => {
-    assert.deepEqual(
-      parseGlobalDirectiveNames("\t.global gl_hshk_initiate_send"),
-      ["GL_HSHK_INITIATE_SEND"],
-    );
-    assert.deepEqual(parseGlobalDirectiveNames("\t.globl foo, bar"), [
-      "FOO",
-      "BAR",
-    ]);
-    assert.equal(parseGlobalDirectiveNames("\t.dw\tfoo"), null);
-  });
+	test("parseGlobalDirectiveNames は外部宣言名を返す", () => {
+		assert.deepEqual(
+			parseGlobalDirectiveNames(
+				"\t.global gl_hshk_initiate_send",
+			),
+			["GL_HSHK_INITIATE_SEND"],
+		);
+		assert.deepEqual(
+			parseGlobalDirectiveNames("\t.globl foo, bar"),
+			["FOO", "BAR"],
+		);
+		assert.equal(parseGlobalDirectiveNames("\t.dw\tfoo"), null);
+	});
 
-  test("定数 0 だけの .dw は refs 空", () => {
-    const p = parseAsmLine("\t.dw\t0", arch);
-    assert.equal(p.kind, "directive");
-    assert.deepEqual(p.refs, []);
-  });
+	test("定数 0 だけの .dw は refs 空", () => {
+		const p = parseAsmLine("\t.dw\t0", arch);
+		assert.equal(p.kind, "directive");
+		assert.deepEqual(p.refs, []);
+	});
 
-  test("0b 二進リテラルは未定義ラベルにしない", () => {
-    const p = parseAsmLine("\tandi\tR0, 0b00000111", arch);
-    assert.equal(p.kind, "instruction");
-    assert.deepEqual(p.refs, []);
-  });
+	test("0b 二進リテラルは未定義ラベルにしない", () => {
+		const p = parseAsmLine("\tandi\tR0, 0b00000111", arch);
+		assert.equal(p.kind, "instruction");
+		assert.deepEqual(p.refs, []);
+	});
 
-  test(".dw 0b11100000 / #0b / #0x も refs 空", () => {
-    const dw = parseAsmLine("\t.dw\t0b11100000\t\t; STR", arch);
-    assert.equal(dw.kind, "directive");
-    assert.deepEqual(dw.refs, []);
-    assert.deepEqual(parseAsmLine("\tmvi\tR0, #0b11100000", arch).refs, []);
-    assert.deepEqual(parseAsmLine("\tandi\tR0, #0xFFFF", arch).refs, []);
-  });
+	test(".dw 0b11100000 / #0b / #0x も refs 空", () => {
+		const dw = parseAsmLine("\t.dw\t0b11100000\t\t; STR", arch);
+		assert.equal(dw.kind, "directive");
+		assert.deepEqual(dw.refs, []);
+		assert.deepEqual(
+			parseAsmLine("\tmvi\tR0, #0b11100000", arch).refs,
+			[],
+		);
+		assert.deepEqual(
+			parseAsmLine("\tandi\tR0, #0xFFFF", arch).refs,
+			[],
+		);
+	});
 
-  test("0b11100000 内の B11100000 は単語として見つからない", () => {
-    assert.deepEqual(
-      findIdentRangesInLine("\t.dw\t0b11100000", "B11100000"),
-      [],
-    );
-    assert.deepEqual(findIdentRangesInLine("\tandi\tR0, #0xFFFF", "XFFFF"), []);
-  });
+	test("0b11100000 内の B11100000 は単語として見つからない", () => {
+		assert.deepEqual(
+			findIdentRangesInLine("\t.dw\t0b11100000", "B11100000"),
+			[],
+		);
+		assert.deepEqual(
+			findIdentRangesInLine("\tandi\tR0, #0xFFFF", "XFFFF"),
+			[],
+		);
+	});
 
-  test("0x / サフィックス数値も refs にしない", () => {
-    const p = parseAsmLine("\tandi\tR0, 0x07", arch);
-    assert.deepEqual(p.refs, []);
-    const p2 = parseAsmLine("\tmvi\tR0, 1010b", arch);
-    assert.deepEqual(p2.refs, []);
-    const p3 = parseAsmLine("\tmvi\tR0, 0FFh", arch);
-    assert.deepEqual(p3.refs, []);
-  });
+	test("0x / サフィックス数値も refs にしない", () => {
+		const p = parseAsmLine("\tandi\tR0, 0x07", arch);
+		assert.deepEqual(p.refs, []);
+		const p2 = parseAsmLine("\tmvi\tR0, 1010b", arch);
+		assert.deepEqual(p2.refs, []);
+		const p3 = parseAsmLine("\tmvi\tR0, 0FFh", arch);
+		assert.deepEqual(p3.refs, []);
+	});
 
-  test("数値とラベル混在ではラベルだけ拾う", () => {
-    const p = parseAsmLine("\tai\tR0, MASK+0b11", arch);
-    assert.deepEqual(p.refs, ["MASK"]);
-  });
+	test("数値とラベル混在ではラベルだけ拾う", () => {
+		const p = parseAsmLine("\tai\tR0, MASK+0b11", arch);
+		assert.deepEqual(p.refs, ["MASK"]);
+	});
 
-  test("HSHK_DELAY_50US を数値リテラルとして壊さない", () => {
-    const p = parseAsmLine("\tawi\tR0, HSHK_DELAY_50US", arch);
-    assert.deepEqual(p.refs, ["HSHK_DELAY_50US"]);
-  });
+	test("HSHK_DELAY_50US を数値リテラルとして壊さない", () => {
+		const p = parseAsmLine("\tawi\tR0, HSHK_DELAY_50US", arch);
+		assert.deepEqual(p.refs, ["HSHK_DELAY_50US"]);
+	});
 });
 
 describe("collectSymbolOccurrences", () => {
-  const arch = mn1613Architecture;
+	const arch = mn1613Architecture;
 
-  test("定義と参照を集める", () => {
-    const text = [
-      "gl_handshake_interrupt_handler:",
-      "\tret",
-      "\t.dw\tgl_handshake_interrupt_handler",
-      "\tb\tgl_handshake_interrupt_handler",
-    ].join("\n");
-    const occs = collectSymbolOccurrences(
-      text,
-      "gl_handshake_interrupt_handler",
-      arch,
-      true,
-    );
-    assert.equal(occs.filter((o) => o.kind === "declaration").length, 1);
-    assert.equal(occs.filter((o) => o.kind === "reference").length, 2);
-  });
+	test("定義と参照を集める", () => {
+		const text = [
+			"gl_handshake_interrupt_handler:",
+			"\tret",
+			"\t.dw\tgl_handshake_interrupt_handler",
+			"\tb\tgl_handshake_interrupt_handler",
+		].join("\n");
+		const occs = collectSymbolOccurrences(
+			text,
+			"gl_handshake_interrupt_handler",
+			arch,
+			true,
+		);
+		assert.equal(
+			occs.filter((o) => o.kind === "declaration").length,
+			1,
+		);
+		assert.equal(
+			occs.filter((o) => o.kind === "reference").length,
+			2,
+		);
+	});
 
-  test(".global は宣言として集める", () => {
-    const text = [
-      "\t.global gl_hshk_initiate_send",
-      "\tbald\tgl_hshk_initiate_send",
-    ].join("\n");
-    const occs = collectSymbolOccurrences(
-      text,
-      "gl_hshk_initiate_send",
-      arch,
-      true,
-    );
-    assert.deepEqual(
-      occs.map((o) => o.kind),
-      ["declaration", "reference"],
-    );
-  });
+	test(".global は宣言として集める", () => {
+		const text = [
+			"\t.global gl_hshk_initiate_send",
+			"\tbald\tgl_hshk_initiate_send",
+		].join("\n");
+		const occs = collectSymbolOccurrences(
+			text,
+			"gl_hshk_initiate_send",
+			arch,
+			true,
+		);
+		assert.deepEqual(
+			occs.map((o) => o.kind),
+			["declaration", "reference"],
+		);
+	});
 
-  test("includeDeclaration=false では定義を除外", () => {
-    const text = "FOO:\n\tb\tFOO\n";
-    const occs = collectSymbolOccurrences(text, "FOO", arch, false);
-    assert.deepEqual(
-      occs.map((o) => o.kind),
-      ["reference"],
-    );
-  });
+	test("includeDeclaration=false では定義を除外", () => {
+		const text = "FOO:\n\tb\tFOO\n";
+		const occs = collectSymbolOccurrences(text, "FOO", arch, false);
+		assert.deepEqual(
+			occs.map((o) => o.kind),
+			["reference"],
+		);
+	});
 
-  test("FOO と FOOBAR を混同しない", () => {
-    assert.deepEqual(findIdentRangesInLine("\tb\tFOOBAR", "FOO"), []);
-    assert.deepEqual(findIdentRangesInLine("\tb\tFOO", "FOO"), [
-      { start: 3, end: 6 },
-    ]);
-  });
+	test("FOO と FOOBAR を混同しない", () => {
+		assert.deepEqual(
+			findIdentRangesInLine("\tb\tFOOBAR", "FOO"),
+			[],
+		);
+		assert.deepEqual(findIdentRangesInLine("\tb\tFOO", "FOO"), [
+			{ start: 3, end: 6 },
+		]);
+	});
 });
 
 describe("collectIncludePaths", () => {
-  test(".include パスを集める", () => {
-    const { collectIncludePaths } = require("./symbols/includeParse") as {
-      collectIncludePaths: (t: string) => string[];
-    };
-    const paths = collectIncludePaths(
-      '; c\n.include "../handshake_io.inc"\nINCLUDE "a.inc"\n',
-    );
-    assert.deepEqual(paths, ['"../handshake_io.inc"', '"a.inc"']);
-  });
+	test(".include パスを集める", () => {
+		const { collectIncludePaths } =
+			require("./symbols/includeParse") as {
+				collectIncludePaths: (t: string) => string[];
+			};
+		const paths = collectIncludePaths(
+			'; c\n.include "../handshake_io.inc"\nINCLUDE "a.inc"\n',
+		);
+		assert.deepEqual(paths, ['"../handshake_io.inc"', '"a.inc"']);
+	});
 });
 
 describe("detectArchitecture / preferred CPU", () => {
-  test(".mn1610 / .mn1613 / .tms9995 は拡張子優先（ソース無し）", () => {
-    setPreferredCpuId("mn1613");
-    assert.equal(detectArchitecture("x.mn1610").id, "mn1613");
-    setPreferredCpuId("tms9995");
-    assert.equal(detectArchitecture("x.mn1613").id, "mn1613");
-    setPreferredCpuId("mn1613");
-    assert.equal(detectArchitecture("x.tms9995").id, "tms9995");
-  });
+	test(".mn1613 / .tms9995 は拡張子優先（ソース無し）", () => {
+		setPreferredCpuId("mn1613");
+		assert.equal(detectArchitecture("x.mn1613").id, "mn1613");
+		setPreferredCpuId("tms9995");
+		assert.equal(detectArchitecture("x.mn1613").id, "mn1613");
+		setPreferredCpuId("mn1613");
+		assert.equal(detectArchitecture("x.tms9995").id, "tms9995");
+	});
 
-  test(".asm はステータスバー選択に従う（.cpu 無し）", () => {
-    setPreferredCpuId("mn1613");
-    assert.equal(detectArchitecture("foo.asm").id, "mn1613");
-    setPreferredCpuId("tms9995");
-    assert.equal(detectArchitecture("foo.asm").id, "tms9995");
-  });
+	test(".asm はステータスバー選択に従う（.cpu 無し）", () => {
+		setPreferredCpuId("mn1613");
+		assert.equal(detectArchitecture("foo.asm").id, "mn1613");
+		setPreferredCpuId("tms9995");
+		assert.equal(detectArchitecture("foo.asm").id, "tms9995");
+	});
 
-  test("先頭の .cpu があれば拡張子・既定より優先", () => {
-    setPreferredCpuId("tms9995");
-    assert.equal(
-      detectArchitecture("foo.asm", "\t.cpu\tmn1610\n\tH\n").id,
-      "tms9995",
-    );
-    assert.equal(
-      detectArchitecture("foo.asm", "; c\n\t.cpu\ttms9995\n\tH\n").id,
-      "tms9995",
-    );
-    assert.equal(
-      detectArchitecture("x.tms9995", "\t.cpu\tmn1613\n\tH\n").id,
-      "mn1613",
-    );
-  });
+	test("先頭の .cpu があれば拡張子・既定より優先", () => {
+		setPreferredCpuId("tms9995");
+		assert.equal(
+			detectArchitecture(
+				"foo.asm",
+				"; c\n\t.cpu\ttms9995\n\tH\n",
+			).id,
+			"tms9995",
+		);
+		assert.equal(
+			detectArchitecture("x.tms9995", "\t.cpu\tmn1613\n\tH\n")
+				.id,
+			"mn1613",
+		);
+	});
 
-  test("先頭以外・不正な .cpu は無視して既定／拡張子", () => {
-    setPreferredCpuId("mn1613");
-    assert.equal(
-      detectArchitecture("foo.asm", "\t.org\t0\n\t.cpu\ttms9995\n").id,
-      "mn1613",
-    );
-    assert.equal(
-      detectArchitecture("foo.asm", "\t.cpu\tz8002\n\tH\n").id,
-      "mn1613",
-    );
-  });
+	test("先頭以外・不正な .cpu は無視して既定／拡張子", () => {
+		setPreferredCpuId("mn1613");
+		assert.equal(
+			detectArchitecture(
+				"foo.asm",
+				"\t.org\t0\n\t.cpu\ttms9995\n",
+			).id,
+			"mn1613",
+		);
+		assert.equal(
+			detectArchitecture("foo.asm", "\t.cpu\tz8002\n\tH\n")
+				.id,
+			"mn1613",
+		);
+	});
 
-  test("MN1613 モードでは AWI を命令にする", () => {
-    const p13 = parseAsmLine("\tawi\tR0, 1", mn1613Architecture);
-    assert.equal(p13.kind, "instruction");
-  });
+	test("MN1613 モードでは AWI を命令にする", () => {
+		const p13 = parseAsmLine("\tawi\tR0, 1", mn1613Architecture);
+		assert.equal(p13.kind, "instruction");
+	});
 
-  test("TMS9995 モードでは LI / MOV を命令、AWI を未知にする", () => {
-    const li = parseAsmLine("\tLI\tR1, #0x1234", tms9995Architecture);
-    assert.equal(li.kind, "instruction");
-    assert.equal(li.mnemonic, "LI");
-    const mov = parseAsmLine("\tMOV\tR1, R2", tms9995Architecture);
-    assert.equal(mov.kind, "instruction");
-    const awi = parseAsmLine("\tawi\tR0, 1", tms9995Architecture);
-    assert.equal(awi.kind, "unknown");
-  });
+	test("TMS9995 モードでは LI / MOV を命令、AWI を未知にする", () => {
+		const li = parseAsmLine(
+			"\tLI\tR1, #0x1234",
+			tms9995Architecture,
+		);
+		assert.equal(li.kind, "instruction");
+		assert.equal(li.mnemonic, "LI");
+		const mov = parseAsmLine("\tMOV\tR1, R2", tms9995Architecture);
+		assert.equal(mov.kind, "instruction");
+		const awi = parseAsmLine("\tawi\tR0, 1", tms9995Architecture);
+		assert.equal(awi.kind, "unknown");
+	});
 });
 
 describe("scanSourceCpuId", () => {
-  test("先頭の .cpu を読む", () => {
-    const { scanSourceCpuId } = require("./cpu/parseCpuDirective") as {
-      scanSourceCpuId: (t: string) => string | undefined;
-    };
-    assert.equal(scanSourceCpuId("\t.cpu\tmn1613\n"), "mn1613");
-    assert.equal(scanSourceCpuId("; hi\n\n\t.CPU\tMN1610\n"), undefined);
-    assert.equal(scanSourceCpuId("\t.org\t0\n\t.cpu\tmn1613\n"), undefined);
-    assert.equal(scanSourceCpuId("\t.cpu\n"), undefined);
-  });
-
-  test(".cpu mn1610 は診断エラー", () => {
-    const { findInvalidCpuDirectives } = require("./cpu/parseCpuDirective") as {
-      findInvalidCpuDirectives: (t: string) => Array<{ message: string }>;
-    };
-    const hits = findInvalidCpuDirectives("\t.cpu\tmn1610\n\tH\n");
-    assert.equal(hits.length, 1);
-    assert.equal(hits[0]?.message, "未知の CPU: mn1610");
-    assert.deepEqual(findInvalidCpuDirectives("\t.cpu\tmn1613\n"), []);
-  });
+	test("先頭の .cpu を読む", () => {
+		const { scanSourceCpuId } =
+			require("./cpu/parseCpuDirective") as {
+				scanSourceCpuId: (
+					t: string,
+				) => string | undefined;
+			};
+		assert.equal(scanSourceCpuId("\t.cpu\tmn1613\n"), "mn1613");
+		assert.equal(
+			scanSourceCpuId("\t.org\t0\n\t.cpu\tmn1613\n"),
+			undefined,
+		);
+		assert.equal(scanSourceCpuId("\t.cpu\n"), undefined);
+	});
 });

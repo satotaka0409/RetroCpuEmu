@@ -7,17 +7,21 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * `.../mn1613/test/...` のテストからログディレクトリを求める。
+ * `.../test/mn1613/...`（旧: `.../mn1613/test/...`）からログディレクトリを求める。
  * @param testFile テストファイルの絶対パス
- * @returns `.../mn1613/logs`。対象外なら null
+ * @returns `.../logs/mn1613`。対象外なら null
  */
 export function mn1613LogsDirFromTestFile(testFile: string): string | null {
   const n = testFile.replace(/\\/g, "/");
-  const m = n.match(/^(.*)\/mn1613\/test(?:\/|$)/);
-  if (!m) {
-    return null;
+  const modern = n.match(/^(.*)\/test\/mn1613(?:\/|$)/);
+  if (modern) {
+    return path.join(modern[1], "logs", "mn1613");
   }
-  return path.join(m[1], "mn1613", "logs");
+  const legacy = n.match(/^(.*)\/mn1613\/test(?:\/|$)/);
+  if (legacy) {
+    return path.join(legacy[1], "logs", "mn1613");
+  }
+  return null;
 }
 
 /**
@@ -41,7 +45,7 @@ export function clearCpuLogDir(dir: string): number {
 }
 
 /**
- * 収集したテストファイルから `mn1613/logs` を特定し、既存 `.log` を消す。
+ * 収集したテストファイルから `logs/mn1613` を特定し、既存 `.log` を消す。
  * CLI が全テスト実行の直前に 1 回呼ぶ。
  * @param testFiles 実行するテストの絶対パス
  * @returns 触ったディレクトリと削除数

@@ -5,11 +5,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
-import { assembleAndLink, assembleToHexCdb } from "../src/assemble_link.js";
+import {
+  assembleAndLink,
+  assembleToHexCdb,
+  lookupByteAddr,
+  lookupWordAddr,
+} from "../src/assemble_link.js";
 import { FRAMEWORK_BUILD } from "../src/repo.js";
 import { expect, test } from "../src/unit.js";
 
-const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const fixtures = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "fixtures",
+);
 
 /**
  * fixture 配下のパス。
@@ -47,4 +55,53 @@ test("MAIN 付きで HEX / CDB を書き、gl_main が CDB にある", () => {
   expect(main!.byteAddr % 2).toBe(0);
   expect(main!.wordAddr).toBe(linked.globals.get("GL_MAIN"));
   expect(fs.readFileSync(hexFile, "utf8")).toContain(":00000001FF");
+});
+
+test("TMS9995: MAIN 無しでも MN1613 用スタブを挿入しない", () => {
+  const linked = assembleAndLink({
+    cpu: "tms9995",
+    sources: [
+      {
+        text: [
+          "\t.cpu\ttms9995",
+          "\t.area\t_CODE\t\t(REL,CON)",
+          "\t.global\tGL_TMS_ENTRY",
+          "GL_TMS_ENTRY:",
+          "\tnop",
+          "",
+        ].join("\n"),
+        module: "LIBTMS",
+      },
+    ],
+  });
+  expect(linked.cpu).toBe("tms9995");
+  expect(linked.globals.has("__TEST_FRAME_MAIN")).toBe(false);
+  expect(lookupByteAddr(linked, "GL_TMS_ENTRY")).toBe(0);
+});
+
+test("TMS9995: 奇数バイト位置のグローバルを扱える", () => {
+  const linked = assembleAndLink({
+    cpu: "tms9995",
+    sources: [
+      {
+        text: [
+          "\t.cpu\ttms9995",
+          "\t.area\t_CODE\t\t(REL,CON)",
+          "\t.org\t0x0000",
+          "\tnop",
+          "\t.ds\t1",
+          "\t.global\tGL_ODD",
+          "GL_ODD:",
+          "\tnop",
+          "",
+        ].join("\n"),
+        module: "MAIN",
+      },
+    ],
+  });
+  expect(linked.cpu).toBe("tms9995");
+  expect(lookupByteAddr(linked, "GL_ODD")).toBe(3);
+  expect(linked.globalBytes.get("GL_ODD")).toBe(3);
+  expect(linked.globals.get("GL_ODD")).toBe(1);
+  expect(() => lookupWordAddr(linked, "GL_ODD")).toThrow(/MN1613-only/);
 });

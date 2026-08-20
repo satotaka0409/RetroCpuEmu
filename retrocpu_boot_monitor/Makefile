@@ -2,7 +2,7 @@
 #
 # 主なターゲット:
 #   make ihx          … 各 .asm → .rel → sdld → Intel HEX + CDB + MAP
-#   make test         … mn1613/test の結合テスト（テストフレームワーク経由）
+#   make test         … test/mn1613 の結合テスト（テストフレームワーク経由）
 #   make sdcc-setup   … SDCC (sdld) を CMake 経由で構築（ihx の前提）
 #   make clean        … ビルド成果物を削除
 #
@@ -14,10 +14,13 @@ SHELL := /bin/bash
 ROOT_DIR      := $(abspath ..)
 MONITOR_DIR   := $(abspath .)
 MN1613_DIR    := $(MONITOR_DIR)/mn1613
-SRC_DIR       := $(MN1613_DIR)/src
+SRC_DIR       := $(MONITOR_DIR)/src/mn1613
+TMS9995_SRC_DIR := $(MONITOR_DIR)/src/tms9995
 BUILD_DIR     := $(MONITOR_DIR)/build
 OBJ_DIR       := $(BUILD_DIR)/obj/mn1613
 HEX_DIR       := $(BUILD_DIR)/hex/mn1613
+TMS9995_OBJ_DIR := $(BUILD_DIR)/obj/tms9995
+TMS9995_HEX_DIR := $(BUILD_DIR)/hex/tms9995
 TOOLS_DIR     := $(MONITOR_DIR)/tools
 
 # --- SDCC（sdld。ihx に必須） ---
@@ -46,6 +49,10 @@ IHX           := $(HEX_DIR)/$(TARGET_NAME).ihx
 BIN           := $(HEX_DIR)/$(TARGET_NAME).bin
 CDB           := $(HEX_DIR)/$(TARGET_NAME).cdb
 MAP           := $(HEX_DIR)/$(TARGET_NAME).map
+TMS9995_TARGET_NAME := tms9995_mon
+TMS9995_IHX   := $(TMS9995_HEX_DIR)/$(TMS9995_TARGET_NAME).ihx
+TMS9995_CDB   := $(TMS9995_HEX_DIR)/$(TMS9995_TARGET_NAME).cdb
+TMS9995_MAP   := $(TMS9995_HEX_DIR)/$(TMS9995_TARGET_NAME).map
 
 ASM_SRCS := \
 	$(SRC_DIR)/main.asm \
@@ -105,14 +112,17 @@ INC_DEPS := \
 	$(SRC_DIR)/interrupt_io.inc \
 	$(SRC_DIR)/handshake/handshake_io.inc
 
-.PHONY: all help sdcc-setup retrocpu-asm-build ihx assemble link test clean clean-sdcc
+.PHONY: all help sdcc-setup retrocpu-asm-build ihx ihx-tms9995 ihx-all assemble link test test-tms9995 clean clean-sdcc
 
 all: ihx
 
 help:
 	@echo "retrocpu_boot_monitor"
 	@echo "  make ihx            各 .asm → .rel → sdld → Intel HEX + CDB + MAP"
-	@echo "  make test           mn1613/test 結合テスト（テストフレームワーク）"
+	@echo "  make ihx-tms9995    TMS9995 monitor を Intel HEX + CDB + MAP に変換"
+	@echo "  make ihx-all        MN1613 + TMS9995 の両 monitor をビルド"
+	@echo "  make test           test/mn1613 結合テスト（テストフレームワーク）"
+	@echo "  make test-tms9995   test/tms9995 結合テスト（成果物検証）"
 	@echo "  make sdcc-setup     Build sdld via CMake (required for ihx)"
 	@echo "  make clean          Remove monitor build/ artifacts"
 	@echo ""
@@ -123,6 +133,9 @@ help:
 # -------------------------------------------------------
 test:
 	npm test
+
+test-tms9995:
+	npm run test:tms9995
 
 # -------------------------------------------------------
 # 1. SDCC 環境（sdld。ihx の前提）
@@ -161,10 +174,18 @@ retrocpu-asm-build:
 ihx: sdcc-setup retrocpu-asm-build $(IHX)
 	@echo "Wrote $(IHX)"
 
+ihx-all: ihx ihx-tms9995
+
 $(OBJ_DIR):
 	@mkdir -p $@
 
 $(HEX_DIR):
+	@mkdir -p $@
+
+$(TMS9995_OBJ_DIR):
+	@mkdir -p $@
+
+$(TMS9995_HEX_DIR):
 	@mkdir -p $@
 
 $(REL_MAIN): $(SRC_DIR)/main.asm $(INC_DEPS) | retrocpu-asm-build $(OBJ_DIR)
@@ -244,13 +265,54 @@ $(IHX): $(RELS) $(SDLD) | $(HEX_DIR)
 	node $(SDLD_LINK_CLI) $(RELS) -o $@ --cdb $(CDB) --map $(MAP)
 	cp -f $@ ../retrocpu_emu/
 
+TMS9995_ASM_SRCS := \
+	$(TMS9995_SRC_DIR)/main.asm \
+	$(TMS9995_SRC_DIR)/interrupt.asm \
+	$(TMS9995_SRC_DIR)/breakpoint/breakpoint.asm \
+	$(TMS9995_SRC_DIR)/breakpoint/breakpoint_hist.asm \
+	$(TMS9995_SRC_DIR)/breakpoint/breakpoint_steprun.asm \
+	$(TMS9995_SRC_DIR)/bios/bios_common.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_common.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_main.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_address_break.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_chg_mode.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_hex_keyboard.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_pc_keyboard.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_led.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_beep.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_timer.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_get_time.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_undef.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_lcd1.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_lcd2.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_sensor_raw.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_read_memory.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_write_memory.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_io_rw.asm \
+	$(TMS9995_SRC_DIR)/handshake/handshake_break_hist.asm
+
+TMS9995_RELS := $(patsubst $(TMS9995_SRC_DIR)/%.asm,$(TMS9995_OBJ_DIR)/%.rel,$(TMS9995_ASM_SRCS))
+
+$(TMS9995_OBJ_DIR)/%.rel: $(TMS9995_SRC_DIR)/%.asm | retrocpu-asm-build $(TMS9995_OBJ_DIR)
+	@mkdir -p $(dir $@)
+	@module=$$(basename "$(basename $< .asm)" | tr '[:lower:]-' '[:upper:]_'); \
+	node $(ASM_CLI) $< -o $@ --lst $(basename $@).lst --module $$module
+
+$(TMS9995_IHX): $(TMS9995_RELS) $(SDLD) | $(TMS9995_HEX_DIR)
+	@test -x "$(SDLD)"
+	node $(SDLD_LINK_CLI) $(TMS9995_RELS) -o $@ --cdb $(TMS9995_CDB) --map $(TMS9995_MAP)
+
+ihx-tms9995: sdcc-setup retrocpu-asm-build $(TMS9995_IHX)
+	@echo "Wrote $(TMS9995_IHX)"
+
 assemble: $(RELS)
 
 link: $(IHX)
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -rf $(MONITOR_DIR)/mn1613/logs
+	rm -rf $(MONITOR_DIR)/logs/mn1613
+	rm -rf $(MONITOR_DIR)/logs/tms9995
 
 clean-sdcc: clean
 	@$(MAKE) -C $(SDCC_SRC_DIR)/sdas/linksrc clean 2>/dev/null || true

@@ -15,10 +15,10 @@ export const FRAMEWORK_BUILD = path.join(FRAMEWORK_ROOT, "build");
 /** retrocpu_asm の dist/main */
 export const ASM_DIST = path.join(REPO_ROOT, "retrocpu_asm/dist/main");
 
-/** retrocpu_boot_monitor/mn1613/src */
+/** retrocpu_boot_monitor/src/mn1613 */
 export const MONITOR_SRC = path.join(
   REPO_ROOT,
-  "retrocpu_boot_monitor/mn1613/src",
+  "retrocpu_boot_monitor/src/mn1613",
 );
 
 /** retrocpu_boot_monitor/build/hex/mn1613（mn1613_mon.ihx / .cdb） */
@@ -27,10 +27,10 @@ export const MONITOR_HEX = path.join(
   "retrocpu_boot_monitor/build/hex/mn1613",
 );
 
-/** retrocpu_boot_monitor/mn1613/test（asm と同列のテスト） */
+/** retrocpu_boot_monitor/test/mn1613（モニター結合テスト） */
 export const MONITOR_TEST = path.join(
   REPO_ROOT,
-  "retrocpu_boot_monitor/mn1613/test",
+  "retrocpu_boot_monitor/test/mn1613",
 );
 
 /**

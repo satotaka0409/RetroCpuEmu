@@ -1,0 +1,22 @@
+; TMS9995 CRU bit map used by monitor stubs
+
+INTERRUPT_BUSY_BIT  .equ 0x20
+INT1_CAUSE_BIT      .equ 0x21
+INT2_CAUSE_BASE     .equ 0x22
+
+INT2_CAUSE_TIMER    .equ 0
+INT2_CAUSE_HSHK     .equ 1
+
+HSHK_OUT_REQ_BIT    .equ 0x24
+HSHK_ENA_BIT        .equ 0x25
+HSHK_OUT_DENA_BIT   .equ 0x26
+HSHK_IN_DACK_BIT    .equ 0x27
+HSHK_IN_REQ_BIT     .equ 0x28
+HSHK_IN_DENA_BIT    .equ 0x29
+HSHK_IN_DACK_BIT    .equ 0x2A
+HSHK_OUT_DACK_BIT   .equ 0x2B
+
+HSHK_OUT_DATA_BASE  .equ 0x30
+HSHK_IN_DATA_BASE   .equ 0x38
+
+STEP_BRK_ENA_BIT    .equ 0x68

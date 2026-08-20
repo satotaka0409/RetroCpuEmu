@@ -15,7 +15,7 @@ import { addrComparators } from "./addr_comparator";
 import { stepBreak } from "./step_break";
 
 /**
- * Panasonic MN1610 / MN1613 CPU Emulator Core
+ * Panasonic MN1613 CPU Emulator Core
  *
  * 参照文書: .github/MN1610.md / .github/MN1613.md
  *
@@ -72,17 +72,17 @@ export function getMemory(): ArrayBufferLike {
 
 // ─────────────────────────────────────────────
 // STR ビット定義
-// MN1610 の bit0=MSB 記法 → JS の bit15=MSB に変換
+// MN1613 の bit0=MSB 記法 → JS の bit15=MSB に変換
 // ─────────────────────────────────────────────
-/** E フラグ（拡張／キャリー）: MN1610 bit0 */
+/** E フラグ（拡張／キャリー）: MN1613 bit0 */
 export const STR_E = 0x8000;
-/** OVF フラグ（オーバーフロー）: MN1610 bit2 */
+/** OVF フラグ（オーバーフロー）: MN1613 bit2 */
 export const STR_OVF = 0x2000;
-/** M0（割り込みマスク level0）: MN1610 bit5 */
+/** M0（割り込みマスク level0）: MN1613 bit5 */
 export const STR_M0 = 0x0400;
-/** M1（割り込みマスク level1）: MN1610 bit6 */
+/** M1（割り込みマスク level1）: MN1613 bit6 */
 export const STR_M1 = 0x0200;
-/** M2（割り込みマスク level2）: MN1610 bit7 */
+/** M2（割り込みマスク level2）: MN1613 bit7 */
 export const STR_M2 = 0x0100;
 
 /** IISR 未定義命令フラグ（LSB 側 bit15） */
@@ -1150,11 +1150,10 @@ function _handleIRQ(): void {
 /**
  * 未定義命令トラップ: IISR bit15 を立て、レベル0内部割り込みを即時受理する。
  * M0 マスクは問わない（MN1613.mdc: 未定義命令 → レベル0内部割り込みが発生）。
- * HALT にはしない（MN1610 の「未定義＝H」とは異なる）。
  */
 function _trapUndefinedInsn(): void {
   // 未定義命令は IISR の未定義通知（bit15）を立てる。
-  cpuRegister.IISR |= 0x8000;
+  cpuRegister.IISR |= 0x0001;
   cpuRegister.IISR |= IISR_UNDEF;
   _acceptIrq(0);
 }

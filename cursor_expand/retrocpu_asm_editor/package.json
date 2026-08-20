@@ -14,7 +14,7 @@
     "Snippets"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.{asm,s,mn1613,mn1610,tms9995,inc,h}"
+    "workspaceContains:**/*.{asm,s,mn1613,tms9995,inc,h}"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -37,17 +37,25 @@
         "id": "mn1613asm",
         "aliases": [
           "MN1613 Assembly",
-          "TMS9995 Assembly",
           "Retro Assembly"
         ],
         "extensions": [
           ".asm",
           ".s",
           ".mn1613",
-          ".mn1610",
-          ".tms9995",
           ".inc",
           ".h"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "tms9995asm",
+        "aliases": [
+          "TMS9995 Assembly",
+          "Retro Assembly (TMS9995)"
+        ],
+        "extensions": [
+          ".tms9995"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -55,6 +63,11 @@
     "grammars": [
       {
         "language": "mn1613asm",
+        "scopeName": "source.mn1613asm",
+        "path": "./syntaxes/mn1613.tmLanguage.json"
+      },
+      {
+        "language": "tms9995asm",
         "scopeName": "source.mn1613asm",
         "path": "./syntaxes/mn1613.tmLanguage.json"
       }
@@ -66,6 +79,10 @@
       },
       {
         "language": "mn1613asm",
+        "path": "./snippets/tms9995.json"
+      },
+      {
+        "language": "tms9995asm",
         "path": "./snippets/tms9995.json"
       }
     ],
@@ -141,7 +158,7 @@
             "tms9995"
           ],
           "default": "mn1613",
-          "description": "ステータスバーで選ぶ既定 CPU。.asm / .s / .inc / .h の命令解釈に使う（.mn1613 / .mn1610 / .tms9995 は拡張子優先。.mn1610 は MN1613）"
+          "description": "ステータスバーで選ぶ既定 CPU。.asm / .s / .inc / .h の命令解釈に使う（.mn1613 / .tms9995 は拡張子優先。）"
         },
         "retroAsm.assemblerPath": {
           "type": "string",
@@ -152,6 +169,19 @@
     },
     "configurationDefaults": {
       "[mn1613asm]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null,
+        "editor.codeActionsOnSave": {},
+        "editor.tabSize": 8,
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false,
+        "editor.indentSize": "tabSize",
+        "files.trimTrailingWhitespace": false,
+        "files.insertFinalNewline": false
+      },
+      "[tms9995asm]": {
         "editor.formatOnSave": false,
         "editor.formatOnPaste": false,
         "editor.formatOnType": false,

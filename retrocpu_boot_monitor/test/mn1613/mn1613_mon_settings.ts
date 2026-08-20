@@ -10,15 +10,15 @@ import type {
   JsonTestSettings,
 } from "../../../retrocpu_test_framework/src/index.js";
 
-/** `mn1613/logs`（テスト専用 CPU ログ） */
+/** `logs/mn1613`（テスト専用 CPU ログ） */
 export const MN1613_TEST_LOG_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../logs",
+  "../../logs/mn1613",
 );
 
 /**
  * `*_test.ts` に対応する asm 名の `.log` を `cpuLogFile` に付ける。
- * `handshake_timer_test.ts` → `mn1613/logs/handshake_timer.log`
+ * `handshake_timer_test.ts` → `logs/mn1613/handshake_timer.log`
  * @param settings 元設定
  * @param testMetaUrl 呼び出し元の `import.meta.url`
  * @param opts 任意。`cpuLogMode` など

@@ -4,7 +4,7 @@
  */
 
 /** retrocpu_asm が扱う CPU */
-export type AsmCpuType = "mn1610" | "mn1613" | "tms9995";
+export type AsmCpuType = "mn1613" | "tms9995";
 
 /** 1 モジュール分の入力（ファイルまたはインライン） */
 export type AsmSource =
@@ -71,11 +71,13 @@ export type LinkedCheckpoint = {
 
 /** リンク済みイメージとシンボル */
 export type LinkedImage = {
+  /** 対象 CPU */
+  cpu: AsmCpuType;
   /** 結合後バイト列（ビッグエンディアン、先頭＝領域 0） */
   image: Uint8Array;
   /** グローバル Def（ワードアドレス） */
   globals: Map<string, number>;
-  /** グローバル Def（バイトアドレス。CDB と同じ） */
+  /** グローバル Def（バイトアドレス。CDB と同じ。TMS9995 はこちらを優先） */
   globalBytes: Map<string, number>;
   /** Intel HEX テキスト */
   hexText: string;
@@ -117,4 +119,3 @@ export type CdbCheckpointInfo = {
  * - `instruction`: 全命令。実行後のみ 1 行
  */
 export type CpuLogMode = "checkpoint" | "instruction";
-

@@ -21,6 +21,6 @@
   "include": [
     "../retrocpu_test_framework/src/**/*.ts",
     "../retrocpu_test_framework/test/**/*.ts",
-    "../retrocpu_boot_monitor/mn1613/test/**/*.ts"
+    "../retrocpu_boot_monitor/test/mn1613/**/*.ts"
   ]
 }

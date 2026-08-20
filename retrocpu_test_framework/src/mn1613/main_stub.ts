@@ -1,7 +1,7 @@
 import type { AsmCpuType } from "../types.js";
 
 /**
- * MAIN が無いときの `_CODE` 原点（ワード）。MN1610/1613 は割り込み領域を避ける。
+ * MAIN が無いときの `_CODE` 原点（ワード）。MN1613 は割り込み領域を避ける。
  * @param cpu CPU
  * @param hasMain ソースに MAIN があるか
  * @returns スタブを置くワード。0 ならスタブ無し
@@ -13,7 +13,7 @@ export function mn1613DefaultCodeOrgWord(
   if (hasMain) {
     return 0;
   }
-  if (cpu === "mn1613" || cpu === "mn1610") {
+  if (cpu === "mn1613") {
     return 0x0200;
   }
   return 0;

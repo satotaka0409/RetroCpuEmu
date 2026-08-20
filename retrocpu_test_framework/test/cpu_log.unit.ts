@@ -187,10 +187,16 @@ test("cpuLogMode instruction は全命令を実行後だけ出す", async () => 
   expect(initRecs.some((r) => r[3] === "-" && r[6] === "H")).toBe(true);
 });
 
-test("全体テスト開始時は mn1613/logs の .log だけ消す", () => {
+test("全体テスト開始時は logs/mn1613 の .log だけ消す", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "rtf-logclear-"));
-  const testFile = path.join(root, "mn1613", "test", "bios", "bios_common_test.ts");
-  const logDir = path.join(root, "mn1613", "logs");
+  const testFile = path.join(
+    root,
+    "test",
+    "mn1613",
+    "bios",
+    "bios_common_test.ts",
+  );
+  const logDir = path.join(root, "logs", "mn1613");
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
   fs.mkdirSync(logDir, { recursive: true });
   fs.writeFileSync(path.join(logDir, "bios_common.log"), "old\n");
@@ -198,9 +204,9 @@ test("全体テスト開始時は mn1613/logs の .log だけ消す", () => {
   fs.writeFileSync(path.join(logDir, "keep.txt"), "keep\n");
 
   expect(mn1613LogsDirFromTestFile(testFile)).toBe(logDir);
-  expect(mn1613LogsDirFromTestFile(path.join(root, "test", "cpu_log.unit.ts"))).toBe(
-    null,
-  );
+  expect(
+    mn1613LogsDirFromTestFile(path.join(root, "test", "cpu_log.unit.ts")),
+  ).toBe(null);
 
   const cleared = clearCpuLogsBeforeRun([
     testFile,

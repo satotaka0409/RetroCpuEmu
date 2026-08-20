@@ -15,6 +15,7 @@ import { MEM_BYTES } from "../shared/shared_board";
 export const BOOT_MONITOR_HEX_NAMES = [
   "boot_monitor.ihx",
   "mn1613_mon.ihx",
+  "tms9995_mon.ihx",
 ] as const;
 
 /** DMA / HALT / RST を行うリンク面 */
@@ -78,15 +79,30 @@ function hexSearchDirs(): string[] {
   add(path.join(process.cwd(), "assets"));
   add(path.join(process.cwd(), "dist/assets"));
   add(path.join(process.cwd(), "retrocpu_boot_monitor/build/hex/mn1613"));
+  add(path.join(process.cwd(), "retrocpu_boot_monitor/build/hex/tms9995"));
   add(path.join(process.cwd(), "../retrocpu_boot_monitor/build/hex/mn1613"));
+  add(path.join(process.cwd(), "../retrocpu_boot_monitor/build/hex/tms9995"));
+  add(path.join(process.cwd(), "../../retrocpu_boot_monitor/build/hex/mn1613"));
   add(
-    path.join(process.cwd(), "../../retrocpu_boot_monitor/build/hex/mn1613"),
+    path.join(process.cwd(), "../../retrocpu_boot_monitor/build/hex/tms9995"),
   );
   add(
     path.join(moduleDir(), "../../../retrocpu_boot_monitor/build/hex/mn1613"),
   );
   add(
-    path.join(moduleDir(), "../../../../retrocpu_boot_monitor/build/hex/mn1613"),
+    path.join(moduleDir(), "../../../retrocpu_boot_monitor/build/hex/tms9995"),
+  );
+  add(
+    path.join(
+      moduleDir(),
+      "../../../../retrocpu_boot_monitor/build/hex/mn1613",
+    ),
+  );
+  add(
+    path.join(
+      moduleDir(),
+      "../../../../retrocpu_boot_monitor/build/hex/tms9995",
+    ),
   );
   return dirs;
 }
@@ -94,7 +110,7 @@ function hexSearchDirs(): string[] {
 /**
  * ブートモニタ IHX のパスを決める。
  * 優先: 明示パス / `RETROCPU_BOOT_MONITOR_HEX` → 探索ディレクトリ内の
- * `boot_monitor.ihx` / `mn1613_mon.ihx`。
+ * `boot_monitor.ihx` / `mn1613_mon.ihx` / `tms9995_mon.ihx`。
  * @param explicit 呼び出し側が渡す絶対／相対パス（任意）
  * @returns 存在するファイルの絶対パス
  * @throws 見つからない場合
@@ -116,13 +132,13 @@ export function resolveBootMonitorHexPath(explicit?: string): string {
     }
   }
   throw new Error(
-    "ブートモニタ IHX が見つからない（boot_monitor.ihx / mn1613_mon.ihx）。" +
+    "ブートモニタ IHX が見つからない（boot_monitor.ihx / mn1613_mon.ihx / tms9995_mon.ihx）。" +
       " retrocpu_boot_monitor を make ihx するか RETROCPU_BOOT_MONITOR_HEX を指定する",
   );
 }
 
 /**
- * IHX に対応する CDB パス（同じ stem）。無ければ探索ディレクトリの `mn1613_mon.cdb`。
+ * IHX に対応する CDB パス（同じ stem）。無ければ探索ディレクトリの既知 CDB を探す。
  * @param hexPath 対応 IHX。省略時は探索のみ
  * @returns 存在する `.cdb` の絶対パス
  * @throws CDB が無い場合
@@ -133,13 +149,17 @@ export function resolveBootMonitorCdbPath(hexPath?: string): string {
     if (fs.existsSync(beside)) return beside;
   }
   for (const dir of hexSearchDirs()) {
-    for (const name of ["mn1613_mon.cdb", "boot_monitor.cdb"] as const) {
+    for (const name of [
+      "mn1613_mon.cdb",
+      "tms9995_mon.cdb",
+      "boot_monitor.cdb",
+    ] as const) {
       const p = path.join(dir, name);
       if (fs.existsSync(p)) return p;
     }
   }
   throw new Error(
-    "ブートモニタ CDB が見つからない（mn1613_mon.cdb）。retrocpu_boot_monitor を make ihx する",
+    "ブートモニタ CDB が見つからない（mn1613_mon.cdb / tms9995_mon.cdb）。retrocpu_boot_monitor を make ihx する",
   );
 }
 

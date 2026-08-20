@@ -5,71 +5,82 @@
 
 import * as vscode from "vscode";
 import { findCheckpointComment } from "../comments/checkpoint";
+import { isAsmLanguageId } from "../languageIds";
 
 /**
  * 可視エディタの `; @cp` 行を ThemeColor で装飾する。
  * @param context 拡張コンテキスト
  */
 export function registerCheckpointHighlight(
-  context: vscode.ExtensionContext,
+	context: vscode.ExtensionContext,
 ): void {
-  const deco = vscode.window.createTextEditorDecorationType({
-    color: new vscode.ThemeColor("retroAsm.checkpointForeground"),
-    backgroundColor: new vscode.ThemeColor("retroAsm.checkpointBackground"),
-    fontWeight: "bold",
-    overviewRulerColor: new vscode.ThemeColor("retroAsm.checkpointForeground"),
-    overviewRulerLane: vscode.OverviewRulerLane.Right,
-  });
+	const deco = vscode.window.createTextEditorDecorationType({
+		color: new vscode.ThemeColor("retroAsm.checkpointForeground"),
+		backgroundColor: new vscode.ThemeColor(
+			"retroAsm.checkpointBackground",
+		),
+		fontWeight: "bold",
+		overviewRulerColor: new vscode.ThemeColor(
+			"retroAsm.checkpointForeground",
+		),
+		overviewRulerLane: vscode.OverviewRulerLane.Right,
+	});
 
-  /**
-   * 1 エディタへチェックポイント装飾を付ける。
-   * @param editor 対象
-   */
-  const apply = (editor: vscode.TextEditor): void => {
-    if (editor.document.languageId !== "mn1613asm") {
-      editor.setDecorations(deco, []);
-      return;
-    }
-    const ranges: vscode.Range[] = [];
-    const doc = editor.document;
-    for (let i = 0; i < doc.lineCount; i += 1) {
-      const line = doc.lineAt(i);
-      const hit = findCheckpointComment(line.text);
-      if (!hit) continue;
-      ranges.push(
-        new vscode.Range(i, hit.commentStart, i, hit.commentEnd),
-      );
-    }
-    editor.setDecorations(deco, ranges);
-  };
+	/**
+	 * 1 エディタへチェックポイント装飾を付ける。
+	 * @param editor 対象
+	 */
+	const apply = (editor: vscode.TextEditor): void => {
+		if (!isAsmLanguageId(editor.document.languageId)) {
+			editor.setDecorations(deco, []);
+			return;
+		}
+		const ranges: vscode.Range[] = [];
+		const doc = editor.document;
+		for (let i = 0; i < doc.lineCount; i += 1) {
+			const line = doc.lineAt(i);
+			const hit = findCheckpointComment(line.text);
+			if (!hit) continue;
+			ranges.push(
+				new vscode.Range(
+					i,
+					hit.commentStart,
+					i,
+					hit.commentEnd,
+				),
+			);
+		}
+		editor.setDecorations(deco, ranges);
+	};
 
-  /**
-   * 可視エディタすべてを更新する。
-   */
-  const refreshVisible = (): void => {
-    for (const editor of vscode.window.visibleTextEditors) {
-      apply(editor);
-    }
-  };
+	/**
+	 * 可視エディタすべてを更新する。
+	 */
+	const refreshVisible = (): void => {
+		for (const editor of vscode.window.visibleTextEditors) {
+			apply(editor);
+		}
+	};
 
-  refreshVisible();
+	refreshVisible();
 
-  context.subscriptions.push(
-    deco,
-    vscode.window.onDidChangeVisibleTextEditors(() => {
-      refreshVisible();
-    }),
-    vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId !== "mn1613asm") return;
-      for (const editor of vscode.window.visibleTextEditors) {
-        if (editor.document === e.document) apply(editor);
-      }
-    }),
-    vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId !== "mn1613asm") return;
-      for (const editor of vscode.window.visibleTextEditors) {
-        if (editor.document === doc) apply(editor);
-      }
-    }),
-  );
+	context.subscriptions.push(
+		deco,
+		vscode.window.onDidChangeVisibleTextEditors(() => {
+			refreshVisible();
+		}),
+		vscode.workspace.onDidChangeTextDocument((e) => {
+			if (!isAsmLanguageId(e.document.languageId)) return;
+			for (const editor of vscode.window.visibleTextEditors) {
+				if (editor.document === e.document)
+					apply(editor);
+			}
+		}),
+		vscode.workspace.onDidOpenTextDocument((doc) => {
+			if (!isAsmLanguageId(doc.languageId)) return;
+			for (const editor of vscode.window.visibleTextEditors) {
+				if (editor.document === doc) apply(editor);
+			}
+		}),
+	);
 }

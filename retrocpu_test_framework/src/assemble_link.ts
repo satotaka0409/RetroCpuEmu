@@ -4,13 +4,12 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { ASM_DIST, FRAMEWORK_BUILD } from "./repo.js";
 import { expandIncludes, expandIncludesFromFile } from "./expand_includes.js";
-import {
-  checkpointId,
-  isSyntheticCheckpointGlobal,
-} from "./checkpoint.js";
+import { checkpointId, isSyntheticCheckpointGlobal } from "./checkpoint.js";
 import { defsToCdb, imageToIntelHex } from "./hex_cdb.js";
-import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
-import { mn1613DefaultCodeOrgWord, mn1613MainStub } from "./mn1613/main_stub.js";
+import {
+  mn1613DefaultCodeOrgWord,
+  mn1613MainStub,
+} from "./mn1613/main_stub.js";
 import type {
   AsmCpuType,
   AsmSource,
@@ -40,6 +39,38 @@ type LinkRelsWithSdldFn = (
 type AssembleResultLike = {
   symbols: Map<string, number>;
 };
+
+/** L:__CP$name$0001:ADDR または L:G$__CP$name$0001:ADDR */
+const CP_CDB_LINE =
+  /^L:(?:G\$)?(__CP\$([A-Za-z_][A-Za-z0-9_]*)\$([0-9]{4})):([0-9A-Fa-f]+)$/;
+
+/**
+ * CDB 文字列からチェックポイントを抜き出す。
+ * parseCdb() は MN1613 前提で奇数バイトを拒否するため、TMS9995 では本関数を使う。
+ * @param cdbText CDB 全文
+ * @returns チェックポイント一覧
+ */
+function parseCheckpointsFromCdb(cdbText: string): LinkedCheckpoint[] {
+  const out: LinkedCheckpoint[] = [];
+  const lines = cdbText.replace(/\r\n/g, "\n").split("\n");
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(CP_CDB_LINE);
+    if (!m) continue;
+    const name = m[2]!;
+    const serial = m[3]!;
+    const byteAddr = parseInt(m[4]!, 16) >>> 0;
+    out.push({
+      name,
+      serial,
+      id: checkpointId(name, serial),
+      byteAddr,
+      wordAddr: byteAddr >>> 1,
+    });
+  }
+  return out;
+}
 
 /**
  * retrocpu_asm の dist から関数を読む。未ビルドならエラー。
@@ -178,16 +209,10 @@ export function assembleAndLink(options: AssembleLinkOptions): LinkedImage {
       globals.set(key, byteAddr >>> 1);
     }
 
-    const parsed = parseCdb(linked.cdbText);
-    const checkpoints: LinkedCheckpoint[] = parsed.checkpoints.map((cp) => ({
-      name: cp.name,
-      serial: cp.serial,
-      id: checkpointId(cp.name, cp.serial),
-      byteAddr: cp.byteAddr >>> 0,
-      wordAddr: cp.wordAddr >>> 0,
-    }));
+    const checkpoints = parseCheckpointsFromCdb(linked.cdbText);
 
     return {
+      cpu,
       image: linked.image,
       globals,
       globalBytes,
@@ -236,8 +261,30 @@ export function defaultHexCdbPaths(): { hexFile: string; cdbFile: string } {
  * @throws 見つからないとき
  */
 export function lookupWordAddr(image: LinkedImage, name: string): number {
+  if (image.cpu === "tms9995") {
+    throw new Error(
+      `lookupWordAddr is MN1613-only for now (symbol: ${name}). ` +
+        "For TMS9995 use lookupByteAddr().",
+    );
+  }
   const key = name.toUpperCase();
   const g = image.globals.get(key);
+  if (g !== undefined) {
+    return g;
+  }
+  throw new Error(`Global symbol not found: ${name}`);
+}
+
+/**
+ * リンク済みグローバルのバイトアドレスを探す（MN1613/TMS9995 共通）。
+ * @param image リンク結果
+ * @param name ラベル名（大文字小文字無視）
+ * @returns バイトアドレス
+ * @throws 見つからないとき
+ */
+export function lookupByteAddr(image: LinkedImage, name: string): number {
+  const key = name.toUpperCase();
+  const g = image.globalBytes.get(key);
   if (g !== undefined) {
     return g;
   }

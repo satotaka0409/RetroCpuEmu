@@ -6,10 +6,7 @@
 
 import { resolveSuitePath } from "../json_suite.js";
 import type { JsonTestSettings } from "../json_value.js";
-import {
-  createMn1613AsmSession,
-  type Mn1613AsmSession,
-} from "./session.js";
+import { createMn1613AsmSession, type Mn1613AsmSession } from "./session.js";
 import type { CpuLogMode } from "../types.js";
 
 /**
@@ -60,6 +57,12 @@ export function createSessionFromSettings(
   fromDir = process.cwd(),
 ): Mn1613AsmSession {
   const resolved = resolveTestSettings(settings, fromDir);
+  if (resolved.cpu !== "mn1613") {
+    throw new Error(
+      `createSessionFromSettings currently supports mn1613 runtime only (got: ${resolved.cpu}). ` +
+        "For tms9995, use assembleAndLink / assembleToHexCdb and byte-address assertions.",
+    );
+  }
   return createMn1613AsmSession({
     hexFile: resolved.hexFile,
     cdbFile: resolved.cdbFile,
