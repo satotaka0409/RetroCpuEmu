@@ -109,8 +109,8 @@ HSHK_RESUME_LIMIT		.equ	2
 HSHK_IRQ_PAY_SET	.equ	9
 HSHK_IRQ_PAY_CLR	.equ	1
 
-; アドレスブレイク（10h/11h）スロット表（_WORK、1 スロット 6 ワード × 8）
-HSHK_AB_SLOTS		.equ	8
+; アドレスブレイク（10h/11h）スロット表（_WORK、1 スロット 6 ワード × 4）
+HSHK_AB_SLOTS		.equ	4
 HSHK_AB_SLOT_WORDS	.equ	6
 HSHK_AB_TBL_WORDS	.equ	HSHK_AB_SLOTS * HSHK_AB_SLOT_WORDS
 HSHK_AB_W_ENA		.equ	0
@@ -129,10 +129,11 @@ HSHK_AB_F_HIST		.equ	0x80
 
 ; 履歴リング（HandShake 17h / breakpoint.mdc）。物理 3F000h＝SBR C + 論理 F000h
 ; 1 エントリ 33 ワード: 時刻4 + AFTER + PREV + レジスタ 11 + スタック 16
-HSHK_BH_DEPTH		.equ	16
+HSHK_BH_DEPTH		.equ	4
+HSHK_BH_INDEX_MASK	.equ	3	; DEPTH-1（リング index）
 HSHK_BH_ENTRY_WORDS	.equ	33
 HSHK_BH_STACK_WORDS	.equ	16
-HSHK_BH_SLOT_WORDS	.equ	HSHK_BH_DEPTH * HSHK_BH_ENTRY_WORDS
+HSHK_BH_SLOT_WORDS	.equ	HSHK_BH_DEPTH * HSHK_BH_ENTRY_WORDS	; 132
 HSHK_BH_SBR		.equ	0x000C
 HSHK_BH_BASE		.equ	0xF000
 HSHK_BH_META_WORDS	.equ	3
@@ -144,8 +145,8 @@ HSHK_BH_W_REGS		.equ	6
 HSHK_BH_W_STACK		.equ	17	; NPP の次から 16 ワード
 HSHK_BH_ENTRY_BYTES	.equ	66
 ; GL_BP_HIST_META（1 スロット 3 ワード）
-HSHK_BH_MW_COUNT	.equ	0	; 有効件数（0–16）
-HSHK_BH_MW_NEXT		.equ	1	; 次書込 index（最新は (NEXT-1) & 15）
+HSHK_BH_MW_COUNT	.equ	0	; 有効件数（0–4）
+HSHK_BH_MW_NEXT		.equ	1	; 次書込 index（最新は (NEXT-1) & 3）
 HSHK_BH_MW_OVF		.equ	2	; Bit0=リングオーバフロー
 ; 比較器ヒットの入口スナップ（スタック。R0 が先頭。リエントラント）
 HSHK_BP_SNAP_WORDS	.equ	6

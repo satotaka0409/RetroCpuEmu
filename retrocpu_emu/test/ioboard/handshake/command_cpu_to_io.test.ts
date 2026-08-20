@@ -7,8 +7,10 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  BREAK_HISTORY_ENTRY_SIZE_TMS9995,
   CPU_FRAME_SIZE,
   CPU_PAYLOAD_REMAINING_SIZE,
+  cpuToIoRemainingSize,
   CpuToIoCommandDispatcher,
   type CpuToIoHandlers,
 } from "../../../src/ioboard/handshake/command_cpu_to_io";
@@ -412,7 +414,7 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     frame.set(
       [
         CMD_CPU_TO_IO.BREAK_NOTIFY,
-        7,
+        3,
         count,
         0x82,
         0,
@@ -430,7 +432,7 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     const response = dispatcher.dispatch(frame);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith({
       kind: 1,
-      slot: 7,
+      slot: 3,
       flags: 0x82,
       breakCount: 0,
       historyCount: count,
@@ -440,8 +442,43 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
 
-  it("historyCount=16（満杯）をそのまま通知できる", () => {
-    const count = 16;
+  it("TMS9995 は履歴エントリ 78B で切り出す", () => {
+    const tms = new CpuToIoCommandDispatcher(handlers, {
+      historyEntrySize: 78,
+    });
+    const count = 1;
+    const entries = new Uint8Array(78);
+    entries[0] = 0x11;
+    entries[77] = 0x22;
+    const frame = new Uint8Array(11 + entries.length);
+    frame.set(
+      [
+        CMD_CPU_TO_IO.BREAK_NOTIFY,
+        0,
+        count,
+        0x82,
+        0,
+        0x00,
+        0x00,
+        0x10,
+        0x00,
+        count,
+        0,
+      ],
+      0,
+    );
+    frame.set(entries, 11);
+    tms.dispatch(frame);
+    expect(handlers.onBreakNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        historyCount: 1,
+        historyEntries: [entries],
+      }),
+    );
+  });
+
+  it("historyCount=4（満杯）をそのまま通知できる", () => {
+    const count = 4;
     const entries = new Uint8Array(count * 66);
     const frame = new Uint8Array(11 + entries.length);
     frame.set(
@@ -464,17 +501,17 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     dispatcher.dispatch(frame);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith(
       expect.objectContaining({
-        historyCount: 16,
+        historyCount: 4,
       }),
     );
   });
 
   it("履歴件数はヘッダ位置(02h)を優先し、末尾の重複値(09h)に影響されない", () => {
-    const entries = new Uint8Array(16 * 66);
+    const entries = new Uint8Array(4 * 66);
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
       2,
-      16,
+      4,
       0xc2,
       3,
       0x00,
@@ -490,15 +527,15 @@ describe("CpuToIoCommandDispatcher — ブレイク通知(0x1A)", () => {
     dispatcher.dispatch(full);
     expect(handlers.onBreakNotify).toHaveBeenCalledWith(
       expect.objectContaining({
-        historyCount: 16,
+        historyCount: 4,
       }),
     );
   });
 
-  it("スロット 8 は NG", () => {
+  it("スロット 4 は NG", () => {
     const frame = new Uint8Array([
       CMD_CPU_TO_IO.BREAK_NOTIFY,
-      8,
+      4,
       0,
       0,
       0,
@@ -787,5 +824,20 @@ describe("CpuToIoCommandDispatcher — エラーケース", () => {
   it("フレーム長が不足している場合は NG を返す（BEEP - 4バイト）", () => {
     const short = new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x00, 0x01, 0x00]);
     expect(dispatcher.dispatch(short)[0]).toBe(RESPONSE_CODE.NG);
+  });
+});
+
+describe("cpuToIoRemainingSize — 1Ah 可変長", () => {
+  it("MN1613 は件数×66 を残余に加算する", () => {
+    const hdr = new Uint8Array([0x1a, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(cpuToIoRemainingSize(hdr.slice(0, 3))).toBe(11 - 3 + 2 * 66);
+    expect(cpuToIoRemainingSize(hdr, 66)).toBe(2 * 66);
+  });
+
+  it("TMS9995 は件数×78 を残余に加算する", () => {
+    const hdr = new Uint8Array([0x1a, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(cpuToIoRemainingSize(hdr, BREAK_HISTORY_ENTRY_SIZE_TMS9995)).toBe(
+      78,
+    );
   });
 });

@@ -44,15 +44,15 @@ describe("debug_addr_break フレーム", () => {
   });
 
   it("11h はコマンドとスロットだけ", () => {
-    const frame = encodeAddrBreakClrFrame(5);
-    expect(frame).toEqual(Uint8Array.from([CMD_IO_TO_CPU.BREAK_MEM_IO_CLR, 5]));
-    expect(parseAddrBreakClrSlot(frame)).toBe(5);
+    const frame = encodeAddrBreakClrFrame(3);
+    expect(frame).toEqual(Uint8Array.from([CMD_IO_TO_CPU.BREAK_MEM_IO_CLR, 3]));
+    expect(parseAddrBreakClrSlot(frame)).toBe(3);
   });
 
-  it("スロットは 0–7 のみ有効", () => {
+  it("スロットは 0–3 のみ有効", () => {
     expect(isAddrBreakSlot(0)).toBe(true);
-    expect(isAddrBreakSlot(5)).toBe(true);
-    expect(isAddrBreakSlot(7)).toBe(true);
+    expect(isAddrBreakSlot(3)).toBe(true);
+    expect(isAddrBreakSlot(4)).toBe(false);
     expect(isAddrBreakSlot(8)).toBe(false);
   });
 });
@@ -124,12 +124,12 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
       },
     });
     const port = await host.listen();
-    const status = await roundTrip(port, encodeAddrBreakClrFrame(4));
+    const status = await roundTrip(port, encodeAddrBreakClrFrame(3));
     expect(status).toBe(RESPONSE_CODE.OK);
-    expect(clrSlot).toBe(4);
+    expect(clrSlot).toBe(3);
   });
 
-  it("スロット 8 は CPU へ渡さず NG", async () => {
+  it("スロット 4 は CPU へ渡さず NG", async () => {
     let called = false;
     host = new DebugHost({
       port: 0,
@@ -144,7 +144,7 @@ describe("DebugHost TCP（IO が待ち受け、PC が接続）", () => {
     });
     const port = await host.listen();
     const frame = encodeAddrBreakSetFrame({
-      slot: 8,
+      slot: 4,
       flags: 0,
       count: 0,
       addr: 0,

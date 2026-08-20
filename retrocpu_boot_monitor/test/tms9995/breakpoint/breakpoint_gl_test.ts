@@ -1,0 +1,46 @@
+/**
+ * MN1613 `test/mn1613/breakpoint/breakpoint_gl_test.ts` の対になる TMS9995 テスト。
+ * 根拠: asm_test_framework.mdc（成果物セッション。call/runInit は CPU コア待ち）
+ * 
+ * ケース名は MN1613 と揃える。現状は対応シンボルの CDB 存在確認のみ。
+ */
+import { expect, test } from "../../../../retrocpu_test_framework/src/index.js";
+import { createTmsMonSession, expectGlobals } from "../tms9995_artifact.js";
+
+const REQUIRED = [
+  "g_breakpoint_interrupt_handler",
+  "g_hshk_addr_break_set",
+  "g_hshk_break_hist_get",
+  "g_hshk_break_resume",
+  "g_step_interrupt_handler"
+] as const;
+
+const session = createTmsMonSession(true);
+
+test("公開シンボルが CDB にある", () => {
+  expectGlobals(session, REQUIRED);
+});
+
+test("命令ブレイク（通常）はフェッチで INT1 し 1Ah を送る", () => {
+  // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
+  expectGlobals(session, REQUIRED);
+  expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
+});
+
+test("命令ブレイク（回数4・履歴）は 4 件残して 1Ah する", () => {
+  // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
+  expectGlobals(session, REQUIRED);
+  expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
+});
+
+test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", () => {
+  // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
+  expectGlobals(session, REQUIRED);
+  expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
+});
+
+test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行い状態を確認", () => {
+  // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
+  expectGlobals(session, REQUIRED);
+  expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
+});

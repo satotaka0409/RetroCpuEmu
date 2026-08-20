@@ -36,6 +36,7 @@ import {
 } from "./handshake/io_board_mock";
 import { performIoBoardReset, resolveBootMonitorHexPath } from "./io_reset";
 import {
+  breakHistoryEntrySizeForCpu,
   CpuToIoCommandDispatcher,
   type CpuToIoHandlers,
 } from "./handshake/command_cpu_to_io";
@@ -43,10 +44,12 @@ import {
   CMD_CPU_TO_IO,
   intCauseForTimer,
   MODE,
+  RESPONSE_CODE,
 } from "../shared/handshake/handshake_type";
 import { DebugHost } from "./debug_host";
 import {
   OFFSETS,
+  CPU_TYPE,
   createFileSettingAreaStorage,
   decodeSettingArea,
   initializeSettingArea,
@@ -201,6 +204,7 @@ function createEmulatorSensorHandlers(): Pick<
 async function reloadSettingArea(): Promise<void> {
   const inited = await initializeSettingArea(settingStorage);
   settingRaw = inited.raw.slice();
+  syncHistoryEntrySizeFromSettings();
   if (inited.initialized) {
     log.info("設定エリアを初期化", {
       path: settingAreaPath,
@@ -231,6 +235,14 @@ async function writeSettingByte(
   const addr = byteAddr & 0xff;
   const before = settingRaw[OFFSETS.CPU_TYPE_RESET] & 0x01;
   settingRaw = writeSettingAreaByte(settingRaw, addr, value);
+  if (
+    addr === OFFSETS.CPU_TYPE ||
+    addr === OFFSETS.CPU_TYPE_RESET ||
+    addr === OFFSETS.MARK_HI ||
+    addr === OFFSETS.MARK_LO
+  ) {
+    syncHistoryEntrySizeFromSettings();
+  }
   const after = settingRaw[OFFSETS.CPU_TYPE_RESET] & 0x01;
   if (
     addr === OFFSETS.CPU_TYPE_RESET &&
@@ -349,11 +361,35 @@ const wallClock = new IoTimeCounter();
  * 10h〜1Fh（HandShake.mdc 概要表の実装済み範囲）を受理する。
  */
 const cmdState = createIoBoardCommandState();
+const baseCmdHandlers = createDefaultCpuToIoHandlers(
+  cmdState,
+  intervalTimer,
+  wallClock,
+);
 const cmdHandlers: CpuToIoHandlers = {
-  ...createDefaultCpuToIoHandlers(cmdState, intervalTimer, wallClock),
+  ...baseCmdHandlers,
   ...createEmulatorSensorHandlers(),
+  /**
+   * 12h は MN1613 専用。TMS9995 は内蔵デクリメンタを使うため NG。
+   */
+  onTimerSet(params) {
+    if (settingRaw && decodeSettingArea(settingRaw).cpuType === CPU_TYPE.TMS9995) {
+      return RESPONSE_CODE.NG;
+    }
+    return baseCmdHandlers.onTimerSet(params);
+  },
 };
 const cmdDispatcher = new CpuToIoCommandDispatcher(cmdHandlers);
+
+/**
+ * 設定エリアの CPU 種類に合わせて 1Ah 履歴エントリ長を切り替える。
+ * HandShake.mdc: MN1613=66B / TMS9995=78B
+ */
+function syncHistoryEntrySizeFromSettings(): void {
+  if (!settingRaw) return;
+  const { cpuType } = decodeSettingArea(settingRaw);
+  cmdDispatcher.setHistoryEntrySize(breakHistoryEntrySizeForCpu(cpuType));
+}
 
 /**
  * ハンドシェイク 19h をレンダラのスピーカーへ渡す。

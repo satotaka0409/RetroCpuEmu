@@ -35,7 +35,7 @@ export type DebugHostHandlers = {
   addrBreakSet: (payload: Uint8Array) => Promise<number>;
   /**
    * アドレス／IO ブレイク解除（81h）を CPU へ中継する。
-   * @param slot 設定番号 0–7
+   * @param slot 設定番号 0–3
    * @returns OK=0 / NG=1
    */
   addrBreakClr: (slot: number) => Promise<number>;

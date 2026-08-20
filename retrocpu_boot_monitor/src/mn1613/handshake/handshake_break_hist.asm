@@ -6,7 +6,7 @@
 ; CPU→IO: 件数, ステータス, flags, count, addr32 BE（計 8B）
 ;   ＋ エントリ×件数×66B（新しい順）＋ 終端 1B（00h OK / 01h NG / 02h 履歴未設定）。
 ; エントリ 66B: 時刻4語 + AFTER + PREV + レジスタ 10語 + NPP 1B + パディング 0 + スタック 16 語。
-; スロット 0–7。番号不正はヘッダ 0 のあと 01h。Bit7 なしは件数 0・02h。
+; スロット 0–3。番号不正はヘッダ 0 のあと 01h。Bit7 なしは件数 0・02h。
 ; 履歴本体は 3F000h（SBR C + 論理 F000h）。線上送信は CSBR=0 のフレーム複写経由。
 ; 局所 bald は SP+1 が戻り。X0≡R3 なので、スロットは R1 から直接フレームへ書く。
 ; g_* / 局所ヘルパは BALD / RET。R3–R4・TSR0 は退避。
@@ -109,7 +109,7 @@ l_bh_fail:
 	bald	g_hshk_send_byte
 	b	l_bh_done
 
-; --- ユーザ 0–7 ---
+; --- ユーザ 0–3 ---
 l_bh_user:
 	; X1 = GL_HSHK_ADDR_BREAK + slot*6（1 スロット 6 語）
 	mv	R0, R3
@@ -246,7 +246,7 @@ l_bh_hdr_tbl:
 ; -------------------------------------------------------
 ; 履歴エントリを新しい順に送る
 ; @note スロットは呼び出し元フレーム HSHK_BH_SLOT。SBR C からフレーム複写（HSHK_BH_WIRE）へ写して送る。
-; @note リング最新は (NEXT-1) & 15。1 件 66B = 16 語 BE + NPP 1B + パディング 0 + スタック 16 語。
+; @note リング最新は (NEXT-1) & 3。1 件 66B = 16 語 BE + NPP 1B + パディング 0 + スタック 16 語。
 ; @param R0 - 送信件数（0 なら何もしない。1–16）
 ; @return R0 - 最後の send の OK / NG（件数 0 なら入口のまま）
 ; @Destruction R0, R1, R2
@@ -268,15 +268,15 @@ l_bh_se_go:
 	a	X1, R0
 	l	R1, HSHK_BH_MW_NEXT(X1)
 	si	R1, #1
-	andi	R1, #0x000f		; 最新 index
+	andi	R1, #HSHK_BH_INDEX_MASK		; 最新 index
 	push	R1
 	mvi	R0, #HSHK_BH_SBR
 	setb	R0, TSR0
 l_bh_se_lp:
 	; この時点のスタック: +1 index / +2 残り件数 / +3 R4 / +4 R3 / +5 戻り
 	; / +6 TSR0 / +7 スロット / … / +11 複写先頭
-	; エントリ先頭 = F000h + slot*528 + index*33
-	; *33 = <<5 + n、*528 = <<9 + <<4
+	; エントリ先頭 = F000h + slot*132 + index*33
+	; *33 = <<5 + n、*132 = <<7 + <<2
 	mv	X1, SP
 	l	R0, 1(X1)		; index
 	mv	R1, R0
@@ -291,16 +291,14 @@ l_bh_se_lp:
 	l	R0, HSHK_BH_SE_SLOT(X1)	; slot
 	mv	R1, R0
 	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE			; *16
+	sl	R1, RE			; *4
 	mv	R0, R1
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
-	sl	R1, RE			; *512
-	a	R1, R0			; slot*528
+	sl	R1, RE			; *128
+	a	R1, R0			; slot*132
 	a	R1, R2			; + index*33
 	mvwi	R0, #HSHK_BH_BASE
 	a	R1, R0			; 元論理（TSR0=SBR C）
@@ -358,7 +356,7 @@ l_bh_se_stk:
 	mv	X1, SP
 	l	R1, 1(X1)
 	si	R1, #1
-	andi	R1, #0x000f
+	andi	R1, #HSHK_BH_INDEX_MASK
 	st	R1, 1(X1)
 	l	R0, 2(X1)
 	si	R0, #1
@@ -390,19 +388,17 @@ l_bh_clear:
 	st	R0, HSHK_BH_MW_COUNT(X1)
 	st	R0, HSHK_BH_MW_NEXT(X1)
 	st	R0, HSHK_BH_MW_OVF(X1)
-	; リング先頭 = F000h + slot*528（*528 = <<9 + <<4）
+	; リング先頭 = F000h + slot*132（*132 = <<7 + <<2）
 	mv	R1, R3
 	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE			; *16
+	sl	R1, RE			; *4
 	mv	R2, R1
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
-	sl	R1, RE			; *512
-	a	R1, R2			; slot*528
+	sl	R1, RE			; *128
+	a	R1, R2			; slot*132
 	mvwi	R0, #HSHK_BH_BASE
 	a	R1, R0
 	mv	X1, R1

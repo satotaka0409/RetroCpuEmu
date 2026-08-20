@@ -64,8 +64,20 @@ test("snapshot は信号・データ・領域範囲を一貫して返す", () =>
   expect(snap.bits["0x0030"]).toBe(1);
   expect(snap.bits["0x003F"]).toBe(0);
 
-  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMin).toBe(0x0024);
+  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMin).toBe(0x0020);
   expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMax).toBe(0x003f);
   expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_REQ).toBe(0x0024);
   expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DACK).toBe(0x002a);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INTERRUPT_BUSY).toBe(0x0020);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT2_CAUSE).toBe(0x0023);
+});
+
+test("INT1/INT2 要因を IO がセットし CPU が読める", () => {
+  const cru = new Tms9995CruHandshakeMock();
+  cru.ioSetInt1Cause(1); // handshake
+  expect(cru.cpuReadInt1Cause()).toBe(1);
+  cru.ioSetInt2Cause(1); // step
+  expect(cru.cpuReadInt2Cause()).toBe(1);
+  cru.cpuWriteSignal("INTERRUPT_BUSY", 1);
+  expect(cru.ioReadSignal("INTERRUPT_BUSY")).toBe(1);
 });

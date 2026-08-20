@@ -50,7 +50,7 @@ const AFTER_WR = 0xcafe;
 const HIST_SBR = 0x0c;
 const HIST_LOG = 0xf000;
 const HIST_ENTRY_WORDS = 33;
-const HIST_SLOT_WORDS = 16 * HIST_ENTRY_WORDS;
+const HIST_SLOT_WORDS = 4 * HIST_ENTRY_WORDS;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const SAMPLE_TIME_WORDS = [0x0123, 0x4567, 0x89ab, 0xcdef] as const;
 const OP_B_SELF = 0xcfff;
@@ -87,8 +87,8 @@ function physWord(logAddr: number, sbr: number): number {
 
 /**
  * 履歴エントリ先頭の物理ワードアドレス。
- * @param slot ユーザ 0–7
- * @param index リング index 0–15
+ * @param slot ユーザ 0–3
+ * @param index リング index 0–3
  * @returns 物理ワードアドレス
  */
 function histEntryPhys(slot: number, index: number): number {
@@ -104,8 +104,8 @@ const sessionThru = createSessionFromSettings(
 const sessionSlot0 = createSessionFromSettings(
   withMn1613CpuLog(settingsWithHit(0), import.meta.url),
 );
-const sessionSlot6 = createSessionFromSettings(
-  withMn1613CpuLog(settingsWithHit(6), import.meta.url),
+const sessionSlot3 = createSessionFromSettings(
+  withMn1613CpuLog(settingsWithHit(3), import.meta.url),
 );
 const sessionPrev = createSessionFromSettings(
   withMn1613CpuLog(settingsWithHit(0, PREV_WR), import.meta.url),
@@ -182,7 +182,7 @@ function be16(buf: Uint8Array, off: number): number {
 /**
  * ユーザースロット表へ 6 ワードを書く。
  * @param s セッション
- * @param slot 0–7
+ * @param slot 0–3
  * @param words ena / flags / count / addr_hi / addr_lo / data
  */
 function writeSlot(
@@ -238,11 +238,11 @@ test("スロット 0 有効・回数 0 は 1Ah を送り R0=1", async () => {
   });
 });
 
-test("履歴満杯（16件）で停止すると 1Ah の履歴件数は 16", async () => {
+test("履歴満杯（4件）で停止すると 1Ah の履歴件数は 4", async () => {
   await withCase(sessionSlot0, async (s, mock) => {
     writeSlot(s, 0, [1, FLAGS_HIST, 0, 0, WATCH_BYTE, 0]);
     const meta = s.wordAddr("GL_BP_HIST_META");
-    s.writeWord(meta, 16);
+    s.writeWord(meta, 4);
     s.writeWord(meta + 1, 0);
     s.writeWord(meta + 2, 1);
 
@@ -260,7 +260,7 @@ test("履歴満杯（16件）で停止すると 1Ah の履歴件数は 16", asyn
     if (notify == null) throw new Error("missing break notify");
     expect(notify.slot).toBe(0);
     expect(notify.flags).toBe(FLAGS_HIST);
-    expect(notify.historyCount).toBe(16);
+    expect(notify.historyCount).toBe(4);
     expect(notify.addr).toBe(WATCH_BYTE);
   });
 });
@@ -290,9 +290,9 @@ test("回数 2 の 1 回目はデクリメントして継続", async () => {
   });
 });
 
-test("スロット 6 もユーザ比較器として 1Ah", async () => {
-  await withCase(sessionSlot6, async (s, mock) => {
-    writeSlot(s, 6, [1, 0, 0, 0, WATCH_BYTE, 0]);
+test("スロット 3 もユーザ比較器として 1Ah", async () => {
+  await withCase(sessionSlot3, async (s, mock) => {
+    writeSlot(s, 3, [1, 0, 0, 0, WATCH_BYTE, 0]);
     mock.start();
     try {
       await s.call("g_breakpoint_interrupt_handler", {
@@ -305,7 +305,7 @@ test("スロット 6 もユーザ比較器として 1Ah", async () => {
     const notify2 = mock.state.lastBreakNotify;
     if (notify2 == null) throw new Error("missing break notify");
     expect(notify2.kind).toBe(1);
-    expect(notify2.slot).toBe(6);
+    expect(notify2.slot).toBe(3);
     expect(notify2.addr).toBe(WATCH_BYTE);
   });
 });

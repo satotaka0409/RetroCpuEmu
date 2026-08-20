@@ -5,12 +5,12 @@ description: MN1613 アセンブラテスト統合仕様（asm 結合テスト +
 
 # asm テストフレームワーク
 
-根拠: 本ファイル。実装は `retrocpu_test_framework/`（共通）と `retrocpu_test_framework/src/mn1613/`（MN1613 固有）と `retrocpu_emu/src/code_test/`。
+根拠: 本ファイル。実装は `retrocpu_test_framework/`（共通）と `retrocpu_test_framework/src/mn1613/`（MN1613 固有）と `retrocpu_test_framework/src/tms9995/`（TMS9995 固有）と `retrocpu_emu/src/code_test/`。
 呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。
 
 ## 目的
 
-MN1613 の成果物を TypeScript テストから検証するための統合仕様。
+MN1613 / TMS9995 の成果物を TypeScript テストから検証するための統合仕様。
 セッションがテスト対象として読んでよい入力は **`.ihx` と `.cdb` のみ**（`.asm` は読まない）。
 アセンブル／リンクは Makefile 等で事前に行い、成果物パスを `JsonTestSettings` に書く。
 
@@ -18,20 +18,27 @@ MN1613 の成果物を TypeScript テストから検証するための統合仕�
 
 | 系統 | 入力（セッション） | 主用途 | 実装 |
 | :----- | :---- | :---- | :---- |
-| BIOS/モニタ結合 | `.ihx` + `.cdb`（Makefile 成果物） | 回帰・結合 | `retrocpu_test_framework/` + `retrocpu_boot_monitor` |
-| code_test ハーネス | Intel HEX + CDB | 既リンク成果物・C 出力検証 | `retrocpu_emu/src/code_test/` |
+| BIOS/モニタ結合 (MN1613) | `.ihx` + `.cdb` | 実行回帰 | `Mn1613AsmSession` + emu |
+| BIOS/モニタ結合 (TMS9995) | `.ihx` + `.cdb` | 成果物検証 | `Tms9995ArtifactSession`（実行は CPU コア待ち） |
+| code_test ハーネス | Intel HEX + CDB | 既リンク成果物・C 出力検証 | `retrocpu_emu/src/code_test/`（MN1613） |
 | フレームワーク単体 | 自前で `assembleToHexCdb` した一時 HEX/CDB | ハーネス自身の検証 | `retrocpu_test_framework/test/*.unit.ts` |
 
-ターゲット CPU は当面 MN1613。
+## TMS9995（成果物セッション）
+
+- `createTms9995SessionFromSettings` / `createTms9995ArtifactSession`
+- CDB は `parseTms9995Cdb`（奇数バイトアドレス可）。MN1613 の `parseCdb` は使わない
+- `planTms9995Call` 既定スタック `0xFE00`。モニター暫定 ABI は第1=`R1`（`TMS9995_MONITOR_ARG_REGISTERS`）
+- CRU: `Tms9995CruHandshakeMock`（`0x0020..0x003F`。INT1=ハンドシェイク、INT2=break/step、タイマーは内蔵レベル3）
+- **`call` / `runInit` は例外**（`retrocpu_emu` に TMS9995 コアが無い限り）
 
 ## 共通原則
 
-1. **テスト対象のロードは `.ihx` / `.cdb` のみ。** `createMn1613AsmSession` / `createSessionFromSettings` は `.asm` を読まない。
-2. ドライバ専用 `.asm` は作らない。TS から `call` で引数を渡す。
-3. 第1引数=`R0`、第2引数=`R1`、第3引数=`R2`、第4引数以降はスタック。**R3 / R4 は引数に使わない**。戻り値=`R0`/`R1`/`R2`（必要な分）。
+1. **テスト対象のロードは `.ihx` / `.cdb` のみ。** `createMn1613AsmSession` / `createSessionFromSettings` / `createTms9995SessionFromSettings` は `.asm` を読まない。
+2. ドライバ専用 `.asm` は作らない。TS から `call` で引数を渡す（TMS 実行はコア実装後）。
+3. MN1613: 第1引数=`R0`、第2引数=`R1`、第3引数=`R2`、第4引数以降はスタック。**R3 / R4 は引数に使わない**。戻り値=`R0`/`R1`/`R2`（必要な分）。TMS9995 は `asm_rules.mdc`（第1=`R2`…）を正とする。
 4. 被試験ラベルは `.global` / `.globl`。
 5. `call()` はメモリと IO ピンを消さない。ケース分離は `reload()` を使う。
-6. IO/ハンドシェイク検証は `ioMock` で明示する。
+6. IO/ハンドシェイク検証は `ioMock`（MN1613）または CRU モック（TMS9995）で明示する。
 
 ## アドレス規約（MN1613）
 
@@ -39,6 +46,11 @@ MN1613 の成果物を TypeScript テストから検証するための統合仕�
 - 物理メモリは 1 ワード = 2 バイト（BE）。
 - Intel HEX のアドレスはバイトアドレスとして扱う。
 - CDB のラベル末尾アドレスも当面バイトアドレスとして扱い、呼び出し時に `wordAddr = byteAddr / 2`（奇数はエラー）。
+
+## アドレス規約（TMS9995）
+
+- バイトアドレス。CDB / HEX ともバイト。
+- 奇数バイトのグローバルもあり得る（`parseTms9995Cdb` / `lookupByteAddr`）。
 
 ## BIOS/モニタ結合テスト
 
@@ -50,6 +62,7 @@ Makefile: .asm (+ .inc) -> assemble/link -> .ihx + .cdb
   -> g_main -> HALT -> call -> RET -> 戻りスタブ H -> 検証
 ```
 
+TMS9995 は現状フロー末尾の実行部分を省略し、シンボル／メモリ／CRU 静的検証まで。
 `assembleToHexCdb` / `assembleAndLink` はフレームワーク単体テストやビルド補助用。
 リンクは in-process ではなく **sdld**（`SDLD` / `SDCC_BIN_DIR` / `make sdcc-setup`）。未導入なら失敗する。
 製品テストのセッション作成パスでは呼ばない。

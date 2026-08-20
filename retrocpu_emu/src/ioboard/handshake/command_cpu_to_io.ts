@@ -19,6 +19,7 @@
  */
 
 import {
+  ADDR_BREAK_SLOT_COUNT,
   CMD_CPU_TO_IO,
   MODE,
   RESPONSE_CODE,
@@ -26,10 +27,34 @@ import {
 
 /** 1Ah ブレイク通知ヘッダ長（コマンド含む） */
 export const BREAK_NOTIFY_HEADER_SIZE = 11;
-/** 履歴 1 エントリのバイト長（87h と同一） */
-export const BREAK_HISTORY_ENTRY_SIZE = 66;
+/** 履歴 1 エントリ長（MN1613。HandShake.mdc） */
+export const BREAK_HISTORY_ENTRY_SIZE_MN1613 = 66;
+/** 履歴 1 エントリ長（TMS9995。HandShake.mdc） */
+export const BREAK_HISTORY_ENTRY_SIZE_TMS9995 = 78;
+/**
+ * 履歴 1 エントリの既定バイト長（MN1613）。
+ * CPU 種別依存の切替は `breakHistoryEntrySizeForCpu` / ディスパッチャ引数を使う。
+ */
+export const BREAK_HISTORY_ENTRY_SIZE = BREAK_HISTORY_ENTRY_SIZE_MN1613;
 /** 履歴件数の上限 */
-export const BREAK_HISTORY_MAX_COUNT = 16;
+export const BREAK_HISTORY_MAX_COUNT = 4;
+
+/** IO ボード設定の CPU 種類（setting_area.CPU_TYPE と同値） */
+export const HSHK_CPU_TYPE = {
+  MN1613: 1,
+  TMS9995: 2,
+} as const;
+
+/**
+ * CPU 種類に応じた履歴エントリ長（1Ah / 87h）を返す。
+ * @param cpuType setting_area の cpuType（1=MN1613, 2=TMS9995）
+ * @returns バイト長
+ */
+export function breakHistoryEntrySizeForCpu(cpuType: number): number {
+  return cpuType === HSHK_CPU_TYPE.TMS9995
+    ? BREAK_HISTORY_ENTRY_SIZE_TMS9995
+    : BREAK_HISTORY_ENTRY_SIZE_MN1613;
+}
 
 // ─────────────────────────────────────────────
 // 型定義
@@ -142,9 +167,9 @@ export interface CpuToIoHandlers {
     flags: number;
     /** 10h 表の count（ブレイクまでのカウント値） */
     breakCount: number;
-    /** 履歴件数（0-16） */
+    /** 履歴件数（0-4） */
     historyCount: number;
-    /** 履歴エントリ生バイト（1件 66B、87h と同一形式） */
+    /** 履歴エントリ生バイト（1件 MN1613=66B / TMS9995=78B、87h と同一形式） */
     historyEntries: Uint8Array[];
     addr: number;
   }): number;
@@ -227,7 +252,7 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.TIMER_SET]: 6,
   /** 時刻取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.TIME_GET]: 1,
-  /** ブレイク通知: ヘッダ 11 バイト + 履歴エントリ(66B)×件数（最小 11 バイト） */
+  /** ブレイク通知: ヘッダ 11 バイト + 履歴エントリ×件数（最小 11 バイト。エントリ長は CPU 依存） */
   [CMD_CPU_TO_IO.BREAK_NOTIFY]: BREAK_NOTIFY_HEADER_SIZE,
   /** LCD制御: cmd(1) + kind(1) + argA(1) + argB(1) + argC(1) = 5バイト */
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
@@ -274,10 +299,15 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
 /**
  * CPU→IO 受信フレーム（可変長含む）の残余バイト数を返す。
  * 返値は「現在の frameSoFar に対して、あと何バイト必要か」。
- * - BREAK_NOTIFY(1Ah): 件数(02h) が読めるまでヘッダ長で待ち、読めたら 66B×件数を加算
+ * - BREAK_NOTIFY(1Ah): 件数(02h) が読めるまでヘッダ長で待ち、読めたら エントリ長×件数を加算
  * - それ以外: 固定長（未定義コマンドは 1 バイト）
+ * @param frameSoFar これまでに受信したバイト列（先頭はコマンド）
+ * @param entrySize 履歴 1 エントリ長（既定 MN1613=66。TMS9995 は 78）
  */
-export function cpuToIoRemainingSize(frameSoFar: Uint8Array): number {
+export function cpuToIoRemainingSize(
+  frameSoFar: Uint8Array,
+  entrySize: number = BREAK_HISTORY_ENTRY_SIZE_MN1613,
+): number {
   if (frameSoFar.length === 0) return 0;
   const cmd = frameSoFar[0] & 0xff;
   if (cmd !== CMD_CPU_TO_IO.BREAK_NOTIFY) {
@@ -295,8 +325,19 @@ export function cpuToIoRemainingSize(frameSoFar: Uint8Array): number {
   if (historyCount > BREAK_HISTORY_MAX_COUNT) {
     return Math.max(0, headerTotal - frameSoFar.length);
   }
-  const total = headerTotal + historyCount * BREAK_HISTORY_ENTRY_SIZE;
+  const total = headerTotal + historyCount * entrySize;
   return Math.max(0, total - frameSoFar.length);
+}
+
+/**
+ * 指定エントリ長で閉じた `cpuToIoRemainingSize` を返す（mock / adaptive 受信用）。
+ * @param entrySize 履歴 1 エントリ長
+ * @returns frameSoFar → 残余バイト数
+ */
+export function makeCpuToIoRemainingSize(
+  entrySize: number,
+): (frameSoFar: Uint8Array) => number {
+  return (frameSoFar) => cpuToIoRemainingSize(frameSoFar, entrySize);
 }
 
 // ─────────────────────────────────────────────
@@ -332,10 +373,35 @@ function read16(buf: Uint8Array, ofs: number): number {
  * await io.send(response);
  */
 export class CpuToIoCommandDispatcher {
+  private historyEntrySize: number;
+
   /**
    * @param handlers コマンドごとの処理を実装したハンドラ集合
+   * @param options.historyEntrySize 1Ah/87h 相当の履歴エントリ長（省略時 MN1613=66）
    */
-  constructor(private readonly handlers: CpuToIoHandlers) {}
+  constructor(
+    private readonly handlers: CpuToIoHandlers,
+    options: { historyEntrySize?: number } = {},
+  ) {
+    this.historyEntrySize =
+      options.historyEntrySize ?? BREAK_HISTORY_ENTRY_SIZE_MN1613;
+  }
+
+  /**
+   * 履歴エントリ長を切り替える（設定エリアの CPU 種類変更時など）。
+   * @param entrySize バイト長（MN1613=66 / TMS9995=78）
+   */
+  setHistoryEntrySize(entrySize: number): void {
+    this.historyEntrySize = entrySize;
+  }
+
+  /**
+   * 現在の履歴エントリ長を返す。
+   * @returns バイト長
+   */
+  getHistoryEntrySize(): number {
+    return this.historyEntrySize;
+  }
 
   /**
    * 受信フレームを解析してハンドラを呼び出し、応答フレームを返す。
@@ -511,11 +577,11 @@ export class CpuToIoCommandDispatcher {
 
   /**
    * ブレイク通知 (0x1A)
-   * スロット 0–7。応答: 1バイト (OK / NG)
+   * スロット 0–3。応答: 1バイト (OK / NG)
    */
   private _handleBreakNotify(frame: Uint8Array): Uint8Array {
     const slot = frame[0x01]! & 0xff;
-    if (slot > 7) {
+    if (slot >= ADDR_BREAK_SLOT_COUNT) {
       return new Uint8Array([RESPONSE_CODE.NG]);
     }
     const historyCount = frame[0x02]! & 0xff;
@@ -532,14 +598,13 @@ export class CpuToIoCommandDispatcher {
     const kind = (flags & 0x40) !== 0 ? 0 : (flags & 0x01) !== 0 ? 2 : 1;
     const entriesStart = BREAK_NOTIFY_HEADER_SIZE;
     const availableEntryBytes = Math.max(0, frame.length - entriesStart);
-    const availableEntryCount = Math.floor(
-      availableEntryBytes / BREAK_HISTORY_ENTRY_SIZE,
-    );
+    const entrySize = this.historyEntrySize;
+    const availableEntryCount = Math.floor(availableEntryBytes / entrySize);
     const parseCount = Math.min(historyCount, availableEntryCount);
     const historyEntries: Uint8Array[] = [];
     for (let i = 0; i < parseCount; i += 1) {
-      const from = entriesStart + i * BREAK_HISTORY_ENTRY_SIZE;
-      const to = from + BREAK_HISTORY_ENTRY_SIZE;
+      const from = entriesStart + i * entrySize;
+      const to = from + entrySize;
       historyEntries.push(frame.slice(from, to));
     }
     const result = this.handlers.onBreakNotify({

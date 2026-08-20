@@ -73,12 +73,16 @@ export {
 } from "./checkpoint.js";
 export {
   mn1613LogsDirFromTestFile,
+  tms9995LogsDirFromTestFile,
   clearCpuLogDir,
   clearCpuLogsBeforeRun,
 } from "./mn1613/cpu_log_clear.js";
 export {
   TMS9995_DEFAULT_ARG_REGISTERS,
+  TMS9995_MONITOR_ARG_REGISTERS,
   TMS9995_DEFAULT_FORBIDDEN_ARG_REGISTERS,
+  TMS9995_DEFAULT_STACK_INIT,
+  TMS9995_DEFAULT_WORKSPACE,
   planTms9995Call,
   validateTms9995ArgRegisters,
 } from "./tms9995/calling_convention.js";
@@ -87,6 +91,15 @@ export {
   TMS9995_CRU_HANDSHAKE_REGION,
   TMS9995_CRU_HANDSHAKE_SIGNALS,
 } from "./tms9995/cru_handshake.js";
+export {
+  parseTms9995Cdb,
+  requireTms9995Symbol,
+} from "./tms9995/cdb.js";
+export {
+  Tms9995ArtifactSession,
+  createTms9995ArtifactSession,
+} from "./tms9995/session.js";
+export { createTms9995SessionFromSettings } from "./tms9995/settings_session.js";
 export type {
   Tms9995CruActor,
   Tms9995CruBit,
@@ -103,6 +116,7 @@ export type {
   Tms9995ArgLocation,
   Tms9995StackWord,
 } from "./tms9995/types.js";
+export type { Tms9995SessionOptions } from "./tms9995/session.js";
 export {
   beginCpuLogTest,
   endCpuLogTest,

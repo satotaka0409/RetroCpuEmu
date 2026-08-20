@@ -2,19 +2,25 @@
 
 MN1613 / TMS9995 向けの **Intel HEX + CDB** テスト補助ライブラリ（Vitest は使わない）。
 
-- MN1613: アセンブル補助 + エミュ実行セッション（`Mn1613AsmSession`）
-- TMS9995: アセンブル／リンク補助（`assembleAndLink` / `assembleToHexCdb`）
+- MN1613: アセンブル補助 + エミュ実行セッション（`Mn1613AsmSession` / `createSessionFromSettings`）
+- TMS9995: アセンブル／リンク + **成果物セッション**（`Tms9995ArtifactSession` / `createTms9995SessionFromSettings`）
+  - シンボル解決・メモリ読取・呼び出し規約プラン・CRU モックまで
+  - **`call` / `runInit` は未実装**（`retrocpu_emu` に TMS9995 CPU コアが無い）
 
-TMS9995 では CRU ハンドシェイク領域モックも利用できる。
+TMS9995 CRU モック:
 
-- `Tms9995CruHandshakeMock`: CRU 0x0024..0x003F の信号線・データ線を役割付きで検証
-- `TMS9995_CRU_HANDSHAKE_SIGNALS`: 信号名→ビットアドレス対応
-- `TMS9995_CRU_HANDSHAKE_REGION`: 領域定数
+- `Tms9995CruHandshakeMock`: CRU `0x0020..0x003F`（BUSY / INT1・INT2 要因 + ハンドシェイク線）
+- `TMS9995_CRU_HANDSHAKE_SIGNALS` / `TMS9995_CRU_HANDSHAKE_REGION`
+
+呼び出し規約:
+
+- `planTms9995Call`: 既定は `asm_rules` の R2..R9、スタック初期値 `0xFE00`（モニター memmap）
+- モニター BIOS 暫定 ABI（第1=`R1`）は `TMS9995_MONITOR_ARG_REGISTERS` / `session.planCall()` 既定
 
 仕様: `.cursor/rules/asm_test_framework.mdc`
 
-MN1613 固有（セッション、M系列メモリ埋め、CPU ログ、MAIN スタブ）は `src/mn1613/`。
-TMS9995 は現状、実行セッションは未実装（エミュ実行は MN1613 のみ）。
+MN1613 固有（実行セッション、M系列メモリ埋め、CPU ログ、MAIN スタブ）は `src/mn1613/`。
+TMS9995 は `src/tms9995/`。
 
 **テスト対象として読んでよいのは `.ihx` と `.cdb` のみ。** セッション作成は `.asm` を読まない。
 アセンブル／リンクは Makefile 等で事前に行い、成果物パスを設定に書く。
@@ -31,9 +37,9 @@ TMS9995 は現状、実行セッションは未実装（エミュ実行は MN161
 `; @cp <name>` はアセンブララベルではない。`retrocpu_asm` が `.rel` に `L:__CP$name$serial:addr` を出す（同名は `$0001` / `$0002`。同一ワードでも可）。
 チェックポイント欄は `name$serial`（例 `add_enter$0001`）。`instruction` で非 `@cp` なら `-`。
 各 `test()` ケースはタイトルを `START` / `END` で囲む。
-CLI は全体実行の開始時に、対象が `test/mn1613` 配下なら `logs/mn1613/*.log` を削除する。
+CLI は全体実行の開始時に、対象が `test/mn1613` / `test/tms9995` 配下なら対応する `logs/*/*.log` を削除する。
 
-ドライバ `.asm` は使わない。呼び出し規約は **第1引数=`R0` / 第2引数=`R1` / 第3引数=`R2` / 第4引数以降=スタック / 戻り値=`R0`–`R2`**。
+ドライバ `.asm` は使わない。MN1613 呼び出し規約は **第1引数=`R0` / 第2引数=`R1` / 第3引数=`R2` / 第4引数以降=スタック / 戻り値=`R0`–`R2`**。TMS9995 は `asm_rules.mdc`（第1=`R2`…）を正とし、モニター移植中は R1 起点の暫定 ABI もサポートする。
 
 ## テストの置き場
 
@@ -43,10 +49,9 @@ CLI は全体実行の開始時に、対象が `test/mn1613` 配下なら `logs/
 | :---------------------- | :---------------------------------------- | :-------------------------------------- |
 | 本リポジトリ            | `npm test`                                | `test/*.unit.ts`（フレームワーク単体）  |
 | `retrocpu_boot_monitor` | `cd ../retrocpu_boot_monitor && npm test` | `test/mn1613/**/*_test.ts`（BIOS 結合） |
+| 同上                    | `npm run test:tms9995`                    | `test/tms9995/**`（成果物スモーク）     |
 
-BIOS 結合は Makefile 成果物 `mn1613_mon.ihx` / `mn1613_mon.cdb`（`mn1613_mon_settings.ts`）をロードする。IO が必要なら設定の `ioMock`（`mn1613MonHandshakeSettings`）。
-
-フレームワーク単体で `assembleToHexCdb` を使うのは、ハーネス自身の検証用（一時 HEX/CDB を書いてからセッションを開く）に限る。
+BIOS 結合は Makefile 成果物をロードする。MN1613 は `createSessionFromSettings`、TMS9995 は `createTms9995SessionFromSettings`。
 
 ## 実行
 

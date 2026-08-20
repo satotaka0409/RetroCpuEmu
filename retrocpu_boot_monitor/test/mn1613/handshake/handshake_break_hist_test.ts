@@ -78,11 +78,11 @@ async function callHandler(
   return io;
 }
 
-test("17h スロット 8 はヘッダ 0 のあと NG", async () => {
+test("17h スロット 4 はヘッダ 0 のあと NG", async () => {
   await withCase(async (s, mock) => {
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x08, 0x00]),
+      Uint8Array.from([0x17, 0x04, 0x00]),
       9,
     );
     expect(Array.from(reply)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
@@ -141,8 +141,8 @@ test("17h 履歴設定で件数 0 なら OK", async () => {
 /**
  * 履歴エントリ 33 語を物理 3F000h 領域へ置く。
  * @param s セッション
- * @param slot 0–7
- * @param index リング index 0–15
+ * @param slot 0–3
+ * @param index リング index 0–3
  * @param mark 先頭ワード（識別用）
  */
 function plantEntry(
@@ -151,7 +151,7 @@ function plantEntry(
   index: number,
   mark: number,
 ): void {
-  const base = 0x3f000 + slot * 528 + index * 33;
+  const base = 0x3f000 + slot * 132 + index * 33;
   s.writeWord(base, mark);
   s.writeWord(base + 1, 0x4567);
   s.writeWord(base + 2, 0x89ab);
@@ -217,23 +217,23 @@ test("17h は 2 件を新しい順（後に書いた方から）で返す", asyn
   });
 });
 
-test("17h スロット 7 は slot×528 先のエントリを返す", async () => {
+test("17h スロット 3 は slot×132 先のエントリを返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
       Uint8Array.from([
-        0x10, 0x07, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
+        0x10, 0x03, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
       ]),
       1,
     );
-    const meta = s.wordAddr("GL_BP_HIST_META") + 7 * 3;
+    const meta = s.wordAddr("GL_BP_HIST_META") + 3 * 3;
     s.writeWord(meta, 1);
     s.writeWord(meta + 1, 1);
     s.writeWord(meta + 2, 0);
-    plantEntry(s, 7, 0, 0x7777);
+    plantEntry(s, 3, 0, 0x7777);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x07, 0x00]),
+      Uint8Array.from([0x17, 0x03, 0x00]),
       8 + 66 + 1,
     );
     expect(reply[0]).toBe(1);
@@ -296,7 +296,7 @@ test("17h オーバフロー済みはステータス Bit0 を立てる", async (
   });
 });
 
-test("17h 履歴 16 件を新しい順で返す", async () => {
+test("17h 履歴 4 件を新しい順で返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -306,10 +306,10 @@ test("17h 履歴 16 件を新しい順で返す", async () => {
       1,
     );
     const meta = s.wordAddr("GL_BP_HIST_META");
-    s.writeWord(meta, 16);
-    s.writeWord(meta + 1, 16);
+    s.writeWord(meta, 4);
+    s.writeWord(meta + 1, 4);
     s.writeWord(meta + 2, 0);
-    for (let i = 0; i < 16; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       plantEntry(s, 0, i, 0x0100 + i);
     }
 
@@ -317,14 +317,14 @@ test("17h 履歴 16 件を新しい順で返す", async () => {
     const reply = await callHandler(
       mock,
       Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + entrySize * 16 + 1,
+      8 + entrySize * 4 + 1,
     );
 
-    expect(reply.length).toBe(8 + entrySize * 16 + 1);
-    expect(reply[0]).toBe(16);
+    expect(reply.length).toBe(8 + entrySize * 4 + 1);
+    expect(reply[0]).toBe(4);
     expect(reply[1]).toBe(0);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x010f);
-    expect((reply[8 + entrySize * 15]! << 8) | reply[9 + entrySize * 15]!).toBe(
+    expect((reply[8]! << 8) | reply[9]!).toBe(0x0103);
+    expect((reply[8 + entrySize * 3]! << 8) | reply[9 + entrySize * 3]!).toBe(
       0x0100,
     );
     expect(reply[reply.length - 1]).toBe(0x00);

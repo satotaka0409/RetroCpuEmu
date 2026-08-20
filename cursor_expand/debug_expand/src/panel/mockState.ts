@@ -1,6 +1,6 @@
 /**
  * 画面用のデバッグ状態型とモック初期値。
- * 根拠: retrocpu_debug.mdc（比較器スロット 0–7 の 1 プール、INT3 廃止）
+ * 根拠: retrocpu_debug.mdc（比較器スロット 0–3 の 1 プール、INT3 廃止）
  */
 
 /** 物理ワードアドレス幅（18bit → 表示は 16 進 5 桁） */
@@ -293,7 +293,7 @@ function makeRegs(seed: number): RegisterSnapshot {
 export function createMockDebugState(): DebugViewState {
   const current = makeRegs(0);
   const slotHistory: SlotBreakHist[] = [];
-  for (let h = 0; h < 8; h += 1) {
+  for (let h = 0; h < 4; h += 1) {
     slotHistory.push({
       slot: 0,
       histIndex: h,
@@ -341,10 +341,6 @@ export function createMockDebugState(): DebugViewState {
       history: false,
     },
     emptySlot(3),
-    emptySlot(4),
-    emptySlot(5),
-    emptySlot(6),
-    emptySlot(7),
   ];
 
   const memStart = DEFAULT_ENTRY_WORD;

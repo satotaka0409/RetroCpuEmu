@@ -91,7 +91,7 @@
       regs: state.current,
       meta: "現在値",
       breakText:
-        "ブレイク未発生（モック）。\n比較器 0–7 は命令／メモリ／IO。ステップは比較器を使わない。",
+        "ブレイク未発生（モック）。\n比較器 0–3 は命令／メモリ／IO。ステップは比較器を使わない。",
     };
   }
 
@@ -102,7 +102,7 @@
     const el = document.getElementById("regTabs");
     if (!el) return;
     const histBtns = [];
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       const active =
         state.viewMode === "hist" && state.histIndex === i ? " active" : "";
       histBtns.push(
@@ -110,7 +110,7 @@
       );
     }
     const slotBtns = [];
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       const active =
         state.viewMode === "hist" && state.pointSlot === i ? " active" : "";
       slotBtns.push(
@@ -211,7 +211,7 @@
     }
   }
 
-  /** BP 一覧を描画する（スロット 0–7） */
+  /** BP 一覧を描画する（スロット 0–3） */
   function renderBp() {
     const list = document.getElementById("bpSlots");
     if (!list) return;

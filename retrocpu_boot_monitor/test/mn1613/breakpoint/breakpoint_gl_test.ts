@@ -70,7 +70,7 @@ const session: Mn1613AsmSession = createSessionFromSettings(
 /**
  * スロット 6 ワードを読む。
  * @param s セッション
- * @param slot 0–7
+ * @param slot 0–3
  * @returns [ena, flags, count, addrHi, addrLo, data]
  */
 function readSlot(s: Mn1613AsmSession, slot: number): number[] {
@@ -80,7 +80,7 @@ function readSlot(s: Mn1613AsmSession, slot: number): number[] {
 
 /**
  * 10h フレーム（cmd + slot + flags + count + addr32 BE + data16 BE）。
- * @param slot 設定番号 0–7
+ * @param slot 設定番号 0–3
  * @param flags Bit0 MEM/IO, Bit1 RD, Bit2 WR, Bit6 INST, Bit7 履歴
  * @param count 0=即停止。1–255=その回数で停止
  * @param addr 監視バイトアドレス
@@ -153,7 +153,7 @@ async function callHandler(
 
 /**
  * 10h と同じスロットへ CPLD 比較器（MEM READ）を載せる。
- * @param slot 0–7
+ * @param slot 0–3
  * @param wordAddr 監視する 18bit 物理ワードアドレス
  */
 function armCpldFetchBreak(slot: number, wordAddr: number): void {

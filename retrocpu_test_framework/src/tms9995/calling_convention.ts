@@ -7,12 +7,18 @@ import type {
   Tms9995StackWord,
 } from "./types.js";
 
-/** TMS9995 呼び出し規約の既定: 引数は R2..R9。 */
+/** asm_rules.mdc の既定: 引数は R2..R9。 */
 export const TMS9995_DEFAULT_ARG_REGISTERS = [2, 3, 4, 5, 6, 7, 8, 9] as const;
 
 /**
+ * 現行 `retrocpu_boot_monitor` TMS BIOS の引数（第1=R1）。
+ * asm_rules の R2 起点へ揃えるまでの暫定 ABI。
+ */
+export const TMS9995_MONITOR_ARG_REGISTERS = [1, 2, 3] as const;
+
+/**
  * 既定で引数に使わないレジスタ。
- * - R0/R1: 乗除算主用途
+ * - R0/R1: 乗除算主用途（モニター ABI は R1 を第1引数に使う例外あり）
  * - R10: ソフトウェア SP
  * - R11: BL 復帰アドレス
  * - R12: CRU ベース
@@ -22,7 +28,11 @@ export const TMS9995_DEFAULT_FORBIDDEN_ARG_REGISTERS = [
   0, 1, 10, 11, 12, 13, 14, 15,
 ] as const;
 
-const DEFAULT_STACK_INIT = 0x8300;
+/** モニター memmap.inc のスタック初期値（R10）。 */
+export const TMS9995_DEFAULT_STACK_INIT = 0xfe00;
+
+/** モニター memmap.inc のワークスペース（WP）。 */
+export const TMS9995_DEFAULT_WORKSPACE = 0xff00;
 
 function u16(value: number): number {
   return value & 0xffff;
@@ -110,7 +120,7 @@ export function planTms9995Call(
 
   const args = options.args.map((v) => u16(v));
   const regFile = makeRegisterFile();
-  const spBeforePush = u16(options.stackInit ?? DEFAULT_STACK_INIT);
+  const spBeforePush = u16(options.stackInit ?? TMS9995_DEFAULT_STACK_INIT);
   if (spBeforePush & 1) {
     throw new Error(
       `stackInit must be even byte address (got 0x${spBeforePush.toString(16)})`,

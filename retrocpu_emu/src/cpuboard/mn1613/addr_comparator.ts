@@ -6,8 +6,8 @@
  * 一致時は呼び出し側が INT1・INT1_CAUSE=0 を上げる（本モジュールはヒット判定とレジスタのみ）。
  */
 
-/** 比較器本数（ユーザ 0–7。ステップは比較器を使わない） */
-export const CPLD_COMPARATOR_COUNT = 8;
+/** 比較器本数（ユーザ 0–3。ステップは比較器を使わない） */
+export const CPLD_COMPARATOR_COUNT = 4;
 
 /** IO:0030 — スロット選択と ENA / MEM·IO / RD·WR */
 export const IO_PORT_BREAK_CTRL = 0x0030;
@@ -72,7 +72,7 @@ export function decodeBreakCtrl(ctrl: number): {
 
 /**
  * スロット設定を IO:0030 用の制御ワードにする。
- * @param slot 比較器番号 0–7
+ * @param slot 比較器番号 0–3
  * @param enabled ENABLE
  * @param io true=IO
  * @param rdwr 01/10/11
@@ -174,7 +174,7 @@ export class AddrComparatorBank {
 
   /**
    * スロット内容を返す（コピー）。
-   * @param slot 0–7
+   * @param slot 0–3
    * @returns スロット。範囲外は undefined
    */
   getSlot(slot: number): AddrComparatorSlot | undefined {
@@ -185,7 +185,7 @@ export class AddrComparatorBank {
 
   /**
    * スロットを直接設定する（テスト／内部用）。
-   * @param slot 0–7
+   * @param slot 0–3
    * @param cfg 設定
    */
   setSlot(slot: number, cfg: AddrComparatorSlot): void {
@@ -199,7 +199,7 @@ export class AddrComparatorBank {
 
   /**
    * 直近に一致した比較器番号を返す。
-   * @returns 0–7。未ヒットは 0xFFFF
+   * @returns 0–3。未ヒットは 0xFFFF
    */
   getLastHit(): number {
     return this.lastHit;
@@ -291,7 +291,7 @@ export class AddrComparatorBank {
 
   /**
    * 制御ラッチのスロット番号（Bit0–2）。
-   * @returns 0–7
+   * @returns 0–7（有効な比較器は 0–3 のみ）
    */
   private selectedSlot(): number {
     return this.ctrlLatch & 0x07;
@@ -300,6 +300,7 @@ export class AddrComparatorBank {
   /** 選択スロットへ制御ラッチを書き込む */
   private applyCtrlToSlot(): void {
     const d = decodeBreakCtrl(this.ctrlLatch);
+    if (d.slot < 0 || d.slot >= CPLD_COMPARATOR_COUNT) return;
     const s = this.slots[d.slot]!;
     s.enabled = d.enabled;
     s.io = d.io;
@@ -311,6 +312,7 @@ export class AddrComparatorBank {
   /** 選択スロットのアドレスだけ更新する（31/32 書込時） */
   private applyAddrToSelected(): void {
     const slot = this.selectedSlot();
+    if (slot < 0 || slot >= CPLD_COMPARATOR_COUNT) return;
     const s = this.slots[slot]!;
     s.addr =
       ((this.addrHiLatch & 0x03) << 16) | (this.addrLoLatch & 0xffff);

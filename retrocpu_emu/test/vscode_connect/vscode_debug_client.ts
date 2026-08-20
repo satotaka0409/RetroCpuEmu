@@ -111,7 +111,7 @@ export class VsDebugClient {
 
   /**
    * 81h ブレイク解除。
-   * @param slot 0-7
+   * @param slot 0-3
    * @returns status
    */
   breakClear(slot: number): Promise<number> {

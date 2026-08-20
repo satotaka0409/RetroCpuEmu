@@ -3,9 +3,9 @@
 ;
 ; 引数は第1=R0、第2=R1（asm-rules.mdc の呼び出し規約）。
 ; 種は _SYS_PAGE0 の GL_RND_SEED（.ds 1、L/ST *label）。初期値は g_rnd_init で書く。
-; g_* は BALD / RET。コードはセグメント 0。拡張 SBR はデータ（malloc2 等）専用。
+; g_* は BALD / RET。コードはセグメント 0。拡張 SBR はデータ専用。
 ; ヒープは first-fit + 隣接 free 結合。ブロック先頭 2 ワードがヘッダ
-; （サイズ／使用フラグ）。GL_ALLOC_* は CSBR、GL_ALLOC2_* は SBR+TSR0。
+; （サイズ／使用フラグ）。GL_ALLOC_* は CSBR 上。
 
 	.cpu	mn1613
 
@@ -24,18 +24,10 @@
 	.global g_malloc_
 	; @unwarning
 	.global g_free_
-	.global g_malloc2_init
-	; @unwarning
-	.global g_malloc2_
-	; @unwarning
-	.global g_free2_
 	.global g_write_cpu_registers
 	.global GL_RND_SEED
 	.global GL_ALLOC_ADR
 	.global GL_ALLOC_SIZE
-	.global GL_ALLOC2_ADR
-	.global GL_ALLOC2_SBR
-	.global GL_ALLOC2_SIZE
 
 ; 16bit Galois LFSR（M系列）のタップ
 ; 原始多項式 x^16 + x^14 + x^13 + x^11 + 1 → 0xB400
@@ -295,229 +287,6 @@ l_f_done:
 	pop	R3
 	ret
 ; -------------------------------------------------------
-; malloc2 初期化（first-fit・セグメント付きヒープ）
-; @param R0 - ヒープ先頭（論理ワードアドレス）
-; @param R1 - ヒープ SBR（下位 2bit=0 固定。有効値 0/4/8/C。他はマスク）
-; @param R2 - ヒープサイズ（ワード数。2 未満なら確保不可）
-; @Destruction なし
-; -------------------------------------------------------
-g_malloc2_init:
-	push	R3
-	push	R4
-	st	R0, *GL_ALLOC2_ADR
-	mv	R3, R2			; R3 = サイズ（第3引数）
-	mv	R2, R1
-	andi	R2, #0x000c
-	st	R2, *GL_ALLOC2_SBR
-	st	R3, *GL_ALLOC2_SIZE
-	cwi	R3, #GL_HEAP_HDR, LPZ
-	b	l_m2i_done
-	cpyb	R4, TSR0
-	setb	R2, TSR0
-	mv	R2, R0
-	str	R3, TSR0, (R2)
-	eor	R3, R3
-	ai	R2, #1
-	str	R3, TSR0, (R2)
-	setb	R4, TSR0
-l_m2i_done:
-	pop	R4
-	pop	R3
-	ret
-; -------------------------------------------------------
-; malloc2（ワード単位・first-fit。TSR0 でセグメントアクセス）
-; @param R0 - 欲しいワード数（1 以上。ヘッダ 2 ワードは含まない）
-; @return R0 - ユーザ領域先頭。失敗は 0
-; @return R1 - ユーザ領域の SBR。失敗は 0
-; @Destruction R0, R1, R2
-; -------------------------------------------------------
-g_malloc2_:
-	push	R3
-	push	R4
-	cpyb	R3, TSR0
-	push	R3
-	mv	R1, R0
-	mv	R1, R1, NZ
-	b	l_m2_fail
-	ai	R1, #GL_HEAP_HDR
-	c	R1, R0, LP
-	b	l_m2_fail
-	l	R2, *GL_ALLOC2_ADR
-	l	R4, *GL_ALLOC2_SIZE
-	cwi	R4, #GL_HEAP_HDR, LPZ
-	b	l_m2_fail
-	a	R4, R2
-	l	R0, *GL_ALLOC2_SBR
-	setb	R0, TSR0
-l_m2_lp:
-	c	R2, R4, LPZ
-	b	l_m2_body
-	b	l_m2_fail
-l_m2_body:
-	lr	R0, TSR0, (R2)
-	cwi	R0, #GL_HEAP_HDR, LPZ
-	b	l_m2_fail
-	mv	R3, R2
-	a	R3, R0, EZ
-	b	l_m2_fail
-	c	R4, R3, LPZ
-	b	l_m2_fail
-	ai	R2, #1
-	lr	R3, TSR0, (R2)
-	si	R2, #1
-	mv	R3, R3, Z
-	b	l_m2_next
-	c	R0, R1, LPZ
-	b	l_m2_next
-	s	R0, R1
-	cwi	R0, #GL_HEAP_HDR, LPZ
-	b	l_m2_take
-	push	R0
-	mv	R3, R2
-	mv	R0, R1
-	str	R0, TSR0, (R2)
-	ai	R2, #1
-	mvwi	R0, #GL_HEAP_USED
-	str	R0, TSR0, (R2)
-	mv	R2, R3
-	a	R2, R1
-	pop	R0
-	str	R0, TSR0, (R2)
-	ai	R2, #1
-	eor	R0, R0
-	str	R0, TSR0, (R2)
-	mv	R2, R3
-	b	l_m2_user
-l_m2_take:
-	ai	R2, #1
-	mvwi	R0, #GL_HEAP_USED
-	str	R0, TSR0, (R2)
-	si	R2, #1
-l_m2_user:
-	mv	R0, R2
-	ai	R0, #GL_HEAP_HDR
-	l	R1, *GL_ALLOC2_SBR
-	b	l_m2_done
-l_m2_next:
-	lr	R0, TSR0, (R2)
-	a	R2, R0
-	b	l_m2_lp
-l_m2_fail:
-	eor	R0, R0
-	eor	R1, R1
-l_m2_done:
-	pop	R3
-	setb	R3, TSR0
-	pop	R4
-	pop	R3
-	ret
-; -------------------------------------------------------
-; free2（malloc2 で得た先頭を返す。隣接 free は結合する）
-; @param R0 - malloc2 の戻り値（ユーザ先頭）
-; @param R1 - malloc2 の戻り値（SBR）
-; @return R0 - 成功時は同じアドレス。失敗は 0
-; @return R1 - 成功時は同じ SBR。失敗は 0
-; @Destruction R0, R1, R2
-; -------------------------------------------------------
-g_free2_:
-	push	R3
-	push	R4
-	cpyb	R3, TSR0
-	push	R3
-	mv	R0, R0, NZ
-	b	l_f2_fail0
-	l	R2, *GL_ALLOC2_SBR
-	c	R1, R2, Z
-	b	l_f2_fail0
-	setb	R2, TSR0
-	push	R0
-	si	R0, #GL_HEAP_HDR
-	l	R2, *GL_ALLOC2_ADR
-	l	R4, *GL_ALLOC2_SIZE
-	cwi	R4, #GL_HEAP_HDR, LPZ
-	b	l_f2_fail1
-	a	R4, R2
-	mv	R1, R0
-l_f2_lp:
-	c	R2, R4, LPZ
-	b	l_f2_body
-	b	l_f2_fail1
-l_f2_body:
-	c	R2, R1, NZ
-	b	l_f2_hit
-	lr	R0, TSR0, (R2)
-	cwi	R0, #GL_HEAP_HDR, LPZ
-	b	l_f2_fail1
-	a	R2, R0, ENZ
-	b	l_f2_advok
-	b	l_f2_fail1
-l_f2_advok:
-	c	R4, R2, LPZ
-	b	l_f2_fail1
-	b	l_f2_lp
-l_f2_hit:
-	ai	R2, #1
-	lr	R0, TSR0, (R2)
-	si	R2, #1
-	cwi	R0, #GL_HEAP_USED, Z
-	b	l_f2_fail1
-	eor	R0, R0
-	ai	R2, #1
-	str	R0, TSR0, (R2)
-	si	R2, #1
-	l	R2, *GL_ALLOC2_ADR
-	l	R4, *GL_ALLOC2_SIZE
-	a	R4, R2
-l_c2_lp:
-	c	R2, R4, LPZ
-	b	l_c2_body
-	b	l_f2_ok
-l_c2_body:
-	lr	R0, TSR0, (R2)
-	cwi	R0, #GL_HEAP_HDR, LPZ
-	b	l_f2_ok
-	ai	R2, #1
-	lr	R1, TSR0, (R2)
-	si	R2, #1
-	mv	R3, R2
-	a	R3, R0, EZ
-	b	l_f2_ok
-	c	R4, R3, LPZ
-	b	l_f2_ok
-	c	R3, R4, NZ
-	b	l_f2_ok
-	mv	R1, R1, Z
-	b	l_c2_adv
-	ai	R3, #1
-	lr	R1, TSR0, (R3)
-	si	R3, #1
-	mv	R1, R1, Z
-	b	l_c2_adv
-	lr	R1, TSR0, (R3)
-	lr	R0, TSR0, (R2)
-	a	R0, R1
-	str	R0, TSR0, (R2)
-	b	l_c2_lp
-l_c2_adv:
-	lr	R0, TSR0, (R2)
-	a	R2, R0
-	b	l_c2_lp
-l_f2_ok:
-	pop	R0
-	l	R1, *GL_ALLOC2_SBR
-	b	l_f2_done
-l_f2_fail1:
-	pop	R3
-l_f2_fail0:
-	eor	R0, R0
-	eor	R1, R1
-l_f2_done:
-	pop	R3
-	setb	R3, TSR0
-	pop	R4
-	pop	R3
-	ret
-; -------------------------------------------------------
 ; CPUレジスタの書き出し
 ; あらかじめpushmでスタックに積んでおく
 ; @param R0 - 書き出しエリアアドレス
@@ -589,10 +358,3 @@ GL_BAL_TMP:	.ds	1
 GL_ALLOC_ADR:	.ds	1
 ; ヒープサイズ
 GL_ALLOC_SIZE:	.ds	1
-
-; ヒープアドレス2
-GL_ALLOC2_ADR:	.ds	1
-; ヒープBR
-GL_ALLOC2_SBR:	.ds	1
-; ヒープサイズ
-GL_ALLOC2_SIZE:	.ds	1

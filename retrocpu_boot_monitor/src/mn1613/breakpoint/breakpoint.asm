@@ -13,9 +13,9 @@
 ;
 ; 処理の流れ:
 ;   1. 0033 を読む。Bit3 以上が立っていたら未ヒット（0xFFFF など）→ スルー。
-;      下位 3bit がスロット番号 0–7。
+;      下位 2bit がスロット番号 0–3（Bit2 は未使用可）。
 ;   2. 0034 を読む（前回書込値）。スタックフレームへ残す（リエントラント）。
-;   3. スロット 0–7 はすべてユーザ。GL_HSHK_ADDR_BREAK（1 スロット 6 ワード）を見る。
+;   3. スロット 0–3 はすべてユーザ。GL_HSHK_ADDR_BREAK（1 スロット 6 ワード）を見る。
 ;      ステップ実行は比較器を使わない（別機構）。
 ;        +0 ena    0=無効 → スルー
 ;        +1 flags  Bit0=IO Bit1=RD Bit2=WR Bit3–5=条件 Bit6=INST Bit7=履歴
@@ -130,12 +130,12 @@ g_breakpoint_interrupt_handler:
 	bd	l_bp_cont
 l_bp_hit_ok:
 	andi	R0, #0x0007
-	mv	R3, R0			; R3 = スロット 0–7（以降 X0 を使わない）
+	mv	R3, R0			; R3 = スロット 0–3（以降 X0 を使わない）
 	rd	R1, IO_BREAK_PREV	; 0034 前回書込値
 	mv	X1, SP
 	st	R1, BP_FR_PREV(X1)
 
-; --- ユーザ 0–7: 表を見て比較・回数 ---
+; --- ユーザ 0–3: 表を見て比較・回数 ---
 	; X1 = GL_HSHK_ADDR_BREAK + slot * 6
 	mv	R0, R3
 	sl	R0, RE			; *2
@@ -293,7 +293,7 @@ l_bp_nt_slot:
 	b	l_bp_nt_hc
 	bd	l_bp_notify_fail
 
-; 履歴件数（Bit7 履歴有効時のみ。最大 16。無効なら 0）
+; 履歴件数（Bit7 履歴有効時のみ。最大 4。無効なら 0）
 l_bp_nt_hc:
 	mv	X0, SP
 	l	X1, 1(X0)		; 表
@@ -431,8 +431,8 @@ l_bp_leave:
 
 ; -------------------------------------------------------
 ; 1Ah 用: 履歴エントリを件数分（66B×N）送る
-; @param R3 - slot (0-7)
-; @param R2 - historyCount (0-16)
+; @param R3 - slot (0-3)
+; @param R2 - historyCount (0-4)
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
@@ -448,7 +448,7 @@ l_bp_send_hist_entries:
 
 l_bp_she_go:
 	push	R2			; 残り件数
-	; 最新 index = (NEXT-1) & 0x0f
+	; 最新 index = (NEXT-1) & INDEX_MASK
 	mv	R0, R3
 	sl	R0, RE
 	a	R0, R3			; slot*3
@@ -456,7 +456,7 @@ l_bp_she_go:
 	a	X1, R0
 	l	R4, HSHK_BH_MW_NEXT(X1)
 	si	R4, #1
-	andi	R4, #0x000f
+	andi	R4, #HSHK_BH_INDEX_MASK
 	mvi	R0, #HSHK_BH_SBR
 	setb	R0, TSR0
 
@@ -468,7 +468,7 @@ l_bp_she_lp:
 	b	l_bp_she_done
 
 l_bp_she_build:
-	; entryAddr = F000h + slot*528 + index*33
+	; entryAddr = F000h + slot*132 + index*33
 	mv	R0, R4
 	sl	R0, RE
 	sl	R0, RE
@@ -480,16 +480,14 @@ l_bp_she_build:
 
 	mv	R0, R3
 	sl	R0, RE
-	sl	R0, RE
-	sl	R0, RE
-	sl	R0, RE			; *16
+	sl	R0, RE			; *4
 	mv	R2, R0
 	sl	R0, RE
 	sl	R0, RE
 	sl	R0, RE
 	sl	R0, RE
-	sl	R0, RE			; *512
-	a	R0, R2			; slot*528
+	sl	R0, RE			; *128
+	a	R0, R2			; slot*132
 	a	R1, R0
 	mvwi	R0, #HSHK_BH_BASE
 	a	R1, R0
@@ -547,9 +545,9 @@ l_bp_she_stk_ok:
 	si	R2, #1, Z
 	b	l_bp_she_stk_lp
 
-	; index = (index-1) & 0x0f
+	; index = (index-1) & INDEX_MASK
 	si	R4, #1
-	andi	R4, #0x000f
+	andi	R4, #HSHK_BH_INDEX_MASK
 	mv	X0, SP
 	l	R2, 0(X0)
 	si	R2, #1

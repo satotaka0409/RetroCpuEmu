@@ -174,14 +174,14 @@ describe("アドレス比較器 IO:0030–0034", () => {
     wtPort(IO_PORT_BREAK_ADDR_HI, 0);
     wtPort(
       IO_PORT_BREAK_CTRL,
-      encodeBreakCtrl(5, true, true, BREAK_RDWR_RD),
+      encodeBreakCtrl(3, true, true, BREAK_RDWR_RD),
     );
 
     // RD R0, 0x40
     runSteps([0x1840, 0x2000], 1);
     expect(getPendingIrq() & IRQ1_BIT).toBe(IRQ1_BIT);
     expect(rdPort(0x21)).toBe(INT_CAUSE_CODE.ADDR_BREAK);
-    expect(rdPort(IO_PORT_BREAK_HIT)).toBe(5);
+    expect(rdPort(IO_PORT_BREAK_HIT)).toBe(3);
     expect(rdPort(IO_PORT_BREAK_PREV)).toBe(0);
   });
 });

@@ -39,7 +39,7 @@ BP_HA_KIND		.equ	11
 ; @note 11h の応答待ち前に BUSY を下ろす。作業変数はスタック。
 ; @param R0 - 入口スナップ（6 ワード。0034 / R3 / R4 / TSR0 / TSR1 / ユーザ SP）
 ; @param R2 - 1Ah 区分（0=命令 / 1=MEM / 2=IO）
-; @param R3 - スロット 0–7
+; @param R3 - スロット 0–3
 ; @param R4 - 10h 表ポインタ（X1）
 ; @Destruction R0, R1
 ; -------------------------------------------------------
@@ -96,8 +96,8 @@ l_bp_ha_prev_done:
 	wt	R0, INTERRUPT_BUSY
 	bald	g_hshk_get_time_
 
-	; スロット → メタ。dest = F000h + slot*528 + head*33
-	; *33 = <<5 + n、*528 = <<9 + <<4
+	; スロット → メタ。dest = F000h + slot*132 + head*33
+	; *33 = <<5 + n、*132 = <<7 + <<2
 	; X0≡R3 なので、スロットは R2 に置き、MPTR を書いてから X0 を捨てる
 	mv	X0, SP
 	l	R2, BP_HA_SLOT(X0)
@@ -119,16 +119,14 @@ l_bp_ha_prev_done:
 	mv	R0, R1
 	mv	R1, R2			; slot
 	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE			; *16
+	sl	R1, RE			; *4
 	mv	R2, R1
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
 	sl	R1, RE
-	sl	R1, RE			; *512
-	a	R1, R2			; slot*528
+	sl	R1, RE			; *128
+	a	R1, R2			; slot*132
 	a	R1, R0			; + head*33
 	mvwi	R0, #HSHK_BH_BASE
 	a	R1, R0			; 論理 dest
@@ -226,7 +224,7 @@ l_bp_ha_meta:
 	l	X1, BP_HA_MPTR(X0)
 	l	R0, 1(X1)
 	ai	R0, #1
-	andi	R0, #0x000f
+	andi	R0, #HSHK_BH_INDEX_MASK
 	st	R0, 1(X1)
 	l	R0, 0(X1)
 	cwi	R0, #HSHK_BH_DEPTH, M
@@ -249,5 +247,5 @@ l_bp_ha_meta_ok:
 	ret
 
 	.area	_WORK		(REL,NOLOAD)
-; スロット 0–7: 件数 / 次書込 index / オーバフロー
+; スロット 0–3: 件数 / 次書込 index / オーバフロー
 GL_BP_HIST_META:	.ds	HSHK_BH_META_TBL

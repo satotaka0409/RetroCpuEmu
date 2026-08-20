@@ -181,9 +181,9 @@ export const CMD_CPU_TO_IO = {
 
 /** I/O -> CPU 方向コマンド（HandShake.mdc 概要表の順。番号は CPU→IO と独立） */
 export const CMD_IO_TO_CPU = {
-  /** 比較器ブレイク設定（命令／メモリ／IO、スロット 0–7） */
+  /** 比較器ブレイク設定（命令／メモリ／IO、スロット 0–3） */
   BREAK_MEM_IO_SET: 0x80,
-  /** 比較器ブレイク解除（スロット 0–7） */
+  /** 比較器ブレイク解除（スロット 0–3） */
   BREAK_MEM_IO_CLR: 0x81,
   /** アドレスを渡してプログラムを実行する */
   EXEC: 0x82,
@@ -223,8 +223,8 @@ export const MODE = {
 // ブレイク設定フラグ
 // ─────────────────────────────────────────────
 
-/** アドレス／IO ブレイクスロット数（番号 0–7。比較器 8 本すべてユーザ） */
-export const ADDR_BREAK_SLOT_COUNT = 8;
+/** アドレス／IO ブレイクスロット数（番号 0–3。比較器 4 本すべてユーザ） */
+export const ADDR_BREAK_SLOT_COUNT = 4;
 
 /** 80h のコマンド除くペイロード長（slot, flags, count, addr32, data16） */
 export const ADDR_BREAK_SET_PAYLOAD_LEN = 9;

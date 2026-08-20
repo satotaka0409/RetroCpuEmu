@@ -14,8 +14,10 @@ import {
 } from "../../cpuboard/mn1613/mn1613";
 import type { CpuIoSignals } from "../../cpuboard/mn1613/mn1613ioport";
 import {
-  cpuToIoRemainingSize,
+  BREAK_HISTORY_ENTRY_SIZE_MN1613,
+  breakHistoryEntrySizeForCpu,
   CpuToIoCommandDispatcher,
+  makeCpuToIoRemainingSize,
   type BeepParams,
   type CpuStateNotifyInfo,
   type CpuToIoHandlers,
@@ -115,6 +117,13 @@ export type IoBoardMockOptions = {
   onLog?: (entry: IoBoardMockLogEntry) => void;
   /** タイマー割り込み（12h）の駆動スケジューラ。既定はグローバル setTimeout */
   timerScheduler?: IoTimerScheduler;
+  /**
+   * 1Ah 履歴エントリ長（省略時は cpuType または MN1613=66）。
+   * HandShake.mdc: MN1613=66 / TMS9995=78
+   */
+  historyEntrySize?: number;
+  /** setting_area の cpuType（1=MN1613, 2=TMS9995）。historyEntrySize 未指定時に使う */
+  cpuType?: number;
 };
 
 /**
@@ -435,6 +444,7 @@ export class IoBoardHandshakeMock {
   }
 
   private readonly dispatcher: CpuToIoCommandDispatcher;
+  private cpuToIoRemaining: (frameSoFar: Uint8Array) => number;
   private readonly timeoutMs: number;
   private readonly maxLog: number;
   private readonly onLog?: (entry: IoBoardMockLogEntry) => void;
@@ -474,7 +484,24 @@ export class IoBoardHandshakeMock {
 
     const base = createDefaultCpuToIoHandlers(this.state, this.timer);
     const handlers: CpuToIoHandlers = { ...base, ...options.handlers };
-    this.dispatcher = new CpuToIoCommandDispatcher(handlers);
+    const historyEntrySize =
+      options.historyEntrySize ??
+      (options.cpuType !== undefined
+        ? breakHistoryEntrySizeForCpu(options.cpuType)
+        : BREAK_HISTORY_ENTRY_SIZE_MN1613);
+    this.dispatcher = new CpuToIoCommandDispatcher(handlers, {
+      historyEntrySize,
+    });
+    this.cpuToIoRemaining = makeCpuToIoRemainingSize(historyEntrySize);
+  }
+
+  /**
+   * 1Ah 履歴エントリ長を切り替える（設定エリアの CPU 種類変更時など）。
+   * @param entrySize バイト長（MN1613=66 / TMS9995=78）
+   */
+  setHistoryEntrySize(entrySize: number): void {
+    this.dispatcher.setHistoryEntrySize(entrySize);
+    this.cpuToIoRemaining = makeCpuToIoRemainingSize(entrySize);
   }
 
   /** CPU の RD/WT をこのバスに接続する */
@@ -585,7 +612,7 @@ export class IoBoardHandshakeMock {
    */
   handleOneRequest(): Promise<Uint8Array> {
     return this.withBusLock(async () => {
-      const frame = await this.io.receiveFramedAdaptive(cpuToIoRemainingSize);
+      const frame = await this.io.receiveFramedAdaptive(this.cpuToIoRemaining);
       const response = this.dispatcher.dispatch(frame);
       this.pushLog({
         at: Date.now(),

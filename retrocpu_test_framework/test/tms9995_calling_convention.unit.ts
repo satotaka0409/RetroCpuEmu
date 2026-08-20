@@ -81,3 +81,22 @@ test("validate は範囲外・重複・禁止を個別に返す", () => {
     outOfRangeArgRegisters: [99],
   });
 });
+
+test("既定 stackInit はモニター memmap の 0xFE00", () => {
+  const plan = planTms9995Call({
+    args: [1],
+  });
+  expect(plan.spBeforePush).toBe(0xfe00);
+  expect(plan.registers[10]).toBe(0xfe00);
+});
+
+test("モニター ABI は allowSpecialPurposeRegisters で R1 を第1引数にできる", () => {
+  const plan = planTms9995Call({
+    args: [0xaa, 0xbb, 0xcc],
+    argRegisters: [1, 2, 3],
+    allowSpecialPurposeRegisters: true,
+  });
+  expect(plan.registers[1]).toBe(0xaa);
+  expect(plan.registers[2]).toBe(0xbb);
+  expect(plan.registers[3]).toBe(0xcc);
+});

@@ -18,7 +18,7 @@ import {
 
 /** 80h 設定フレーム（コマンド除くフィールド） */
 export type AddrBreakSetFields = {
-  /** スロット 0–7 */
+  /** スロット 0–3 */
   slot: number;
   /** 位置02 上位バイト。Bit0 MEM/IO, Bit1 RD/WR, Bit2–4 条件, Bit5 履歴 */
   flags: number;
@@ -87,7 +87,7 @@ export function addrBreakSetPayload(frame: Uint8Array): Uint8Array | null {
 
 /**
  * 81h フレーム（cmd + slot）を組み立てる。
- * @param slot ブレイク設定番号（0–7）
+ * @param slot ブレイク設定番号（0–3）
  * @returns 2 バイト
  */
 export function encodeAddrBreakClrFrame(slot: number): Uint8Array {
@@ -106,7 +106,7 @@ export function parseAddrBreakClrSlot(frame: Uint8Array): number | null {
 }
 
 /**
- * スロットが 0–7 か。
+ * スロットが 0–3 か。
  * @param slot 設定番号
  * @returns 範囲内なら true
  */

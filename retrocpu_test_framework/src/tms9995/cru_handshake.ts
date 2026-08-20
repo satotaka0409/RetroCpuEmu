@@ -1,6 +1,8 @@
 /**
- * TMS9995 の CRU ハンドシェイク領域モック。
- * 根拠: TMS9995_CPUボードメモリ_IOマップ.mdc（0x0024..0x003F）
+ * TMS9995 の CRU ボード周辺モック（ハンドシェイク + 割り込み要因）。
+ * 根拠: TMS9995_CPUボードメモリ_IOマップ.mdc
+ * - 0x0020..0x0023: INTERRUPT_BUSY / INT1_CAUSE / INT2_CAUSE
+ * - 0x0024..0x003F: ハンドシェイク制御・データ
  */
 
 import type {
@@ -15,16 +17,24 @@ import type {
   Tms9995CruWriteLog,
 } from "./types.js";
 
-const BIT_MIN = 0x0024;
+const BIT_MIN = 0x0020;
 const BIT_MAX = 0x003f;
 const OUT_DATA_START = 0x0030;
 const IN_DATA_START = 0x0038;
+
+const IRQ_BITS = {
+  INTERRUPT_BUSY: 0x0020,
+  INT1_CAUSE0: 0x0021,
+  INT1_CAUSE1: 0x0022,
+  INT2_CAUSE: 0x0023,
+} as const;
 
 const CPU_OUT_SIGNALS: Record<Tms9995CruCpuOutSignal, number> = {
   HSHK_OUT_REQ: 0x0024,
   HSHK_ENA: 0x0025,
   HSHK_OUT_DENA: 0x0026,
   HSHK_IN_DACK: 0x0027,
+  INTERRUPT_BUSY: IRQ_BITS.INTERRUPT_BUSY,
 };
 
 const CPU_IN_SIGNALS: Record<Tms9995CruCpuInSignal, number> = {
@@ -32,6 +42,9 @@ const CPU_IN_SIGNALS: Record<Tms9995CruCpuInSignal, number> = {
   HSHK_IN_DENA: 0x0029,
   HSHK_IN_DACK: 0x002a,
   HSHK_OUT_DACK: 0x002b,
+  INT1_CAUSE0: IRQ_BITS.INT1_CAUSE0,
+  INT1_CAUSE1: IRQ_BITS.INT1_CAUSE1,
+  INT2_CAUSE: IRQ_BITS.INT2_CAUSE,
 };
 
 const CPU_WRITABLE = new Set<number>([
@@ -39,6 +52,7 @@ const CPU_WRITABLE = new Set<number>([
   CPU_OUT_SIGNALS.HSHK_ENA,
   CPU_OUT_SIGNALS.HSHK_OUT_DENA,
   CPU_OUT_SIGNALS.HSHK_IN_DACK,
+  CPU_OUT_SIGNALS.INTERRUPT_BUSY,
   ...range(OUT_DATA_START, OUT_DATA_START + 7),
 ]);
 
@@ -47,6 +61,9 @@ const IO_WRITABLE = new Set<number>([
   CPU_IN_SIGNALS.HSHK_IN_DENA,
   CPU_IN_SIGNALS.HSHK_IN_DACK,
   CPU_IN_SIGNALS.HSHK_OUT_DACK,
+  CPU_IN_SIGNALS.INT1_CAUSE0,
+  CPU_IN_SIGNALS.INT1_CAUSE1,
+  CPU_IN_SIGNALS.INT2_CAUSE,
   ...range(IN_DATA_START, IN_DATA_START + 7),
 ]);
 
@@ -74,7 +91,7 @@ function fmtBitAddr(bitAddr: number): string {
 }
 
 /**
- * CRU ハンドシェイク線モック。
+ * CRU ハンドシェイク／割り込み要因モック。
  * CPU 側と IO 側で役割外の読み書きを検出できる。
  */
 export class Tms9995CruHandshakeMock {
@@ -159,6 +176,40 @@ export class Tms9995CruHandshakeMock {
     return this.readBit("io", CPU_OUT_SIGNALS[signal]);
   }
 
+  /**
+   * INT1 要因（2bit）を IO がセットする。
+   * 本ボードでは 01=ハンドシェイクのみ（タイマーは TMS9995 内蔵レベル3）。
+   * @param cause 0..3（運用上は 1）
+   */
+  ioSetInt1Cause(cause: number): void {
+    const c = cause & 0x3;
+    this.writeBit("io", IRQ_BITS.INT1_CAUSE0, toBit(c & 1));
+    this.writeBit("io", IRQ_BITS.INT1_CAUSE1, toBit((c >> 1) & 1));
+  }
+
+  /**
+   * INT1 要因を CPU 視点で読む。
+   * @returns 0..3
+   */
+  cpuReadInt1Cause(): number {
+    const b0 = this.readBit("cpu", IRQ_BITS.INT1_CAUSE0);
+    const b1 = this.readBit("cpu", IRQ_BITS.INT1_CAUSE1);
+    return b0 | (b1 << 1);
+  }
+
+  /**
+   * INT2 要因（0=break / 1=step）を IO がセットする。
+   * @param cause 0 または 1
+   */
+  ioSetInt2Cause(cause: number): void {
+    this.writeBit("io", IRQ_BITS.INT2_CAUSE, toBit(cause & 1));
+  }
+
+  /** INT2 要因を CPU 視点で読む。 */
+  cpuReadInt2Cause(): Tms9995CruBit {
+    return this.readBit("cpu", IRQ_BITS.INT2_CAUSE);
+  }
+
   /** CPU→IO データ線（0x0030..0x0037）へ 1 バイトを載せる。 */
   cpuWriteOutDataByte(value: number): void {
     const b = asByte(value);
@@ -202,12 +253,16 @@ export class Tms9995CruHandshakeMock {
       HSHK_ENA: this.peekBit(CPU_OUT_SIGNALS.HSHK_ENA),
       HSHK_OUT_DENA: this.peekBit(CPU_OUT_SIGNALS.HSHK_OUT_DENA),
       HSHK_IN_DACK: this.peekBit(CPU_OUT_SIGNALS.HSHK_IN_DACK),
+      INTERRUPT_BUSY: this.peekBit(CPU_OUT_SIGNALS.INTERRUPT_BUSY),
     };
     const cpuInSignals = {
       HSHK_IN_REQ: this.peekBit(CPU_IN_SIGNALS.HSHK_IN_REQ),
       HSHK_IN_DENA: this.peekBit(CPU_IN_SIGNALS.HSHK_IN_DENA),
       HSHK_IN_DACK: this.peekBit(CPU_IN_SIGNALS.HSHK_IN_DACK),
       HSHK_OUT_DACK: this.peekBit(CPU_IN_SIGNALS.HSHK_OUT_DACK),
+      INT1_CAUSE0: this.peekBit(CPU_IN_SIGNALS.INT1_CAUSE0),
+      INT1_CAUSE1: this.peekBit(CPU_IN_SIGNALS.INT1_CAUSE1),
+      INT2_CAUSE: this.peekBit(CPU_IN_SIGNALS.INT2_CAUSE),
     };
     const bits: Record<string, Tms9995CruBit> = {};
     for (const bitAddr of range(BIT_MIN, BIT_MAX)) {
@@ -270,12 +325,16 @@ export class Tms9995CruHandshakeMock {
   }
 }
 
-/** ハンドシェイク CRU 領域の範囲（両端含む）。 */
+/** CRU 領域の範囲（両端含む）。ハンドシェイク + 割り込み要因。 */
 export const TMS9995_CRU_HANDSHAKE_REGION = {
   bitAddrMin: BIT_MIN,
   bitAddrMax: BIT_MAX,
   outDataStart: OUT_DATA_START,
   inDataStart: IN_DATA_START,
+  irqBusy: IRQ_BITS.INTERRUPT_BUSY,
+  int1Cause0: IRQ_BITS.INT1_CAUSE0,
+  int1Cause1: IRQ_BITS.INT1_CAUSE1,
+  int2Cause: IRQ_BITS.INT2_CAUSE,
 } as const;
 
 /** 役割名と CRU ビットアドレスの対応。 */

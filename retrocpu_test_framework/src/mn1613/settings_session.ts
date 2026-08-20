@@ -60,7 +60,7 @@ export function createSessionFromSettings(
   if (resolved.cpu !== "mn1613") {
     throw new Error(
       `createSessionFromSettings currently supports mn1613 runtime only (got: ${resolved.cpu}). ` +
-        "For tms9995, use assembleAndLink / assembleToHexCdb and byte-address assertions.",
+        "For tms9995 use createTms9995SessionFromSettings (artifact session; CPU emu not ready).",
     );
   }
   return createMn1613AsmSession({

@@ -28,8 +28,8 @@ const FLAGS_IO = 0x01;
 const HIST_SBR = 0x0c;
 const HIST_LOG = 0xf000;
 const HIST_ENTRY_WORDS = 33;
-const HIST_SLOT_WORDS = 16 * HIST_ENTRY_WORDS;
-const HIST_DEPTH = 16;
+const HIST_SLOT_WORDS = 4 * HIST_ENTRY_WORDS;
+const HIST_DEPTH = 4;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const SAMPLE_TIME_WORDS = [0x0123, 0x4567, 0x89ab, 0xcdef] as const;
 const SNAP_R3 = 0x3333;
@@ -51,7 +51,7 @@ function physWord(logAddr: number, sbr: number): number {
 
 /**
  * 履歴エントリ先頭の物理ワードアドレス。
- * @param slot ユーザ 0–7
+ * @param slot ユーザ 0–3
  * @param index リング index 0–15
  * @returns 物理ワードアドレス
  */
@@ -81,7 +81,7 @@ async function withCase(
 /**
  * ユーザースロット表へ 6 ワードを書く。
  * @param s セッション
- * @param slot 0–7
+ * @param slot 0–3
  * @param words ena / flags / count / addr_hi / addr_lo / data
  */
 function writeSlot(
@@ -118,7 +118,7 @@ function writeSnap(s: Mn1613AsmSession, prev = 0): number {
  * @param s セッション
  * @param mock IO モック
  * @param kind 1Ah 区分
- * @param slot 0–7
+ * @param slot 0–3
  * @param snap 入口スナップ先頭
  */
 async function appendOnce(
@@ -158,17 +158,17 @@ test("WRITE は 11h 時刻と AFTER/PREV をスロット 0 の 3F000h に書く"
   });
 });
 
-test("スロット 7 は slot×528 先へ書く", async () => {
+test("スロット 3 は slot×132 先へ書く", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     const snap = writeSnap(s, PREV_WR);
     s.writeWord(WATCH_WORD, AFTER_WR);
-    writeSlot(s, 7, [1, FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
-    await appendOnce(s, mock, KIND_MEM, 7, snap);
-    const meta = s.wordAddr("GL_BP_HIST_META") + 7 * 3;
+    writeSlot(s, 3, [1, FLAGS_WR, 0, 0, WATCH_BYTE, 0]);
+    await appendOnce(s, mock, KIND_MEM, 3, snap);
+    const meta = s.wordAddr("GL_BP_HIST_META") + 3 * 3;
     expect(s.readWord(meta)).toBe(1);
-    expect(s.readWord(histEntryPhys(7, 0))).toBe(SAMPLE_TIME_WORDS[0]);
-    s.expectMemoryWords(histEntryPhys(7, 0), [
+    expect(s.readWord(histEntryPhys(3, 0))).toBe(SAMPLE_TIME_WORDS[0]);
+    s.expectMemoryWords(histEntryPhys(3, 0), [
       ...SAMPLE_TIME_WORDS,
       AFTER_WR,
       PREV_WR,
@@ -201,7 +201,7 @@ test("IO 区分の AFTER は 0", async () => {
   });
 });
 
-test("17 件目は件数 16 のままオーバフローを立て、index 0 を上書きする", async () => {
+test("5 件目は件数 4 のままオーバフローを立て、index 0 を上書きする", async () => {
   await withCase(async (s, mock) => {
     mock.setTimestamp(Uint8Array.from(SAMPLE_TIME));
     const snap = writeSnap(s, PREV_WR);

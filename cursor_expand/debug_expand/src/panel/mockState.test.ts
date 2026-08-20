@@ -8,10 +8,10 @@ import { createMockDebugState, memFetchRange, memNeedsRefetch, memNextCenter } f
 import { getDebugHtml } from "./getHtml";
 
 describe("createMockDebugState", () => {
-  test("比較器スロットは 8（0–7）でダンプアドレスは 5 桁", () => {
+  test("比較器スロットは 4（0–3）でダンプアドレスは 5 桁", () => {
     const s = createMockDebugState();
-    assert.equal(s.bpSlots.length, 8);
-    assert.equal(s.slotHistory.length, 8);
+    assert.equal(s.bpSlots.length, 4);
+    assert.equal(s.slotHistory.length, 4);
     assert.equal(s.current.stack.length, 16);
     assert.ok(s.disasm.length > 0);
     assert.ok(s.memDump.length > 0);
