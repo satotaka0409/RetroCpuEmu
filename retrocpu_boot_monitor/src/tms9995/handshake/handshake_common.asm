@@ -16,42 +16,223 @@
 	.global g_hshk_mem_st8
 	.global GL_HSHK_PAIR
 
+HSHK_WAIT_MAX		.equ 0x4000
+HSHK_PAIR_RECV		.equ 0x0001
+HSHK_PAIR_SEND		.equ 0x0002
+
 	.area	_CODE		(REL,CON)
+
 g_hshk_initiate_send:
+	CLR	R0
+	MOV	R0, GL_HSHK_PAIR
+
+	LI	R12, #0
+	SBZ	#HSHK_OUT_DENA_BIT
+	SBO	#HSHK_OUT_REQ_BIT
+
+	BL	l_hshk_wait_ena_1
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_init_fail
+
+	LI	R12, #0
+	SBZ	#HSHK_OUT_REQ_BIT
 	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_init_fail:
+	LI	R12, #0
+	SBZ	#HSHK_OUT_REQ_BIT
+	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_send_byte:
+	MOV	R1, R3
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_SEND
+	JNE	l_hshk_send_phase2
+
+	LI	R12, #HSHK_OUT_DATA_BASE
+	LDCR	R3, #8
+	LI	R12, #0
+	SBO	#HSHK_OUT_DENA_BIT
+	BL	l_hshk_wait_out_dack_1
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_send_fail
+
+	MOV	GL_HSHK_PAIR, R4
+	ORI	R4, #HSHK_PAIR_SEND
+	MOV	R4, GL_HSHK_PAIR
 	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_send_phase2:
+	LI	R12, #HSHK_OUT_DATA_BASE
+	LDCR	R3, #8
+	LI	R12, #0
+	SBZ	#HSHK_OUT_DENA_BIT
+	BL	l_hshk_wait_out_dack_0
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_send_fail
+
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_RECV
+	MOV	R4, GL_HSHK_PAIR
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_send_fail:
+	LI	R12, #0
+	SBZ	#HSHK_OUT_DENA_BIT
+	CLR	R0
+	MOV	R0, GL_HSHK_PAIR
+	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_send_word:
-	LI	R1, #HSHK_OK
+	MOV	R1, R3
+	SWPB	R3
+	MOV	R3, R1
+	ANDI	R1, #0x00ff
+	BL	g_hshk_send_byte
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_send_word_done
+
+	MOV	R3, R1
+	SWPB	R1
+	ANDI	R1, #0x00ff
+	BL	g_hshk_send_byte
+
+l_hshk_send_word_done:
 	B	(R11)
 
 g_hshk_finalize_send:
-	LI	R1, #HSHK_OK
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_SEND
+	JEQ	l_hshk_finalize_send_wait
+
+	CLR	R3
+	LI	R12, #HSHK_OUT_DATA_BASE
+	LDCR	R3, #8
+	LI	R12, #0
+	SBZ	#HSHK_OUT_DENA_BIT
+	BL	l_hshk_wait_out_dack_0
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_finalize_send_fail
+
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_RECV
+	MOV	R4, GL_HSHK_PAIR
+
+l_hshk_finalize_send_wait:
+	BL	l_hshk_wait_ena_0
+	B	(R11)
+
+l_hshk_finalize_send_fail:
+	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_accept_request:
+	CLR	R0
+	MOV	R0, GL_HSHK_PAIR
+
+	LI	R12, #0
+	SBZ	#HSHK_IN_DACK_BIT
+	SBO	#HSHK_ENA_BIT
+
+	BL	l_hshk_wait_req1_0
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_accept_fail
+
 	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_accept_fail:
+	LI	R12, #0
+	SBZ	#HSHK_ENA_BIT
+	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_recv_byte:
-	CLR	R1
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_RECV
+	JNE	l_hshk_recv_phase2
+
+	BL	l_hshk_wait_in_dena_1
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_recv_fail
+
+	LI	R12, #HSHK_IN_DATA_BASE
+	STCR	R1, #8
+	ANDI	R1, #0x00ff
+	LI	R12, #0
+	SBO	#HSHK_IN_DACK_BIT
+
+	MOV	GL_HSHK_PAIR, R4
+	ORI	R4, #HSHK_PAIR_RECV
+	MOV	R4, GL_HSHK_PAIR
 	LI	R2, #HSHK_OK
 	B	(R11)
 
+l_hshk_recv_phase2:
+	BL	l_hshk_wait_in_dena_0
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_recv_fail
+
+	LI	R12, #HSHK_IN_DATA_BASE
+	STCR	R1, #8
+	ANDI	R1, #0x00ff
+	LI	R12, #0
+	SBZ	#HSHK_IN_DACK_BIT
+
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_SEND
+	MOV	R4, GL_HSHK_PAIR
+	LI	R2, #HSHK_OK
+	B	(R11)
+
+l_hshk_recv_fail:
+	LI	R12, #0
+	SBZ	#HSHK_IN_DACK_BIT
+	CLR	R0
+	MOV	R0, GL_HSHK_PAIR
+	CLR	R1
+	LI	R2, #HSHK_NG
+	B	(R11)
+
 g_hshk_finalize_recv:
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_RECV
+	JEQ	l_hshk_finalize_recv_done
+
+	BL	l_hshk_wait_in_dena_0
+	CI	R1, #HSHK_OK
+	JNE	l_hshk_finalize_recv_fail
+	LI	R12, #0
+	SBZ	#HSHK_IN_DACK_BIT
+	MOV	GL_HSHK_PAIR, R4
+	ANDI	R4, #HSHK_PAIR_SEND
+	MOV	R4, GL_HSHK_PAIR
+
+l_hshk_finalize_recv_done:
+	LI	R12, #0
+	SBZ	#HSHK_ENA_BIT
 	LI	R1, #HSHK_OK
 	B	(R11)
 
+l_hshk_finalize_recv_fail:
+	LI	R1, #HSHK_NG
+	B	(R11)
+
 g_hshk_wait_ena_delay:
+	LI	R0, #0x0010
+l_hshk_delay_loop:
+	AI	R0, #-1
+	JNE	l_hshk_delay_loop
 	LI	R1, #HSHK_OK
 	B	(R11)
 
 g_hshk_wait_req1_1:
-	LI	R1, #HSHK_OK
+	BL	l_hshk_wait_req1_1
 	B	(R11)
 
 g_hshk_mem_map:
@@ -65,6 +246,118 @@ g_hshk_mem_ld8:
 
 g_hshk_mem_st8:
 	LI	R1, #HSHK_NG
+	B	(R11)
+
+l_hshk_wait_ena_1:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_ena_1_lp:
+	LI	R12, #0
+	TB	#HSHK_ENA_BIT
+	JEQ	l_hshk_wait_ena_1_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_ena_1_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_ena_1_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_ena_0:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_ena_0_lp:
+	LI	R12, #0
+	TB	#HSHK_ENA_BIT
+	JNE	l_hshk_wait_ena_0_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_ena_0_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_ena_0_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_out_dack_1:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_out_dack_1_lp:
+	LI	R12, #0
+	TB	#HSHK_OUT_DACK_BIT
+	JEQ	l_hshk_wait_out_dack_1_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_out_dack_1_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_out_dack_1_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_out_dack_0:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_out_dack_0_lp:
+	LI	R12, #0
+	TB	#HSHK_OUT_DACK_BIT
+	JNE	l_hshk_wait_out_dack_0_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_out_dack_0_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_out_dack_0_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_in_dena_1:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_in_dena_1_lp:
+	LI	R12, #0
+	TB	#HSHK_IN_DENA_BIT
+	JEQ	l_hshk_wait_in_dena_1_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_in_dena_1_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_in_dena_1_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_in_dena_0:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_in_dena_0_lp:
+	LI	R12, #0
+	TB	#HSHK_IN_DENA_BIT
+	JNE	l_hshk_wait_in_dena_0_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_in_dena_0_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_in_dena_0_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_req1_1:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_req1_1_lp:
+	LI	R12, #0
+	TB	#HSHK_IN_REQ_BIT
+	JEQ	l_hshk_wait_req1_1_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_req1_1_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_req1_1_ok:
+	LI	R1, #HSHK_OK
+	B	(R11)
+
+l_hshk_wait_req1_0:
+	LI	R0, #HSHK_WAIT_MAX
+l_hshk_wait_req1_0_lp:
+	LI	R12, #0
+	TB	#HSHK_IN_REQ_BIT
+	JNE	l_hshk_wait_req1_0_ok
+	AI	R0, #-1
+	JNE	l_hshk_wait_req1_0_lp
+	LI	R1, #HSHK_NG
+	B	(R11)
+l_hshk_wait_req1_0_ok:
+	LI	R1, #HSHK_OK
 	B	(R11)
 
 	.area	_WORK		(REL,NOLOAD)
