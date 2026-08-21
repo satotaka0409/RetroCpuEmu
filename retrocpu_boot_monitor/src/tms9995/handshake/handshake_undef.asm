@@ -1,7 +1,7 @@
 ; 未定義命令実行通知（ハンドシェイク 13h）
-; 線上 送信 70B: 13h + (pad + addr32 + regs + pad + stack16語) → 受信 1B: status
-; TMS9995 CPU 実行コンテキスト未実装のため、通知本体 69B はゼロ埋めで送る。
-; return R1 OK/NG
+; 線上 送信 70B: 13h + pad + addr32 + R0–R15 + stack16語 → 受信 1B: status
+; 割り込み WP の R13/R14（旧 WP / 旧 PC）から本体を送る。
+; @return R2 - OK/NG
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -15,56 +15,55 @@
 	.global g_hshk_accept_request
 	.global g_hshk_recv_byte
 	.global g_hshk_finalize_recv
+	.global g_bp_send_user_state_body
+	.global g_bp_copy_user_regs
+	.global GL_UNDEF_INST_REG
 
 	.area	_CODE		(REL,CON)
 g_bios_undef_led:
-	MOV	R11, R9
-	MOV	R1, R4
+	MOV	R11, R8
+
+	; 旧 WP を GL_UNDEF_INST_REG へ退避（デバッグ／再送用）
+	MOV	R13, R2
+	LI	R3, #GL_UNDEF_INST_REG
+	BL	g_bp_copy_user_regs
 
 	BL	g_hshk_initiate_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
 
-	LI	R1, #HSHK_CMD_UNDEF_LED
+	LI	R2, #HSHK_CMD_UNDEF_LED
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
 
-	LI	R7, #69
-l_undef_body_lp:
-	MOV	R7, R7
-	JEQ	l_undef_body_done
-	CLR	R1
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	BL	g_bp_send_user_state_body
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
-	AI	R7, #-1
-	JMP	l_undef_body_lp
-l_undef_body_done:
 
 	BL	g_hshk_finalize_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
 
 	BL	g_hshk_wait_req1_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
 
 	BL	g_hshk_accept_request
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_undef_fail
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_undef_recv_fail
-	MOV	R1, R4
+	MOV	R3, R4
 	BL	g_hshk_finalize_recv
-	MOV	R4, R1
-	ANDI	R1, #0x00ff
-	B	(R9)
+	MOV	R4, R2
+	ANDI	R2, #0x00ff
+	B	(R8)
 
 l_undef_recv_fail:
 	BL	g_hshk_finalize_recv
 l_undef_fail:
-	LI	R1, #HSHK_NG
-	B	(R9)
+	LI	R2, #HSHK_NG
+	B	(R8)

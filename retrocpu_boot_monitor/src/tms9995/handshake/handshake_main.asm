@@ -1,5 +1,6 @@
 ; IO→CPU ハンドシェイク割り込み（INT1 / INT1_CAUSE=ハンドシェイク）
-; 受理 → コマンド受信 → 10h–18h ディスパッチ → finalize
+; 受理 → コマンド受信 → 10h–18h ディスパッチ → finalize。
+; 高位 ID（0x80–0x89）受信時は 0x70 を引いて正規化（MN1613 / HandShake.mdc と同規約）。
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -22,17 +23,29 @@
 	.area	_CODE		(REL,CON)
 
 g_handshake_interrupt_handler:
-	MOV	R11, R8
+	DECT	R10
+	MOV	R11, (R10)
 	BL	g_hshk_accept_request
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_irq_ret
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_hshk_irq_fail_recv
 
-	MOV	R1, R0
+	MOV	R3, R0
 	ANDI	R0, #0x00ff
+	; 80h–89h → 10h–19h（上位ニブル 8 かつ下位 < 0xA）
+	MOV	R0, R2
+	ANDI	R2, #0x00f0
+	CI	R2, #HSHK_CMD_IO_HI_BASE
+	JNE	l_hshk_irq_range
+	MOV	R0, R2
+	ANDI	R2, #0x000f
+	CI	R2, #0x000a
+	JHE	l_hshk_irq_range
+	AI	R0, #-HSHK_CMD_IO_WIRE_BIAS
+l_hshk_irq_range:
 	CI	R0, #HSHK_CMD_IO_BASE
 	JL	l_hshk_irq_fin
 	CI	R0, #HSHK_CMD_IO_LIMIT
@@ -47,11 +60,13 @@ g_handshake_interrupt_handler:
 l_hshk_irq_fin:
 	BL	g_hshk_finalize_recv
 l_hshk_irq_ret:
-	B	(R8)
+	MOV	(R10)+, R11
+	B	(R11)
 
 l_hshk_irq_fail_recv:
 	BL	g_hshk_finalize_recv
-	B	(R8)
+	MOV	(R10)+, R11
+	B	(R11)
 
 ; 未実装: 実行指示はペイロード破棄 + NG
 l_hshk_irq_12:
@@ -64,7 +79,7 @@ l_hshk_irq_12_lp:
 	AI	R5, #-1
 	JMP	l_hshk_irq_12_lp
 l_hshk_irq_12_ng:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	BL	g_hshk_send_byte
 	B	(R9)
 

@@ -121,8 +121,8 @@ help:
 	@echo "  make ihx            各 .asm → .rel → sdld → Intel HEX + CDB + MAP"
 	@echo "  make ihx-tms9995    TMS9995 monitor を Intel HEX + CDB + MAP に変換"
 	@echo "  make ihx-all        MN1613 + TMS9995 の両 monitor をビルド"
-	@echo "  make test           test/mn1613 結合テスト（テストフレームワーク）"
-	@echo "  make test-tms9995   test/tms9995 結合テスト（成果物検証）"
+	@echo "  make test           test/mn1613+tms9995（先に ihx / ihx-tms9995）"
+	@echo "  make test-tms9995   test/tms9995（先に ihx-tms9995）"
 	@echo "  make sdcc-setup     Build sdld via CMake (required for ihx)"
 	@echo "  make clean          Remove monitor build/ artifacts"
 	@echo ""
@@ -131,10 +131,10 @@ help:
 # -------------------------------------------------------
 # 結合テスト（retrocpu_test_framework。このプロジェクトの test のみ）
 # -------------------------------------------------------
-test:
+test: ihx ihx-tms9995
 	npm test
 
-test-tms9995:
+test-tms9995: ihx-tms9995
 	npm run test:tms9995
 
 # -------------------------------------------------------
@@ -270,6 +270,7 @@ TMS9995_ASM_SRCS := \
 	$(TMS9995_SRC_DIR)/interrupt.asm \
 	$(TMS9995_SRC_DIR)/breakpoint/breakpoint.asm \
 	$(TMS9995_SRC_DIR)/breakpoint/breakpoint_hist.asm \
+	$(TMS9995_SRC_DIR)/breakpoint/breakpoint_state.asm \
 	$(TMS9995_SRC_DIR)/breakpoint/breakpoint_steprun.asm \
 	$(TMS9995_SRC_DIR)/bios/bios_common.asm \
 	$(TMS9995_SRC_DIR)/handshake/handshake_common.asm \

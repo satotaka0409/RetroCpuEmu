@@ -15,7 +15,7 @@ TMS9995 CRU モック:
 呼び出し規約:
 
 - `planTms9995Call`: 既定は `asm_rules` の R2..R9、スタック初期値 `0xFE00`（モニター memmap）
-- モニター BIOS 暫定 ABI（第1=`R1`）は `TMS9995_MONITOR_ARG_REGISTERS` / `session.planCall()` 既定
+- モニター BIOS も `asm_rules.mdc` どおり第1=`R2`（`TMS9995_DEFAULT_ARG_REGISTERS` / `session.planCall()` 既定）
 
 仕様: `.cursor/rules/asm_test_framework.mdc`
 
@@ -39,7 +39,7 @@ TMS9995 は `src/tms9995/`。
 各 `test()` ケースはタイトルを `START` / `END` で囲む。
 CLI は全体実行の開始時に、対象が `test/mn1613` / `test/tms9995` 配下なら対応する `logs/*/*.log` を削除する。
 
-ドライバ `.asm` は使わない。MN1613 呼び出し規約は **第1引数=`R0` / 第2引数=`R1` / 第3引数=`R2` / 第4引数以降=スタック / 戻り値=`R0`–`R2`**。TMS9995 は `asm_rules.mdc`（第1=`R2`…）を正とし、モニター移植中は R1 起点の暫定 ABI もサポートする。
+ドライバ `.asm` は使わない。MN1613 呼び出し規約は **第1引数=`R0` / 第2引数=`R1` / 第3引数=`R2` / 第4引数以降=スタック / 戻り値=`R0`–`R2`**。TMS9995 は `asm_rules.mdc`（第1=`R2`…、戻りステータス=`R2`）を正とする。
 
 ## テストの置き場
 

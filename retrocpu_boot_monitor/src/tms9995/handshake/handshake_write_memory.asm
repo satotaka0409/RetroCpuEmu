@@ -1,6 +1,7 @@
 ; メモリ書き込み（ハンドシェイク 14h、IO→CPU）
 ; コマンド済み。ヘッダ 9B + count バイト受信 → mem_st8 → status 1B 送信。
 ; 下位 16bit の addr/count のみ使用（小転送向け）。
+; @return R2 - OK/NG
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -13,7 +14,7 @@
 
 	.area	_CODE		(REL,CON)
 g_hshk_write_memory:
-	MOV	R11, R9
+	MOV	R11, R8
 
 	; pad
 	BL	g_hshk_recv_byte
@@ -32,14 +33,14 @@ g_hshk_write_memory:
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	ANDI	R1, #0x00ff
-	SWPB	R1
-	MOV	R1, R5
+	ANDI	R3, #0x00ff
+	SWPB	R3
+	MOV	R3, R5
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	ANDI	R1, #0x00ff
-	SOC	R1, R5
+	ANDI	R3, #0x00ff
+	SOC	R3, R5
 
 	; count hi（破棄）
 	BL	g_hshk_recv_byte
@@ -53,39 +54,38 @@ g_hshk_write_memory:
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	ANDI	R1, #0x00ff
-	SWPB	R1
-	MOV	R1, R6
+	ANDI	R3, #0x00ff
+	SWPB	R3
+	MOV	R3, R4
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	ANDI	R1, #0x00ff
-	SOC	R1, R6
+	ANDI	R3, #0x00ff
+	SOC	R3, R4
 
 l_wm_lp:
-	MOV	R6, R6
+	MOV	R4, R4
 	JEQ	l_wm_stat
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	ANDI	R1, #0x00ff
-	MOV	R1, R2			; 書込データ
-	MOV	R5, R1			; バイトアドレス
+	ANDI	R3, #0x00ff		; 書込データ
+	MOV	R5, R2			; バイトアドレス
 	BL	g_hshk_mem_st8
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
 	AI	R5, #1
-	AI	R6, #-1
+	AI	R4, #-1
 	JMP	l_wm_lp
 
 l_wm_stat:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
-	LI	R1, #HSHK_OK
-	B	(R9)
+	LI	R2, #HSHK_OK
+	B	(R8)
 
 l_wm_fail:
-	LI	R1, #HSHK_NG
-	B	(R9)
+	LI	R2, #HSHK_NG
+	B	(R8)

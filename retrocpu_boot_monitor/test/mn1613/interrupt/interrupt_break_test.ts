@@ -55,6 +55,8 @@ const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
 const SAMPLE_TIME_WORDS = [0x0123, 0x4567, 0x89ab, 0xcdef] as const;
 const OP_B_SELF = 0xcfff;
 const HIST_ENTRY_BYTES = 66;
+/** 17h CPU→IO ヘッダ長（HandShake.mdc 87h: 件数〜histCount+pad） */
+const HIST_HDR_BYTES = 10;
 const FLAGS_INST = 0x40;
 const FLAGS_IO = 0x01;
 
@@ -496,12 +498,12 @@ test("START 0x1800: 命令ブレイクで停止しレジスタ値を確認", asy
     const hist = await callHandler(
       s,
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
     );
-    const ent = 8;
+    const ent = HIST_HDR_BYTES;
     expect(hist[0]).toBe(1);
-    expect(hist[2]).toBe(flags);
+    expect(hist[1]).toBe(flags);
     expect(be16(hist, ent + 10)).toBe(0);
     expect(be16(hist, ent + 18)).toBe(testRegs[3]);
     expect(be16(hist, ent + 20)).toBe((0xff00 - 8) & 0xffff);
@@ -549,12 +551,12 @@ test("START 0x1800: MEM WRITEブレイクで停止しレジスタ値と前回書
     const hist = await callHandler(
       s,
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
     );
-    const ent = 8;
+    const ent = HIST_HDR_BYTES;
     expect(hist[0]).toBe(1);
-    expect(hist[2]).toBe(flags);
+    expect(hist[1]).toBe(flags);
     expect(be16(hist, ent + 10)).toBe(PREV_WR);
     expect(be16(hist, ent + 18)).toBe(testRegs[3]);
   });
@@ -600,12 +602,12 @@ test("START 0x1800: IO READブレイクで停止しレジスタ値を確認", as
     const hist = await callHandler(
       s,
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
     );
-    const ent = 8;
+    const ent = HIST_HDR_BYTES;
     expect(hist[0]).toBe(1);
-    expect(hist[2]).toBe(flags);
+    expect(hist[1]).toBe(flags);
     expect(be16(hist, ent + 10)).toBe(0);
     expect(be16(hist, ent + 18)).toBe(testRegs[3]);
     expect(be16(hist, ent + 20)).toBe((0xff00 - 8) & 0xffff);
@@ -653,12 +655,12 @@ test("START 0x1800: IO WRITEブレイクで停止しレジスタ値と前回書�
     const hist = await callHandler(
       s,
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
     );
-    const ent = 8;
+    const ent = HIST_HDR_BYTES;
     expect(hist[0]).toBe(1);
-    expect(hist[2]).toBe(flags);
+    expect(hist[1]).toBe(flags);
     expect(be16(hist, ent + 10)).toBe(PREV_WR);
     expect(be16(hist, ent + 18)).toBe(testRegs[3]);
   });

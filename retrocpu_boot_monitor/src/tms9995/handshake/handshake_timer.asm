@@ -1,10 +1,10 @@
 ; タイマー設定（TMS9995 内蔵デクリメンタ）
 ; 根拠: TMS9995_CPUボードメモリ_IOマップ.mdc / TMS9995_hardware.mdc / boot_monitor.mdc
 ; ハンドシェイク 12h は出さない（MN1613 専用）。
-; param R1 タイマー番号（0 のみ）
-; param R2 周期 ms
-; param R3 回数（0=無限）
-; return R1 OK/NG
+; @param R2 - タイマー番号（0 のみ）
+; @param R3 - 周期 ms
+; @param R4 - 回数（0=無限）
+; @return R2 - OK/NG
 ;
 ; 1ms ティック: CLKOUT=3MHz 想定で FFFA←3000。ソフトで period/count を数える。
 ; 満了時は g_int3_handler → GL_INT3_ADR スロット。
@@ -27,14 +27,13 @@ TMS_DEC_1MS		.equ	3000
 
 	.area	_CODE		(REL,CON)
 g_bios_timer_set_:
-	MOV	R11, R9
-	MOV	R1, R0
+	MOV	R2, R0
 	ANDI	R0, #0x00ff
 	CI	R0, #0
 	JNE	l_timer_ng
 
-	MOV	R2, R4			; period
-	MOV	R3, R5			; count
+	MOV	R4, R5			; count
+	MOV	R3, R4			; period
 
 	; いったん停止
 	LI	R12, #TMS_FLAG_CRU
@@ -55,8 +54,8 @@ g_bios_timer_set_:
 	SBZ	#0			; timer mode
 	SBO	#1			; enable
 	LIMI	#3
-	LI	R1, #HSHK_OK
-	B	(R9)
+	LI	R2, #HSHK_OK
+	B	(R11)
 
 l_timer_stopped:
 	CLR	R0
@@ -64,12 +63,12 @@ l_timer_stopped:
 	MOV	R0, GL_TIMER_COUNT
 	MOV	R0, GL_TIMER_ACCUM
 	MOV	R0, GL_TIMER_REMAIN
-	LI	R1, #HSHK_OK
-	B	(R9)
+	LI	R2, #HSHK_OK
+	B	(R11)
 
 l_timer_ng:
-	LI	R1, #HSHK_NG
-	B	(R9)
+	LI	R2, #HSHK_NG
+	B	(R11)
 
 ; -------------------------------------------------------
 ; デクリメンタ 1ms ティック（g_int3_handler から BL）

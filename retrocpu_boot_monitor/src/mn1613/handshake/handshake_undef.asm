@@ -2,7 +2,7 @@
 ; 未定義命令実行通知（ハンドシェイク 13h）
 ; 根拠: HandShake.mdc「未定義命令実行通知」/ boot_monitor.mdc
 ;
-; 線上 送信 59B: 13h + addr32 + レジスタ + NPP + pad + スタック16語 → 受信 1B: status
+; 線上 送信 60B: 13h + pad + addr32 + レジスタ + NPP + pad + スタック16語 → 受信 1B: status
 ; レジスタは GL_UNDEF_INST_REG（g_write_cpu_registers 退避）をそのまま使う。
 ;
 ; 引数は第1=R0（互換のため未使用。旧 Bit0 指定は無視）。
@@ -45,6 +45,14 @@ g_bios_undef_led:
 	bd	l_undef_led_fail
 
 	mvwi	R0, #HSHK_CMD_UNDEF_LED
+	bald	g_hshk_send_byte
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	bd	l_undef_led_fail
+
+	; HandShake.mdc: 位置00 = cmd + pad(0)
+	eor	R0, R0
 	bald	g_hshk_send_byte
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK

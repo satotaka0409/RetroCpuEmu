@@ -264,6 +264,7 @@ export function createDefaultCpuToIoHandlers(
     r2: info.r2 & 0xffff,
     r3: info.r3 & 0xffff,
     r4: info.r4 & 0xffff,
+    r5to15: (info.r5to15 ?? []).slice(0, 11).map((v) => v & 0xffff),
     sp: info.sp & 0xffff,
     str: info.str & 0xffff,
     ic: info.ic & 0xffff,

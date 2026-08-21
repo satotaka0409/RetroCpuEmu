@@ -7,18 +7,17 @@ import type {
   Tms9995StackWord,
 } from "./types.js";
 
-/** asm_rules.mdc の既定: 引数は R2..R9。 */
+/** asm_rules.mdc: 引数は R2..R9（第1=R2）。モニター BIOS もこれに揃える。 */
 export const TMS9995_DEFAULT_ARG_REGISTERS = [2, 3, 4, 5, 6, 7, 8, 9] as const;
 
 /**
- * 現行 `retrocpu_boot_monitor` TMS BIOS の引数（第1=R1）。
- * asm_rules の R2 起点へ揃えるまでの暫定 ABI。
+ * @deprecated 旧暫定 ABI（第1=R1）。`TMS9995_DEFAULT_ARG_REGISTERS` を使うこと。
  */
-export const TMS9995_MONITOR_ARG_REGISTERS = [1, 2, 3] as const;
+export const TMS9995_MONITOR_ARG_REGISTERS = TMS9995_DEFAULT_ARG_REGISTERS;
 
 /**
  * 既定で引数に使わないレジスタ。
- * - R0/R1: 乗除算主用途（モニター ABI は R1 を第1引数に使う例外あり）
+ * - R0/R1: 乗除算・シフト・CRU 補助
  * - R10: ソフトウェア SP
  * - R11: BL 復帰アドレス
  * - R12: CRU ベース

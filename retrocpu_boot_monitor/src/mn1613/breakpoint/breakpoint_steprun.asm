@@ -97,6 +97,13 @@ l_sr_nt_cmd:
 	mvwi	R0, #HSHK_CMD_STEP_NOTIFY
 	bald	g_hshk_send_byte
 	cwi	R0, #HSHK_OK, NZ
+	b	l_sr_nt_cmdpad
+	bd	l_sr_nt_fail
+l_sr_nt_cmdpad:
+	; HandShake.mdc: 位置00 = cmd + pad(0) → 合計 60B
+	eor	R0, R0
+	bald	g_hshk_send_byte
+	cwi	R0, #HSHK_OK, NZ
 	b	l_sr_nt_addr
 	bd	l_sr_nt_fail
 l_sr_nt_addr:

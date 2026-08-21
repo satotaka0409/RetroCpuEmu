@@ -54,7 +54,8 @@ const SLOT_WORDS = 6;
 const STR_IRQ_ENABLE = 0x0700;
 const IDLE_SP = 0xff00;
 const SAMPLE_TIME = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef] as const;
-/** 17h: ヘッダ 8B ＋ エントリ 66B×件数 ＋ 終端 1B */
+/** 17h: ヘッダ 10B ＋ エントリ 66B×件数 ＋ 終端 1B（HandShake.mdc 87h） */
+const HIST_HDR_BYTES = 10;
 const HIST_ENTRY_BYTES = 66;
 /** EOR R0,R0 */
 const OP_EOR_R0 = 0x6000;
@@ -276,21 +277,25 @@ test("命令ブレイク（回数4・履歴）は 4 件残して 1Ah する", as
     );
     const hist = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_COUNT * HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_COUNT * HIST_ENTRY_BYTES + 1,
     );
-    expect(hist.length).toBe(8 + HIST_COUNT * HIST_ENTRY_BYTES + 1);
+    expect(hist.length).toBe(
+      HIST_HDR_BYTES + HIST_COUNT * HIST_ENTRY_BYTES + 1,
+    );
     expect(hist[0]).toBe(HIST_COUNT);
-    expect(hist[1]).toBe(0);
-    expect(hist[2]).toBe(FLAGS_INST_RD_HIST);
+    expect(hist[1]).toBe(FLAGS_INST_RD_HIST);
+    expect(hist[2]).toBe(0);
     expect(hist[3]).toBe(0);
     expect(hist[4]).toBe(0);
     expect(hist[5]).toBe(0);
     expect(hist[6]).toBe((WATCH_BYTE >>> 8) & 0xff);
     expect(hist[7]).toBe(WATCH_BYTE & 0xff);
+    expect(hist[8]).toBe(HIST_COUNT);
+    expect(hist[9]).toBe(0);
     expect(hist[hist.length - 1]).toBe(0x00);
     for (let i = 0; i < HIST_COUNT; i += 1) {
-      const off = 8 + i * HIST_ENTRY_BYTES;
+      const off = HIST_HDR_BYTES + i * HIST_ENTRY_BYTES;
       expect(Array.from(hist.slice(off, off + 8))).toEqual([...SAMPLE_TIME]);
       expect((hist[off + 8]! << 8) | hist[off + 9]!).toBe(OP_B_SELF);
       expect((hist[off + 10]! << 8) | hist[off + 11]!).toBe(0);
@@ -352,20 +357,22 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
 
     const hist = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + HIST_ENTRY_BYTES + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
     );
-    expect(hist.length).toBe(8 + HIST_ENTRY_BYTES + 1);
+    expect(hist.length).toBe(HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1);
     expect(hist[0]).toBe(1);
-    expect(hist[1]).toBe(0);
-    expect(hist[2]).toBe(FLAGS_INST_RD_HIST);
+    expect(hist[1]).toBe(FLAGS_INST_RD_HIST);
+    expect(hist[2]).toBe(0);
     expect(hist[3]).toBe(0);
     expect(hist[4]).toBe(0);
     expect(hist[5]).toBe(0);
     expect(hist[6]).toBe((WATCH_BYTE >>> 8) & 0xff);
     expect(hist[7]).toBe(WATCH_BYTE & 0xff);
+    expect(hist[8]).toBe(1);
+    expect(hist[9]).toBe(0);
     expect(hist[hist.length - 1]).toBe(0x00);
-    const ent = 8;
+    const ent = HIST_HDR_BYTES;
     expect(Array.from(hist.slice(ent, ent + 8))).toEqual([...SAMPLE_TIME]);
     expect(be16(hist, ent + 8)).toBe(OP_EOR_R0);
     expect(be16(hist, ent + 10)).toBe(0);
@@ -448,11 +455,11 @@ test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行�
       );
       const hist = await callTagged(
         "get hist(17h)",
-        Uint8Array.from([0x17, 0x00, 0x00]),
-        8 + HIST_ENTRY_BYTES + 1,
+        Uint8Array.from([0x17, 0x00]),
+        HIST_HDR_BYTES + HIST_ENTRY_BYTES + 1,
       );
 
-      const ent = 8;
+      const ent = HIST_HDR_BYTES;
       const userIc = s.readWord(INT1_IC_SAVE);
       expect(userIc).toBe(WATCH_WORD + 1);
       expect(be16(hist, ent + 8)).toBe(OP_EOR_R0);

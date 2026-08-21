@@ -149,31 +149,27 @@ export class Tms9995ArtifactSession {
 
   /**
    * 呼び出し規約プラン（実行はしない。テスト準備用）。
-   * モニター BIOS は当面 R1/R2/R3（`TMS9995_MONITOR_ARG_REGISTERS`）。
-   * @param options 引数とスタック。省略時はモニター ABI・既定 SP/WP
+   * 既定は asm_rules.mdc（第1=`R2` … `TMS9995_DEFAULT_ARG_REGISTERS`）。
+   * @param options 引数とスタック
    * @returns 配置プラン
    */
   planCall(
     options: Omit<Tms9995CallPlanOptions, "argRegisters" | "stackInit"> & {
       argRegisters?: readonly number[];
       stackInit?: number;
-      /** true なら asm_rules の R2..R9。省略時はモニター ABI（R1..） */
+      /** @deprecated 常に asm_rules。互換のため残す（無視される） */
       useAsmRulesArgs?: boolean;
     },
   ): Tms9995CallPlan {
-    const useAsm = options.useAsmRulesArgs === true;
     const argRegisters =
-      options.argRegisters ??
-      (useAsm
-        ? [...TMS9995_DEFAULT_ARG_REGISTERS]
-        : [...TMS9995_MONITOR_ARG_REGISTERS]);
+      options.argRegisters ?? [...TMS9995_DEFAULT_ARG_REGISTERS];
     return planTms9995Call({
       args: options.args,
       returnAddr: options.returnAddr,
       stackInit: options.stackInit ?? TMS9995_DEFAULT_STACK_INIT,
       argRegisters: [...argRegisters],
       allowSpecialPurposeRegisters:
-        options.allowSpecialPurposeRegisters ?? !useAsm,
+        options.allowSpecialPurposeRegisters ?? false,
     });
   }
 

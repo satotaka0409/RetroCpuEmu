@@ -27,7 +27,7 @@ MN1613 / TMS9995 の成果物を TypeScript テストから検証するための
 
 - `createTms9995SessionFromSettings` / `createTms9995ArtifactSession`
 - CDB は `parseTms9995Cdb`（奇数バイトアドレス可）。MN1613 の `parseCdb` は使わない
-- `planTms9995Call` 既定スタック `0xFE00`。モニター暫定 ABI は第1=`R1`（`TMS9995_MONITOR_ARG_REGISTERS`）
+- `planTms9995Call` 既定スタック `0xFE00`。引数は第1=`R2`（`TMS9995_DEFAULT_ARG_REGISTERS`）
 - CRU: `Tms9995CruHandshakeMock`（`0x0020..0x003F`。INT1=ハンドシェイク、INT2=break/step、タイマーは内蔵レベル3）
 - **`call` / `runInit` は例外**（`retrocpu_emu` に TMS9995 コアが無い限り）
 

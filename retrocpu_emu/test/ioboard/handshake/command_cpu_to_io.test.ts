@@ -10,8 +10,10 @@ import {
   BREAK_HISTORY_ENTRY_SIZE_TMS9995,
   CPU_FRAME_SIZE,
   CPU_PAYLOAD_REMAINING_SIZE,
+  CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995,
   cpuToIoRemainingSize,
   CpuToIoCommandDispatcher,
+  HSHK_CPU_TYPE,
   type CpuToIoHandlers,
 } from "../../../src/ioboard/handshake/command_cpu_to_io";
 import {
@@ -89,10 +91,10 @@ describe("CPU_FRAME_SIZE", () => {
   it("時刻取得はコマンドのみ 1 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIME_GET]).toBe(1);
   });
-  it("ブレイク通知は 11 バイト、ステップ/未定義通知は 59 バイト", () => {
+  it("ブレイク通知は 11 バイト、ステップ/未定義通知は 60 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BREAK_NOTIFY]).toBe(11);
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(59);
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_NOTIFY]).toBe(59);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(60);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_NOTIFY]).toBe(60);
   });
   it("LCD制御は 6 バイト（cmd+pad+4引数）、文字列表示は 20 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(6);
@@ -636,19 +638,20 @@ describe("CpuToIoCommandDispatcher — ステップ通知(0x1B)", () => {
   });
 
   it("1Bh を onStepNotify へ渡し OK を返す", () => {
-    const frame = new Uint8Array(59);
+    const frame = new Uint8Array(60);
     frame[0] = CMD_CPU_TO_IO.STEP_NOTIFY;
-    frame[3] = 0x18;
-    frame[4] = 0x00;
-    frame[5] = 0x11;
+    frame[1] = 0; // pad
+    frame[4] = 0x18;
+    frame[5] = 0x00;
     frame[6] = 0x11;
-    frame[0x0f] = 0xff;
-    frame[0x10] = 0x00;
-    frame[0x13] = 0x18;
-    frame[0x14] = 0x00;
-    frame[0x19] = 0x0a;
-    frame[0x1b] = 0xaa;
-    frame[0x1c] = 0xbb;
+    frame[7] = 0x11;
+    frame[0x10] = 0xff;
+    frame[0x11] = 0x00;
+    frame[0x14] = 0x18;
+    frame[0x15] = 0x00;
+    frame[0x1a] = 0x0a;
+    frame[0x1c] = 0xaa;
+    frame[0x1d] = 0xbb;
     const response = dispatcher.dispatch(frame);
     expect(handlers.onStepNotify).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -665,6 +668,46 @@ describe("CpuToIoCommandDispatcher — ステップ通知(0x1B)", () => {
     expect(arg.stack[0]).toBe(0xaabb);
     expect(response[0]).toBe(RESPONSE_CODE.OK);
   });
+
+  it("TMS9995 は 70B レイアウト（R0–R15 + stack@0x26）でデコードする", () => {
+    const tms = new CpuToIoCommandDispatcher(handlers, {
+      cpuType: HSHK_CPU_TYPE.TMS9995,
+    });
+    const frame = new Uint8Array(CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995);
+    frame[0] = CMD_CPU_TO_IO.STEP_NOTIFY;
+    frame[1] = 0; // pad
+    frame[4] = 0x12;
+    frame[5] = 0x34;
+    // R0 @0x06, R5 @0x10, R10 @0x1a, R15 @0x24, stack @0x26
+    frame[0x06] = 0xaa;
+    frame[0x07] = 0x01;
+    frame[0x10] = 0xbb;
+    frame[0x11] = 0x05;
+    frame[0x1a] = 0xcc;
+    frame[0x1b] = 0x0a;
+    frame[0x24] = 0xdd;
+    frame[0x25] = 0x0f;
+    frame[0x26] = 0x11;
+    frame[0x27] = 0x22;
+    const response = tms.dispatch(frame);
+    expect(handlers.onStepNotify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        addr: 0x00001234,
+        r0: 0xaa01,
+        r5to15: expect.arrayContaining([0xbb05]),
+        sp: 0xcc0a,
+        stack: expect.arrayContaining([0x1122]),
+      }),
+    );
+    const arg = (handlers.onStepNotify as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as { r5to15: number[]; stack: number[] };
+    expect(arg.r5to15).toHaveLength(11);
+    expect(arg.r5to15[0]).toBe(0xbb05);
+    expect(arg.r5to15[10]).toBe(0xdd0f);
+    expect(arg.stack).toHaveLength(16);
+    expect(arg.stack[0]).toBe(0x1122);
+    expect(response[0]).toBe(RESPONSE_CODE.OK);
+  });
 });
 
 describe("CpuToIoCommandDispatcher — 未定義命令通知(0x13)", () => {
@@ -677,17 +720,18 @@ describe("CpuToIoCommandDispatcher — 未定義命令通知(0x13)", () => {
   });
 
   it("13h を onUndefNotify へ渡し OK を返す", () => {
-    const frame = new Uint8Array(59);
+    const frame = new Uint8Array(60);
     frame[0] = CMD_CPU_TO_IO.UNDEF_NOTIFY;
-    frame[3] = 0x18;
-    frame[4] = 0x02;
-    frame[5] = 0x22;
+    frame[1] = 0; // pad
+    frame[4] = 0x18;
+    frame[5] = 0x02;
     frame[6] = 0x22;
-    frame[0x13] = 0x18;
-    frame[0x14] = 0x02;
-    frame[0x19] = 0x05;
-    frame[0x1b] = 0xde;
-    frame[0x1c] = 0xad;
+    frame[7] = 0x22;
+    frame[0x14] = 0x18;
+    frame[0x15] = 0x02;
+    frame[0x1a] = 0x05;
+    frame[0x1c] = 0xde;
+    frame[0x1d] = 0xad;
     const response = dispatcher.dispatch(frame);
     expect(handlers.onUndefNotify).toHaveBeenCalledWith(
       expect.objectContaining({

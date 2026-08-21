@@ -6,8 +6,8 @@
 ; 10h 残り 9B: slot, flags, count, addr32 BE, data16 BE → 送信 1B status
 ; 11h 残り 1B: slot → 送信 1B status
 ; スロット 0–3。表は GL_HSHK_ADDR_BREAK（6 語×4）。CRU へもプログラムする。
-; 呼び出し: BL / B (R11)。ステータスは R1。ネスト時は R11 を退避。
-; 注意: g_hshk_recv/send は R3–R5 を壊すので、表ポインタは R7・slot は R6。
+; 呼び出し: BL / B (R11)。ステータスは R2。ネスト時は R11 を退避。
+; 注意: g_hshk_recv/send は R0–R3 を壊すので、表ポインタは R7・slot は R6（入口で退避）。
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -24,15 +24,19 @@
 
 ; -------------------------------------------------------
 ; アドレスブレイク設定（10h ペイロード）
-; return R1 HSHK_OK / HSHK_NG
+; @return R2 - HSHK_OK / HSHK_NG
 ; -------------------------------------------------------
 g_hshk_addr_break_set:
 	MOV	R11, R8
+	DECT	R10
+	MOV	R7, (R10)
+	DECT	R10
+	MOV	R6, (R10)
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	MOV	R1, R6			; slot
+	MOV	R3, R6			; slot
 	ANDI	R6, #0x00ff
 	CI	R6, #HSHK_AB_SLOTS
 	JHE	l_ab_set_bad
@@ -53,64 +57,72 @@ g_hshk_addr_break_set:
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	ANDI	R1, #0x00ff
-	MOV	R1, 2(R7)		; flags
+	ANDI	R3, #0x00ff
+	MOV	R3, 2(R7)		; flags
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	ANDI	R1, #0x00ff
-	MOV	R1, 4(R7)		; count
+	ANDI	R3, #0x00ff
+	MOV	R3, 4(R7)		; count
 
 	BL	l_ab_recv_word
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	MOV	R1, 6(R7)		; addr_hi
+	MOV	R3, 6(R7)		; addr_hi
 
 	BL	l_ab_recv_word
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	MOV	R1, 8(R7)		; addr_lo
+	MOV	R3, 8(R7)		; addr_lo
 
 	BL	l_ab_recv_word
 	CI	R2, #HSHK_OK
 	JNE	l_ab_set_fail
-	MOV	R1, 10(R7)		; data
+	MOV	R3, 10(R7)		; data
 
 	BL	l_ab_cru_program
 
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	BL	g_hshk_send_byte
-	B	(R8)
+	JMP	l_ab_set_ret
 
 l_ab_set_bad:
-	LI	R10, #8
+	LI	R5, #8
 l_ab_set_drain:
-	MOV	R10, R10
+	MOV	R5, R5
 	JEQ	l_ab_set_drain_done
 	BL	g_hshk_recv_byte
-	AI	R10, #-1
+	AI	R5, #-1
 	JMP	l_ab_set_drain
 l_ab_set_drain_done:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	BL	g_hshk_send_byte
-	B	(R8)
+	JMP	l_ab_set_ret
 
 l_ab_set_fail:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
+
+l_ab_set_ret:
+	MOV	(R10)+, R6
+	MOV	(R10)+, R7
 	B	(R8)
 
 ; -------------------------------------------------------
 ; アドレスブレイク解除（11h）
-; return R1 HSHK_OK / HSHK_NG
+; @return R2 - HSHK_OK / HSHK_NG
 ; -------------------------------------------------------
 g_hshk_addr_break_clr:
 	MOV	R11, R8
+	DECT	R10
+	MOV	R7, (R10)
+	DECT	R10
+	MOV	R6, (R10)
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_clr_fail
-	MOV	R1, R6
+	MOV	R3, R6
 	ANDI	R6, #0x00ff
 	CI	R6, #HSHK_AB_SLOTS
 	JHE	l_ab_clr_bad
@@ -135,50 +147,56 @@ l_ab_clr_z:
 	LI	R12, #0
 	SBZ	#IO_BREAK_ENA
 
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	BL	g_hshk_send_byte
-	B	(R8)
+	JMP	l_ab_clr_ret
 
 l_ab_clr_bad:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	BL	g_hshk_send_byte
-	B	(R8)
+	JMP	l_ab_clr_ret
 
 l_ab_clr_fail:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
+
+l_ab_clr_ret:
+	MOV	(R10)+, R6
+	MOV	(R10)+, R7
 	B	(R8)
 
 ; -------------------------------------------------------
 ; 表クリア（リセット後用）
 ; -------------------------------------------------------
 g_hshk_addr_break_init:
-	LI	R1, #GL_HSHK_ADDR_BREAK
-	LI	R2, #HSHK_AB_TBL_WORDS
+	LI	R2, #GL_HSHK_ADDR_BREAK
+	LI	R3, #HSHK_AB_TBL_WORDS
 l_ab_init_lp:
-	CLR	(R1)+
-	AI	R2, #-1
+	CLR	(R2)+
+	AI	R3, #-1
 	JNE	l_ab_init_lp
 	B	(R11)
 
 ; -------------------------------------------------------
-; BE 2 バイト → R1。ステータスは R2
+; BE 2 バイトを 1 ワードにまとめる
+; @return R2 - HSHK_OK / HSHK_NG
+; @return R3 - 受信ワード（NG 時は 0）
 ; -------------------------------------------------------
 l_ab_recv_word:
 	MOV	R11, R9
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_rw_fail
-	MOV	R1, R10
-	SWPB	R10
+	MOV	R3, R5
+	SWPB	R5
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_ab_rw_fail
-	SOC	R1, R10
-	MOV	R10, R1
+	SOC	R3, R5
+	MOV	R5, R3
 	LI	R2, #HSHK_OK
 	B	(R9)
 l_ab_rw_fail:
-	CLR	R1
+	CLR	R3
 	LI	R2, #HSHK_NG
 	B	(R9)
 

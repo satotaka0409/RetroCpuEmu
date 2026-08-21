@@ -1,7 +1,7 @@
 ; LED表示依頼（ハンドシェイク 16h）
 ; 線上 送信 16B: 16h, pad(00) + 14 バイト（バッファ各語の下位 8bit）→ 受信 1B: status
-; param R1 バッファ先頭（14 ワード）
-; return R1 OK/モードエラー/その他
+; @param R2 - バッファ先頭（14 ワード）
+; @return R2 - OK/モードエラー/その他
 ; seven_seg / bullet は OK スタブ
 
 	.cpu	tms9995
@@ -21,65 +21,65 @@
 
 	.area	_CODE		(REL,CON)
 g_bios_led_display_:
-	MOV	R11, R9
-	MOV	R1, R3
+	MOV	R11, R8
+	MOV	R2, R5
 
 	BL	g_hshk_initiate_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
-	LI	R1, #HSHK_CMD_LED_DISPLAY
+	LI	R2, #HSHK_CMD_LED_DISPLAY
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
 	LI	R4, #HSHK_LED_DATA_LEN
 l_led_send_lp:
-	MOV	(R3), R1
-	ANDI	R1, #0x00ff
+	MOV	(R5), R2
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
-	AI	R3, #2
+	AI	R5, #2
 	AI	R4, #-1
 	JNE	l_led_send_lp
 
 	BL	g_hshk_finalize_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
 	BL	g_hshk_wait_req1_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
 	BL	g_hshk_accept_request
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_led_fail
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_led_recv_fail
-	MOV	R1, R4
+	MOV	R3, R4
 	BL	g_hshk_finalize_recv
-	MOV	R4, R1
-	ANDI	R1, #0x00ff
-	B	(R9)
+	MOV	R4, R2
+	ANDI	R2, #0x00ff
+	B	(R8)
 
 l_led_recv_fail:
 	BL	g_hshk_finalize_recv
 l_led_fail:
-	LI	R1, #HSHK_NG_OTHER
-	B	(R9)
+	LI	R2, #HSHK_NG_OTHER
+	B	(R8)
 
 g_bios_led_seven_seg:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 g_bios_led_bullet:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)

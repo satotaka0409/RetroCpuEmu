@@ -2,11 +2,12 @@
 ; ブレイク履歴取得（ハンドシェイク 17h、IO→CPU）
 ; 根拠: HandShake.mdc「ブレイク履歴取得」/ boot_monitor.mdc / breakpoint.mdc
 ;
-; コマンド 1B は IRQ ディスパッチ済み。残り 2B: slot, フラグ（Bit0=取得後クリア）。
-; CPU→IO: 件数, ステータス, flags, count, addr32 BE（計 8B）
-;   ＋ エントリ×件数×66B（新しい順）＋ 終端 1B（00h OK / 01h NG / 02h 履歴未設定）。
+; コマンド 1B は IRQ ディスパッチ済み。残り 1B: slot（0–3）。
+; CPU→IO: 件数, flags, n_stop, pad0, addr32 BE, histCount, pad0（計 10B）
+;   ＋ エントリ×件数×66B（番号順 index 0 から）＋ 終端 1B（00h OK / 01h NG / 02h 履歴未設定）。
 ; エントリ 66B: 時刻4語 + AFTER + PREV + レジスタ 10語 + NPP 1B + パディング 0 + スタック 16 語。
 ; スロット 0–3。番号不正はヘッダ 0 のあと 01h。Bit7 なしは件数 0・02h。
+; OVF はメタのみ（線上ヘッダにステータスバイトは無い）。
 ; 履歴本体は 3F000h（SBR C + 論理 F000h）。線上送信は CSBR=0 のフレーム複写経由。
 ; 局所 bald は SP+1 が戻り。X0≡R3 なので、スロットは R1 から直接フレームへ書く。
 ; g_* / 局所ヘルパは BALD / RET。R3–R4・TSR0 は退避。
@@ -25,32 +26,28 @@
 	.global GL_BP_HIST_META
 
 ; スタック（callee、PUSH R3/R4 のあと）。メインから見たオフセット。
-; +1 TSR0 / +2 スロット / +3 取得後クリア / +4 件数 / +5 終端 / +6.. エントリ複写 33 語
+; +1 TSR0 / +2 スロット / +3 件数 / +4 終端 / +5.. エントリ複写 33 語
 HSHK_BH_TSR0		.equ	1
 HSHK_BH_SLOT		.equ	2
-HSHK_BH_CLRFLG		.equ	3
-HSHK_BH_N		.equ	4
-HSHK_BH_END		.equ	5
-HSHK_BH_WIRE		.equ	6
+HSHK_BH_N		.equ	3
+HSHK_BH_END		.equ	4
+HSHK_BH_WIRE		.equ	5
 HSHK_BH_FR		.equ	HSHK_BH_END+HSHK_BH_ENTRY_WORDS
-; AI/SI 即値は 4bit（1–15）なので確保・解放は 15+15+8
+; AI/SI 即値は 4bit（1–15）なので確保・解放は 15+15+7
 HSHK_BH_FR_A		.equ	15
 HSHK_BH_FR_B		.equ	15
-HSHK_BH_FR_C		.equ	8
-; l_bh_send_ents: bald のあと push R3/R4。件数を積んだ直後は +6、index も積むと +7
-HSHK_BH_SE_SLOT_GO	.equ	6
+HSHK_BH_FR_C		.equ	7
+; l_bh_send_ents: bald のあと push R3/R4・件数・index。スロットは呼び出し元フレーム +7
 HSHK_BH_SE_SLOT		.equ	7
 ; ループ中の複写先頭（WIRE + index/件数/R4/R3/戻り の 5 語）
 HSHK_BH_SE_WIRE		.equ	HSHK_BH_WIRE+5
-; l_bh_clear 中（R4 / R3 / 戻り の下）
-HSHK_BH_CL_SLOT		.equ	5
 ; 1 エントリ 33 語のうち、線上は先行 16 語を 16bit BE、NPP+パディング、スタック 16 語
 HSHK_BH_SEND_WORDS	.equ	16
 
 ; -------------------------------------------------------
 ; ブレイク履歴取得（17h ペイロード）
 ; @note コマンドバイトは呼び出し前に受信済み。IRQ コンテキスト（IO→CPU 転送中）。
-; @note 線上 受信 2B（slot, flags）→ 送信 8B ヘッダ＋エントリ×66B＋終端 1B
+; @note 線上 受信 1B（slot）→ 送信 10B ヘッダ＋エントリ×66B＋終端 1B
 ; @return R0 - 終端ステータス（HSHK_OK / HSHK_NG / HSHK_NG_OTHER=履歴未設定）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
@@ -66,7 +63,6 @@ g_hshk_break_hist_get:
 	st	R0, HSHK_BH_TSR0(X0)
 	eor	R0, R0
 	st	R0, HSHK_BH_SLOT(X0)
-	st	R0, HSHK_BH_CLRFLG(X0)
 	st	R0, HSHK_BH_N(X0)
 	mvi	R0, #HSHK_NG
 	st	R0, HSHK_BH_END(X0)
@@ -80,13 +76,6 @@ g_hshk_break_hist_get:
 	andi	R1, #0x00ff
 	mv	X0, SP
 	st	R1, HSHK_BH_SLOT(X0)	; X0≡R3 なので R1 から書く
-
-	bald	g_hshk_recv_byte
-	cwi	R0, #HSHK_OK, Z
-	b	l_bh_fail
-	andi	R1, #HSHK_BH_CLR
-	mv	X0, SP
-	st	R1, HSHK_BH_CLRFLG(X0)
 	l	R3, HSHK_BH_SLOT(X0)
 
 	cwi	R3, #HSHK_AB_SLOTS, M
@@ -96,7 +85,6 @@ l_bh_bad:
 	; 番号不正: 設定は触らず、件数 0・flags/addr 0・終端 NG
 	eor	R4, R4
 	eor	R0, R0
-	eor	R1, R1
 	mvi	R2, #HSHK_NG
 	mv	X0, SP
 	st	R0, HSHK_BH_N(X0)
@@ -125,13 +113,13 @@ l_bh_user:
 	b	l_bh_nohist
 	b	l_bh_hist
 l_bh_nohist:
-	; Bit7 なし: 件数 0・ステータス Bit1・終端 02h。flags/addr は表のエコー
+	; Bit7 なし: 件数 0・終端 02h。flags/addr は表のエコー（ステータスバイト無し）
 	eor	R0, R0
-	mvi	R1, #HSHK_BH_ST_NOHIST
 	mvi	R2, #HSHK_NG_OTHER
 	mv	X0, SP
 	st	R0, HSHK_BH_N(X0)
 	st	R2, HSHK_BH_END(X0)
+	mv	R4, X1
 	bald	l_bh_send_hdr
 	b	l_bh_fin
 l_bh_hist:
@@ -150,14 +138,12 @@ l_bh_hist:
 l_bh_n_clamp:
 	mvi	R0, #HSHK_BH_DEPTH
 l_bh_n_ok:
-	l	R2, HSHK_BH_MW_OVF(X1)
-	andi	R2, #HSHK_BH_ST_OVF
 	pop	X1			; 10h 表
-	mv	R1, R2			; 線上ステータス（Bit0=OVF）
 	mvi	R2, #HSHK_OK
 	mv	X0, SP
 	st	R0, HSHK_BH_N(X0)
 	st	R2, HSHK_BH_END(X0)
+	mv	R4, X1
 	bald	l_bh_send_hdr
 	cwi	R0, #HSHK_OK, Z
 	b	l_bh_fin
@@ -165,17 +151,9 @@ l_bh_n_ok:
 	l	R0, HSHK_BH_N(X0)
 	or	R0, R0, Z
 	b	l_bh_do_ents
-	b	l_bh_after_ents
+	b	l_bh_fin
 l_bh_do_ents:
 	bald	l_bh_send_ents
-l_bh_after_ents:
-	mv	X0, SP
-	l	R0, HSHK_BH_CLRFLG(X0)
-	or	R0, R0, Z
-	b	l_bh_do_clr
-	b	l_bh_fin
-l_bh_do_clr:
-	bald	l_bh_clear
 	b	l_bh_fin
 
 l_bh_fin:
@@ -201,20 +179,17 @@ l_bh_epilogue:
 	ret
 
 ; -------------------------------------------------------
-; ヘッダ 8B を CPU→IO で送る（件数, ステータス, flags, count, addr32 BE）
+; ヘッダ 10B を CPU→IO で送る
+; @note count, flags, n_stop, pad0, addr32 BE, histCount(=count), pad0
 ; @note 件数と終端ステータスは呼び出し側がフレームへ書く。ここは線上送信のみ。
 ; @note R4=0 なら flags/count/addr は 0（番号不正）。非 0 なら 10h 表ポインタ。
-; @param R0 - 有効件数（0–16、下位 8bit）
-; @param R1 - ステータス（Bit0=OVF / Bit1=履歴未設定）
+; @param R0 - 有効件数（0–4、下位 8bit）。histCount にも同じ値を送る
 ; @param R4 - 10h スロット表先頭。0 ならエコー欄を 0 埋め
 ; @return R0 - 最後の send の OK / NG
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
 l_bh_send_hdr:
-	push	R1
-	andi	R0, #0x00ff
-	bald	g_hshk_send_byte
-	pop	R0
+	push	R0			; histCount 用に件数を保存
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
 	or	R4, R4, NZ
@@ -222,32 +197,43 @@ l_bh_send_hdr:
 	b	l_bh_hdr_tbl
 l_bh_hdr_zero:
 	eor	R0, R0
-	bald	g_hshk_send_byte
+	bald	g_hshk_send_byte	; flags
 	eor	R0, R0
-	bald	g_hshk_send_byte
+	bald	g_hshk_send_byte	; n_stop
 	eor	R0, R0
-	bald	g_hshk_send_word
+	bald	g_hshk_send_byte	; pad
 	eor	R0, R0
-	bald	g_hshk_send_word
-	ret
+	bald	g_hshk_send_word	; addr_hi
+	eor	R0, R0
+	bald	g_hshk_send_word	; addr_lo
+	b	l_bh_hdr_tail
 l_bh_hdr_tbl:
+	; R4≠0 のとき X1≡R4 が 10h 表（番号不正時は R4=0 で zero 経路）
 	l	R0, HSHK_AB_W_FLAGS(X1)
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
 	l	R0, HSHK_AB_W_COUNT(X1)
 	andi	R0, #0x00ff
 	bald	g_hshk_send_byte
+	eor	R0, R0
+	bald	g_hshk_send_byte	; pad
 	l	R0, HSHK_AB_W_ADDR_HI(X1)
 	bald	g_hshk_send_word
 	l	R0, HSHK_AB_W_ADDR_LO(X1)
 	bald	g_hshk_send_word
+l_bh_hdr_tail:
+	pop	R0			; histCount = 件数
+	andi	R0, #0x00ff
+	bald	g_hshk_send_byte
+	eor	R0, R0
+	bald	g_hshk_send_byte	; pad
 	ret
 
 ; -------------------------------------------------------
-; 履歴エントリを新しい順に送る
+; 履歴エントリを番号順（index 0 から）に送る
 ; @note スロットは呼び出し元フレーム HSHK_BH_SLOT。SBR C からフレーム複写（HSHK_BH_WIRE）へ写して送る。
-; @note リング最新は (NEXT-1) & 3。1 件 66B = 16 語 BE + NPP 1B + パディング 0 + スタック 16 語。
-; @param R0 - 送信件数（0 なら何もしない。1–16）
+; @note 1 件 66B = 16 語 BE + NPP 1B + パディング 0 + スタック 16 語。
+; @param R0 - 送信件数（0 なら何もしない。1–4）
 ; @return R0 - 最後の send の OK / NG（件数 0 なら入口のまま）
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
@@ -259,22 +245,13 @@ l_bh_send_ents:
 	b	l_bh_se_done
 l_bh_se_go:
 	push	R0			; 残り件数
-	mv	X1, SP
-	l	R3, HSHK_BH_SE_SLOT_GO(X1)
-	mv	R0, R3
-	sl	R0, RE
-	a	R0, R3			; slot*3
-	mvwi	X1, #GL_BP_HIST_META
-	a	X1, R0
-	l	R1, HSHK_BH_MW_NEXT(X1)
-	si	R1, #1
-	andi	R1, #HSHK_BH_INDEX_MASK		; 最新 index
+	eor	R1, R1			; index 0 から
 	push	R1
 	mvi	R0, #HSHK_BH_SBR
 	setb	R0, TSR0
 l_bh_se_lp:
 	; この時点のスタック: +1 index / +2 残り件数 / +3 R4 / +4 R3 / +5 戻り
-	; / +6 TSR0 / +7 スロット / … / +11 複写先頭
+	; / +6 TSR0 / +7 スロット / … / +10 複写先頭
 	; エントリ先頭 = F000h + slot*132 + index*33
 	; *33 = <<5 + n、*132 = <<7 + <<2
 	mv	X1, SP
@@ -355,7 +332,7 @@ l_bh_se_stk:
 	setb	R0, TSR0
 	mv	X1, SP
 	l	R1, 1(X1)
-	si	R1, #1
+	ai	R1, #1
 	andi	R1, #HSHK_BH_INDEX_MASK
 	st	R1, 1(X1)
 	l	R0, 2(X1)
@@ -365,52 +342,6 @@ l_bh_se_stk:
 	b	l_bh_se_lp
 	ai	SP, #2			; index + 残り件数
 l_bh_se_done:
-	pop	R4
-	pop	R3
-	ret
-
-; -------------------------------------------------------
-; 当該スロットの履歴メタとリングを 0 にする
-; @note スロットは呼び出し元フレーム HSHK_BH_SLOT。Bit0=1（取得後クリア）のときだけ呼ぶ。
-; @Destruction R0, R1, R2
-; -------------------------------------------------------
-l_bh_clear:
-	push	R3
-	push	R4
-	mv	X1, SP
-	l	R3, HSHK_BH_CL_SLOT(X1)
-	mv	R0, R3
-	sl	R0, RE
-	a	R0, R3			; slot*3
-	mvwi	X1, #GL_BP_HIST_META
-	a	X1, R0
-	eor	R0, R0
-	st	R0, HSHK_BH_MW_COUNT(X1)
-	st	R0, HSHK_BH_MW_NEXT(X1)
-	st	R0, HSHK_BH_MW_OVF(X1)
-	; リング先頭 = F000h + slot*132（*132 = <<7 + <<2）
-	mv	R1, R3
-	sl	R1, RE
-	sl	R1, RE			; *4
-	mv	R2, R1
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE
-	sl	R1, RE			; *128
-	a	R1, R2			; slot*132
-	mvwi	R0, #HSHK_BH_BASE
-	a	R1, R0
-	mv	X1, R1
-	mvi	R0, #HSHK_BH_SBR
-	setb	R0, TSR0
-	mvwi	R2, #HSHK_BH_SLOT_WORDS
-	eor	R0, R0
-l_bh_cl_lp:
-	str	R0, TSR0, (R4)
-	ai	X1, #1
-	si	R2, #1, Z
-	b	l_bh_cl_lp
 	pop	R4
 	pop	R3
 	ret

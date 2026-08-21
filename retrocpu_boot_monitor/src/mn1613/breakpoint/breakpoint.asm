@@ -28,7 +28,7 @@
 ;      不一致・条件不正 → スルー（履歴にも書かない）。
 ;   6. Bit7 履歴かつ一致なら 11h で時刻を取り、3F000h（SBR C）へ 1 件追記。
 ;      エントリ 33 ワード（17h）: 時刻4 + AFTER + PREV + レジスタ 11 + スタック 16。
-;      WRITE 以外／命令は PREV=0000h。IO の AFTER は 0。リング 16、メタは _WORK。
+;      WRITE 以外／命令は PREV=0000h。IO の AFTER は 0。リング 4、メタは _WORK。
 ;   7. 停止するとき 1Ah を CPU→IO で送り、OK/NG 1B を IO→CPU で受ける。
 ;
 ; 1Ah 線上（送信 ヘッダ11B + 履歴66B×件数 → 受信 1B status）:
@@ -428,7 +428,7 @@ l_bp_leave:
 	ret
 
 ; -------------------------------------------------------
-; 1Ah 用: 履歴エントリを件数分（66B×N）送る
+; 1Ah 用: 履歴エントリを番号順（index 0 から、66B×N）送る
 ; @param R3 - slot (0-3)
 ; @param R2 - historyCount (0-4)
 ; @return R0 - HSHK_OK / HSHK_NG
@@ -446,15 +446,7 @@ l_bp_send_hist_entries:
 
 l_bp_she_go:
 	push	R2			; 残り件数
-	; 最新 index = (NEXT-1) & INDEX_MASK
-	mv	R0, R3
-	sl	R0, RE
-	a	R0, R3			; slot*3
-	mvwi	X1, #GL_BP_HIST_META
-	a	X1, R0
-	l	R4, HSHK_BH_MW_NEXT(X1)
-	si	R4, #1
-	andi	R4, #HSHK_BH_INDEX_MASK
+	eor	R4, R4			; index 0 から
 	mvi	R0, #HSHK_BH_SBR
 	setb	R0, TSR0
 
@@ -543,8 +535,8 @@ l_bp_she_stk_ok:
 	si	R2, #1, Z
 	b	l_bp_she_stk_lp
 
-	; index = (index-1) & INDEX_MASK
-	si	R4, #1
+	; index = (index+1) & INDEX_MASK
+	ai	R4, #1
 	andi	R4, #HSHK_BH_INDEX_MASK
 	mv	X0, SP
 	l	R2, 0(X0)

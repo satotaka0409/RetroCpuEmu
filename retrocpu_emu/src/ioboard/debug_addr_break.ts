@@ -20,7 +20,7 @@ import {
 export type AddrBreakSetFields = {
   /** スロット 0–3 */
   slot: number;
-  /** 位置02 上位バイト。Bit0 MEM/IO, Bit1 RD/WR, Bit2–4 条件, Bit5 履歴 */
+  /** 位置02。Bit0 MEM/IO, Bit1 RD_EN, Bit2 WR_EN, Bit3–5 条件, Bit6 INST, Bit7 履歴 */
   flags: number;
   /** ブレイクまでのカウント。0=シングル、1–255=回数 */
   count: number;

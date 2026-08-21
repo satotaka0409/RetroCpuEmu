@@ -1,9 +1,10 @@
 ; LCD文字列表示（ハンドシェイク 18h・簡易）
 ; 線上 送信 20B: 18h, row, col, len, ch0..ch15(0) → 受信 1B: status
-; param R1 Bit8-9=行 / Bit0-7=列
-; param R2 文字数（0-16）
-; param R3 バッファ（未使用・文字は 0 埋め）
-; return R1 OK/NG
+; @param R2 - Bit8-9=行 / Bit0-7=列
+; @param R3 - 文字数（0-16）
+; @param R4 - バッファ（未使用・文字は 0 埋め）
+; @return R2 - OK/NG
+; 送信をまたぐ値は R4/R5/R8（R6/R7/R9 は呼び出し元のもの）。
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -20,76 +21,77 @@
 
 	.area	_CODE		(REL,CON)
 g_bios_lcd_text_:
-	MOV	R11, R9
-	MOV	R1, R7
-	MOV	R7, R5
-	SWPB	R5
-	ANDI	R5, #0x0003
-	MOV	R7, R4
-	ANDI	R4, #0x00ff
-	MOV	R2, R6
-	ANDI	R6, #0x00ff
-	CI	R6, #HSHK_LCD_TEXT_MAX
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	R2, R8			; 行・列（パック）
+	MOV	R3, R4
+	ANDI	R4, #0x00ff		; 文字数
+	CI	R4, #HSHK_LCD_TEXT_MAX
 	JLE	l_lcd2_len_ok
-	LI	R6, #HSHK_LCD_TEXT_MAX
+	LI	R4, #HSHK_LCD_TEXT_MAX
 l_lcd2_len_ok:
 
 	BL	g_hshk_initiate_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
-	LI	R1, #HSHK_CMD_LCD_TEXT
+	LI	R2, #HSHK_CMD_LCD_TEXT
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
-	MOV	R5, R1
+	MOV	R8, R2			; 行
+	SWPB	R2
+	ANDI	R2, #0x0003
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
-	MOV	R4, R1
+	MOV	R8, R2			; 列
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
-	MOV	R6, R1
+	MOV	R4, R2			; 文字数
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
-	LI	R7, #HSHK_LCD_TEXT_MAX
+	LI	R5, #HSHK_LCD_TEXT_MAX
 l_lcd2_ch_lp:
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
-	AI	R7, #-1
+	AI	R5, #-1
 	JNE	l_lcd2_ch_lp
 
 	BL	g_hshk_finalize_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
 	BL	g_hshk_wait_req1_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
 	BL	g_hshk_accept_request
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_lcd2_fail
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_lcd2_recv_fail
-	MOV	R1, R4
+	MOV	R3, R4
 	BL	g_hshk_finalize_recv
-	MOV	R4, R1
-	ANDI	R1, #0x00ff
-	B	(R9)
+	MOV	R4, R2
+	ANDI	R2, #0x00ff
+	MOV	(R10)+, R11
+	B	(R11)
 
 l_lcd2_recv_fail:
 	BL	g_hshk_finalize_recv
 l_lcd2_fail:
-	LI	R1, #HSHK_NG
-	B	(R9)
+	LI	R2, #HSHK_NG
+	MOV	(R10)+, R11
+	B	(R11)

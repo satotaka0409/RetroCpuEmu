@@ -20,6 +20,9 @@ const BASE_REGS = {
   R4: 0x4444,
 } as const;
 
+/** CPU→IO ヘッダ長（count..pad、HandShake 位置 02–0B） */
+const HDR = 10;
+
 const session: Mn1613AsmSession = createSessionFromSettings(
   withMn1613CpuLog(mn1613MonHandshakeSettings, import.meta.url),
 );
@@ -80,12 +83,8 @@ async function callHandler(
 
 test("17h スロット 4 はヘッダ 0 のあと NG", async () => {
   await withCase(async (s, mock) => {
-    const reply = await callHandler(
-      mock,
-      Uint8Array.from([0x17, 0x04, 0x00]),
-      9,
-    );
-    expect(Array.from(reply)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
+    const reply = await callHandler(mock, Uint8Array.from([0x17, 0x04]), HDR + 1);
+    expect(Array.from(reply)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
 });
@@ -101,15 +100,18 @@ test("17h 履歴未設定は件数 0 で 02h", async () => {
     );
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      9,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + 1,
     );
     expect(reply[0]).toBe(0);
-    expect(reply[1]).toBe(0x02);
-    expect(reply[2]).toBe(0x42);
+    expect(reply[1]).toBe(0x42);
+    expect(reply[2]).toBe(0x00);
+    expect(reply[3]).toBe(0x00);
     expect(reply[6]).toBe(0x30);
     expect(reply[7]).toBe(0x00);
-    expect(reply[8]).toBe(0x02);
+    expect(reply[8]).toBe(0);
+    expect(reply[9]).toBe(0);
+    expect(reply[10]).toBe(0x02);
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
   });
 });
@@ -125,15 +127,17 @@ test("17h 履歴設定で件数 0 なら OK", async () => {
     );
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      9,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + 1,
     );
-    expect(reply.length).toBe(9);
+    expect(reply.length).toBe(HDR + 1);
     expect(reply[0]).toBe(0);
-    expect(reply[1]).toBe(0);
-    expect(reply[2]).toBe(0xc2);
-    expect(reply[3]).toBe(0x04);
-    expect(reply[8]).toBe(0x00);
+    expect(reply[1]).toBe(0xc2);
+    expect(reply[2]).toBe(0x04);
+    expect(reply[3]).toBe(0x00);
+    expect(reply[8]).toBe(0);
+    expect(reply[9]).toBe(0);
+    expect(reply[10]).toBe(0x00);
     s.expectRegisters({ R0: 0x00, R4: BASE_REGS.R4 });
   });
 });
@@ -163,7 +167,7 @@ function plantEntry(
   }
 }
 
-test("17h 履歴 1 件を新しい順で返す", async () => {
+test("17h 履歴 1 件を番号順で返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -179,18 +183,19 @@ test("17h 履歴 1 件を新しい順で返す", async () => {
     plantEntry(s, 0, 0, 0x0123);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + 66 + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + 66 + 1,
     );
     expect(reply[0]).toBe(1);
-    expect(reply[1]).toBe(0);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x0123);
-    expect((reply[16]! << 8) | reply[17]!).toBe(0xa5a5);
+    expect(reply[1]).toBe(0xc2);
+    expect(reply[8]).toBe(1);
+    expect((reply[HDR]! << 8) | reply[HDR + 1]!).toBe(0x0123);
+    expect((reply[HDR + 8]! << 8) | reply[HDR + 9]!).toBe(0xa5a5);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });
 
-test("17h は 2 件を新しい順（後に書いた方から）で返す", async () => {
+test("17h は 2 件を番号順（index 0 から）で返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -207,12 +212,12 @@ test("17h は 2 件を新しい順（後に書いた方から）で返す", asyn
     plantEntry(s, 0, 1, 0x0002);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + 66 * 2 + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + 66 * 2 + 1,
     );
     expect(reply[0]).toBe(2);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x0002);
-    expect((reply[8 + 66]! << 8) | reply[9 + 66]!).toBe(0x0001);
+    expect((reply[HDR]! << 8) | reply[HDR + 1]!).toBe(0x0001);
+    expect((reply[HDR + 66]! << 8) | reply[HDR + 67]!).toBe(0x0002);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });
@@ -233,44 +238,16 @@ test("17h スロット 3 は slot×132 先のエントリを返す", async () =>
     plantEntry(s, 3, 0, 0x7777);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x03, 0x00]),
-      8 + 66 + 1,
+      Uint8Array.from([0x17, 0x03]),
+      HDR + 66 + 1,
     );
     expect(reply[0]).toBe(1);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x7777);
+    expect((reply[HDR]! << 8) | reply[HDR + 1]!).toBe(0x7777);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });
 
-test("17h Bit0=1 は取得後に当該スロットの履歴をクリアする", async () => {
-  await withCase(async (s, mock) => {
-    await callHandler(
-      mock,
-      Uint8Array.from([
-        0x10, 0x00, 0xc2, 0x04, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
-      ]),
-      1,
-    );
-    const meta = s.wordAddr("GL_BP_HIST_META");
-    s.writeWord(meta, 1);
-    s.writeWord(meta + 1, 1);
-    s.writeWord(meta + 2, 1);
-    plantEntry(s, 0, 0, 0x0123);
-    const reply = await callHandler(
-      mock,
-      Uint8Array.from([0x17, 0x00, 0x01]),
-      8 + 66 + 1,
-    );
-    expect(reply[0]).toBe(1);
-    expect(reply[1]).toBe(0x01);
-    expect(reply[reply.length - 1]).toBe(0x00);
-    expect(s.readWord(meta)).toBe(0);
-    expect(s.readWord(meta + 1)).toBe(0);
-    expect(s.readWord(meta + 2)).toBe(0);
-  });
-});
-
-test("17h オーバフロー済みはステータス Bit0 を立てる", async () => {
+test("17h オーバフローはメタのみ（線上ヘッダにステータス無し）", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -286,17 +263,18 @@ test("17h オーバフロー済みはステータス Bit0 を立てる", async (
     plantEntry(s, 0, 0, 0x00aa);
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + 66 + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + 66 + 1,
     );
     expect(reply[0]).toBe(1);
-    expect(reply[1]).toBe(0x01);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x00aa);
+    expect(reply[1]).toBe(0xc2);
+    expect(s.readWord(meta + 2)).toBe(1);
+    expect((reply[HDR]! << 8) | reply[HDR + 1]!).toBe(0x00aa);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });
 
-test("17h 履歴 4 件を新しい順で返す", async () => {
+test("17h 履歴 4 件を番号順で返す", async () => {
   await withCase(async (s, mock) => {
     await callHandler(
       mock,
@@ -316,17 +294,18 @@ test("17h 履歴 4 件を新しい順で返す", async () => {
     const entrySize = 66;
     const reply = await callHandler(
       mock,
-      Uint8Array.from([0x17, 0x00, 0x00]),
-      8 + entrySize * 4 + 1,
+      Uint8Array.from([0x17, 0x00]),
+      HDR + entrySize * 4 + 1,
     );
 
-    expect(reply.length).toBe(8 + entrySize * 4 + 1);
+    expect(reply.length).toBe(HDR + entrySize * 4 + 1);
     expect(reply[0]).toBe(4);
-    expect(reply[1]).toBe(0);
-    expect((reply[8]! << 8) | reply[9]!).toBe(0x0103);
-    expect((reply[8 + entrySize * 3]! << 8) | reply[9 + entrySize * 3]!).toBe(
-      0x0100,
-    );
+    expect(reply[1]).toBe(0xc2);
+    expect(reply[8]).toBe(4);
+    expect((reply[HDR]! << 8) | reply[HDR + 1]!).toBe(0x0100);
+    expect(
+      (reply[HDR + entrySize * 3]! << 8) | reply[HDR + 1 + entrySize * 3]!,
+    ).toBe(0x0103);
     expect(reply[reply.length - 1]).toBe(0x00);
   });
 });

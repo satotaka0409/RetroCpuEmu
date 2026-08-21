@@ -136,12 +136,13 @@ describe("IoBoardHandshakeMock", () => {
 
   it("未定義命令通知(0x13)で lastUndefNotify を保持し UNDEF LED を点灯する", () => {
     expect(mock.state.undefLed).toBe(false);
-    const frame = new Uint8Array(59);
+    const frame = new Uint8Array(60);
     frame[0] = CMD_CPU_TO_IO.UNDEF_NOTIFY;
-    frame[3] = 0x18;
-    frame[4] = 0x10;
-    frame[0x13] = 0x18;
-    frame[0x14] = 0x10;
+    frame[1] = 0; // pad
+    frame[4] = 0x18;
+    frame[5] = 0x10;
+    frame[0x14] = 0x18;
+    frame[0x15] = 0x10;
     const resp = dispatcher.dispatch(frame);
     expect(resp[0]).toBe(RESPONSE_CODE.OK);
     expect(mock.state.lastUndefNotify).not.toBeNull();

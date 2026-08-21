@@ -56,52 +56,34 @@ GL_RND_DEFAULT_SEED  .equ 0x1234
 	.word	WORKSPACE_BASE
 	.word	l_reset
 	; level1 handshake
-	.word	INT_WORKSPACE
+	.word	WORKSPACE_BASE + 0x80
 	.word	g_int1_handler
 	; level2 break/step
-	.word	INT_WORKSPACE
+	.word	WORKSPACE_BASE + 0xA0
 	.word	g_int2_handler
 	; level3 on-chip timer
-	.word	INT_WORKSPACE
+	.word	WORKSPACE_BASE + 0xC0
 	.word	g_int3_handler
 
 	.area	_BIOS		(REL,CON)
-g_main:			B	l_main
-
-g_main_loop:		B	l_main_loop
-
-g_get_rnd:		B	g_get_rnd_
-
-g_mem_cpy:		B	g_mem_cpy_
-
-g_malloc:		B	g_malloc_
-
-g_free:			B	g_free_
-
-g_bios_mode_set:	B	g_bios_mode_set_
-
-g_hshk_get_time:	B	g_hshk_get_time_
-
-g_bios_timer_set:	B	g_bios_timer_set_
-
-g_bios_hex_key_get:	B	g_bios_hex_key_get_
-
-g_bios_pc_key_get:	B	g_bios_pc_key_get_
-
-g_bios_led_display:	B	g_bios_led_display_
-
-g_bios_lcd_control:	B	g_bios_lcd_control_
-
-g_bios_lcd_text:	B	g_bios_lcd_text_
-
-g_bios_beep:		B	g_bios_beep_
-
-g_bios_rtc_get_raw:	B	g_bios_rtc_get_raw_
-
-g_bios_temp_get_raw:	B	g_bios_temp_get_raw_
-
-g_bios_light_get_raw:	B	g_bios_light_get_raw_
-
+g_main:				B	l_main
+g_main_loop:			B	l_main_loop
+g_get_rnd:			B	g_get_rnd_
+g_mem_cpy:			B	g_mem_cpy_
+g_malloc:			B	g_malloc_
+g_free:				B	g_free_
+g_bios_mode_set:		B	g_bios_mode_set_
+g_hshk_get_time:		B	g_hshk_get_time_
+g_bios_timer_set:		B	g_bios_timer_set_
+g_bios_hex_key_get:		B	g_bios_hex_key_get_
+g_bios_pc_key_get:		B	g_bios_pc_key_get_
+g_bios_led_display:		B	g_bios_led_display_
+g_bios_lcd_control:		B	g_bios_lcd_control_
+g_bios_lcd_text:		B	g_bios_lcd_text_
+g_bios_beep:			B	g_bios_beep_
+g_bios_rtc_get_raw:		B	g_bios_rtc_get_raw_
+g_bios_temp_get_raw:		B	g_bios_temp_get_raw_
+g_bios_light_get_raw:		B	g_bios_light_get_raw_
 g_bios_distance_get_raw:	B	g_bios_distance_get_raw_
 
 	.area	_CODE		(REL,CON)
@@ -109,10 +91,10 @@ l_reset:
 	LWPI	#WORKSPACE_BASE
 	LIMI	#0
 	LI	R10, #STACK_INIT
-	LI	R1, #GL_RND_DEFAULT_SEED
+	LI	R2, #GL_RND_DEFAULT_SEED
 	BL	g_rnd_init
-	LI	R1, #GL_ALLOC_DEFAULT_ADR
-	LI	R2, #GL_ALLOC_DEFAULT_SIZE
+	LI	R2, #GL_ALLOC_DEFAULT_ADR
+	LI	R3, #GL_ALLOC_DEFAULT_SIZE
 	BL	g_malloc_init
 	LIMI	#3
 	JMP	l_main

@@ -90,7 +90,7 @@ test("既定 stackInit はモニター memmap の 0xFE00", () => {
   expect(plan.registers[10]).toBe(0xfe00);
 });
 
-test("モニター ABI は allowSpecialPurposeRegisters で R1 を第1引数にできる", () => {
+test("allowSpecialPurposeRegisters なら R1 を第1引数にできる（非推奨経路）", () => {
   const plan = planTms9995Call({
     args: [0xaa, 0xbb, 0xcc],
     argRegisters: [1, 2, 3],
@@ -99,4 +99,13 @@ test("モニター ABI は allowSpecialPurposeRegisters で R1 を第1引数に�
   expect(plan.registers[1]).toBe(0xaa);
   expect(plan.registers[2]).toBe(0xbb);
   expect(plan.registers[3]).toBe(0xcc);
+});
+
+test("既定は第1引数が R2（asm_rules）", () => {
+  const plan = planTms9995Call({
+    args: [0x11, 0x22, 0x33],
+  });
+  expect(plan.registers[2]).toBe(0x11);
+  expect(plan.registers[3]).toBe(0x22);
+  expect(plan.registers[4]).toBe(0x33);
 });

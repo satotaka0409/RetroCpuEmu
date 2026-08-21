@@ -20,110 +20,121 @@ GL_HEAP_HDR	.equ	2
 
 	.area	_CODE		(REL,CON)
 
-; param R1 種（0→1）
+; 乱数の種を設定する
+; @param R2 - 種（0 は M系列がロックするので 1 に補正）
 g_rnd_init:
-	MOV	R1, R1
+	MOV	R2, R2
 	JNE	l_rnd_init_ok
-	LI	R1, #1
+	LI	R2, #1
 l_rnd_init_ok:
-	MOV	R1, GL_RND_SEED
+	MOV	R2, GL_RND_SEED
 	B	(R11)
 
-; Galois LFSR。return R1
+; 16bit M系列（Galois LFSR）で乱数を 1 つ取る
+; @return R2 - 乱数値（1〜0xFFFF）
 g_get_rnd_:
-	MOV	GL_RND_SEED, R1
-	MOV	R1, R1
+	MOV	GL_RND_SEED, R2
+	MOV	R2, R2
 	JNE	l_rnd_go
-	LI	R1, #1
+	LI	R2, #1
 l_rnd_go:
-	SRL	R1, #1
+	SRL	R2, #1
 	JNC	l_rnd_store
 	LI	R0, #GL_RND_TAP
-	XOR	R1, R0
+	XOR	R0, R2
 l_rnd_store:
-	MOV	R1, GL_RND_SEED
+	MOV	R2, GL_RND_SEED
 	B	(R11)
 
-; 平アドレス語コピー。R1=src, R2=dst, R3=語数
+; 平アドレスのワード列をコピーする
+; @param R2 - コピー元ワードアドレス
+; @param R3 - コピー先ワードアドレス
+; @param R4 - 語数（0 なら何もしない）
 g_mem_cpy_:
-	MOV	R3, R3
+	MOV	R4, R4
 	JEQ	l_mcpy_done
 l_mcpy_lp:
-	MOV	(R1)+, (R2)+
-	AI	R3, #-1
+	MOV	(R2)+, (R3)+
+	AI	R4, #-1
 	JNE	l_mcpy_lp
 l_mcpy_done:
 	B	(R11)
 
-; param R1 先頭、R2 サイズ（語）
+; ヒープを初期化する（先頭に空きブロックヘッダを置く）
+; @param R2 - 先頭ワードアドレス
+; @param R3 - サイズ（語数。ヘッダ 2 語を含む）
 g_malloc_init:
-	MOV	R1, GL_ALLOC_ADR
-	MOV	R2, GL_ALLOC_SIZE
-	CI	R2, #GL_HEAP_HDR
+	MOV	R2, GL_ALLOC_ADR
+	MOV	R3, GL_ALLOC_SIZE
+	CI	R3, #GL_HEAP_HDR
 	JL	l_minit_done
-	MOV	R2, (R1)
-	CLR	2(R1)
+	MOV	R3, (R2)
+	CLR	2(R2)
 l_minit_done:
 	B	(R11)
 
-; param R1 要求語数（ヘッダ不含）。return R1 ユーザ先頭 or 0
+; first-fit でヒープを確保する
+; @param R2 - 要求語数（ヘッダ不含。0 は失敗）
+; @return R2 - ユーザ先頭ワードアドレス。失敗は 0
 g_malloc_:
 	MOV	R11, R8
-	MOV	R1, R1
+	MOV	R2, R2
 	JEQ	l_m_fail
-	AI	R1, #GL_HEAP_HDR
-	MOV	GL_ALLOC_ADR, R2
+	AI	R2, #GL_HEAP_HDR
+	MOV	GL_ALLOC_ADR, R5
 	MOV	GL_ALLOC_SIZE, R4
 	CI	R4, #GL_HEAP_HDR
 	JL	l_m_fail
 l_m_scan:
-	MOV	(R2), R3
-	MOV	2(R2), R0
+	MOV	(R5), R3
+	MOV	2(R5), R0
 	JNE	l_m_next
-	C	R3, R1
+	C	R3, R2
 	JL	l_m_next
 	MOV	R3, R0
-	S	R1, R0
+	S	R2, R0
 	CI	R0, #GL_HEAP_HDR
 	JL	l_m_take
-	MOV	R1, (R2)
-	LI	R5, #1
-	MOV	R5, 2(R2)
-	A	R1, R2
-	MOV	R0, (R2)
-	CLR	2(R2)
-	S	R1, R2
+	MOV	R2, (R5)
+	LI	R1, #1
+	MOV	R1, 2(R5)
+	A	R2, R5
+	MOV	R0, (R5)
+	CLR	2(R5)
+	S	R2, R5
 	JMP	l_m_ret_user
 l_m_take:
-	LI	R5, #1
-	MOV	R5, 2(R2)
+	LI	R1, #1
+	MOV	R1, 2(R5)
 l_m_ret_user:
-	AI	R2, #4
-	MOV	R2, R1
+	AI	R5, #4
+	MOV	R5, R2
 	B	(R8)
 l_m_next:
-	A	R3, R2
+	A	R3, R5
 	MOV	GL_ALLOC_ADR, R0
 	A	R4, R0
-	C	R2, R0
+	C	R5, R0
 	JL	l_m_scan
 l_m_fail:
-	CLR	R1
+	CLR	R2
 	B	(R8)
 
-; param R1 ユーザ先頭。return R1 同 or 0
+; ヒープを解放する（使用中ブロックのみ受け付ける）
+; @param R2 - g_malloc_ の戻り値
+; @return R2 - 成功時は同じアドレス。失敗は 0
 g_free_:
-	MOV	R1, R1
+	MOV	R2, R2
 	JEQ	l_free_fail
-	AI	R1, #-4
-	MOV	2(R1), R0
+	AI	R2, #-4
+	MOV	2(R2), R0
 	CI	R0, #1
 	JNE	l_free_fail
-	CLR	2(R1)
-	AI	R1, #4
+	CLR	2(R2)
+	AI	R2, #4
 	B	(R11)
 l_free_fail:
-	CLR	R1
+	CLR	R2
 	B	(R11)
 
 g_write_cpu_registers:

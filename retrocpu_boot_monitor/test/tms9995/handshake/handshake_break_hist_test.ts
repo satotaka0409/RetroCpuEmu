@@ -35,37 +35,31 @@ test("17h 履歴設定で件数 0 なら OK", () => {
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
 });
 
-test("17h 履歴 1 件を新しい順で返す", () => {
+test("17h 履歴 1 件を番号順で返す", () => {
   // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
   expectGlobals(session, REQUIRED);
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
 });
 
-test("17h は 2 件を新しい順（後に書いた方から）で返す", () => {
+test("17h は 2 件を番号順（index 0 から）で返す", () => {
   // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
   expectGlobals(session, REQUIRED);
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
 });
 
-test("17h スロット 3 は slot×132 先のエントリを返す", () => {
+test("17h スロット 3 は slot×312 先のエントリを返す", () => {
   // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
   expectGlobals(session, REQUIRED);
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
 });
 
-test("17h Bit0=1 は取得後に当該スロットの履歴をクリアする", () => {
+test("17h オーバフローはメタのみ（線上ヘッダにステータス無し）", () => {
   // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
   expectGlobals(session, REQUIRED);
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
 });
 
-test("17h オーバフロー済みはステータス Bit0 を立てる", () => {
-  // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
-  expectGlobals(session, REQUIRED);
-  expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);
-});
-
-test("17h 履歴 4 件を新しい順で返す", () => {
+test("17h 履歴 4 件を番号順で返す", () => {
   // 実行回帰は TMS9995 CPU エミュ実装後に MN1613 と同内容へ置き換える
   expectGlobals(session, REQUIRED);
   expect(() => session.call(REQUIRED[0]!)).toThrow(/CPU emu/);

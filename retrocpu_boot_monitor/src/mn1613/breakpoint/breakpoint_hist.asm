@@ -3,7 +3,7 @@
 ; 根拠: HandShake.mdc 17h エントリ / breakpoint.mdc / boot_monitor.mdc
 ;
 ; g_breakpoint_interrupt_handler が比較一致のあと BALD する。
-; 11h で時刻を取り、リング 16 件へ 33 ワードを書く。失敗しても時刻 0 で書く。
+; 11h で時刻を取り、リング 4 件へ 33 ワードを書く。失敗しても時刻 0 で書く。
 ; ステップ実行はここへ来ない。作業域はスタックのみ（GL_BP_HIST_META を除く）。
 
 	.cpu	mn1613

@@ -1,6 +1,8 @@
-; ブレイク履歴取得（ハンドシェイク 17h、IO→CPU）・最小フレーミング
-; 受信 2B: slot, flags。件数 0 のヘッダ 8B + 終端 status。
-; スロット不正 → 終端 NG。Bit7 未設定 → 終端 02h。
+; ブレイク履歴取得（ハンドシェイク 17h、IO→CPU）
+; 受信 1B: slot。ヘッダ 10B + エントリ×件数×78B + 終端 status。
+; ヘッダ: count, flags, n_stop, pad0, addr32 BE, histCount, pad0
+; スロット不正 → 終端 NG。Bit7 未設定 → 終端 02h。OVF は線上に出さない。
+; @return R2 - OK / NG / 02h（履歴モード未設定）
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -9,29 +11,33 @@
 	.global g_hshk_break_hist_get
 	.global g_hshk_recv_byte
 	.global g_hshk_send_byte
+	.global g_hshk_send_word
+	.global g_bp_send_hist_entries
 	.global GL_HSHK_ADDR_BREAK
+	.global GL_BP_HIST_META
 
 	.area	_CODE		(REL,CON)
 g_hshk_break_hist_get:
-	MOV	R11, R9
+	DECT	R10
+	MOV	R11, (R10)
+	DECT	R10
+	MOV	R7, (R10)
+	DECT	R10
+	MOV	R6, (R10)
 
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_bh_fail
-	ANDI	R1, #0x00ff
-	MOV	R1, R3
+	ANDI	R3, #0x00ff
+	MOV	R3, R7			; slot（送信をまたいで保持）
 
-	BL	g_hshk_recv_byte
-	CI	R2, #HSHK_OK
-	JNE	l_bh_fail
-
-	CI	R3, #HSHK_AB_SLOTS
+	CI	R7, #HSHK_AB_SLOTS
 	JHE	l_bh_bad
 
 	; 表ポインタ = GL_HSHK_ADDR_BREAK + slot*6 語
-	MOV	R3, R4
+	MOV	R7, R4
 	SLA	R4, #2
-	MOV	R3, R5
+	MOV	R7, R5
 	SLA	R5, #1
 	A	R5, R4
 	SLA	R4, #1
@@ -41,16 +47,31 @@ g_hshk_break_hist_get:
 	ANDI	R0, #HSHK_AB_F_HIST
 	JEQ	l_bh_nohist
 
-	; 履歴あり・件数 0（最小）
-	CLR	R6
-	CLR	R7
+	; メタ件数
+	MOV	R7, R0
+	SLA	R0, #1
+	A	R7, R0
+	SLA	R0, #1
+	AI	R0, #GL_BP_HIST_META
+	MOV	R0, R1
+	MOV	0(R1), R6
+	CI	R6, #HSHK_BH_DEPTH
+	JLE	l_bh_cnt_ok
+	LI	R6, #HSHK_BH_DEPTH
+l_bh_cnt_ok:
 	LI	R8, #HSHK_OK
 	BL	l_bh_send_hdr
+	CI	R2, #HSHK_OK
+	JNE	l_bh_fail
+	MOV	R7, R2			; slot
+	MOV	R6, R3			; 件数
+	BL	g_bp_send_hist_entries
+	CI	R2, #HSHK_OK
+	JNE	l_bh_fail
 	JMP	l_bh_fin
 
 l_bh_nohist:
 	CLR	R6
-	LI	R7, #HSHK_BH_ST_NOHIST
 	LI	R8, #HSHK_NG_OTHER
 	BL	l_bh_send_hdr
 	JMP	l_bh_fin
@@ -58,95 +79,92 @@ l_bh_nohist:
 l_bh_bad:
 	CLR	R5
 	CLR	R6
-	CLR	R7
 	LI	R8, #HSHK_NG
 	BL	l_bh_send_hdr
 	JMP	l_bh_fin
 
 l_bh_fail:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	BL	g_hshk_send_byte
-	LI	R1, #HSHK_NG
-	B	(R9)
+	LI	R2, #HSHK_NG
+	JMP	l_bh_ret
 
 l_bh_fin:
-	MOV	R8, R1
+	MOV	R8, R2
 	BL	g_hshk_send_byte
-	MOV	R8, R1
-	B	(R9)
+	MOV	R8, R2
 
-; R5=表ポインタ（bad 時は 0）、R6=件数、R7=線上ステータス、R8=終端
-; ヘッダ: count, status, flags, n_stop, addr32 BE
-; send_byte が R0/R4 を潰すので戻りは R10 スタックへ
+l_bh_ret:
+	MOV	(R10)+, R6
+	MOV	(R10)+, R7
+	MOV	(R10)+, R11
+	B	(R11)
+
+; R5=表ポインタ（bad 時は 0）、R6=件数、R8=終端
+; ヘッダ: count, flags, n_stop, pad0, addr32 BE, histCount(=count), pad0
+; @return R2 - 最後の send ステータス
 l_bh_send_hdr:
 	DECT	R10
 	MOV	R11, (R10)
-	MOV	R6, R1
+	MOV	R6, R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
-	JNE	l_bh_hdr_ret
-
-	MOV	R7, R1
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
 
 	MOV	R5, R5
 	JEQ	l_bh_hdr_zeros
-	MOV	2(R5), R1
-	ANDI	R1, #0x00ff
+	MOV	2(R5), R2
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	MOV	4(R5), R1
-	ANDI	R1, #0x00ff
+	MOV	4(R5), R2
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	MOV	6(R5), R1
-	SWPB	R1
-	ANDI	R1, #0x00ff
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	MOV	6(R5), R1
-	ANDI	R1, #0x00ff
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	MOV	6(R5), R2
+	BL	g_hshk_send_word
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	MOV	8(R5), R1
-	SWPB	R1
-	ANDI	R1, #0x00ff
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	MOV	8(R5), R2
+	BL	g_hshk_send_word
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	MOV	8(R5), R1
-	ANDI	R1, #0x00ff
-	BL	g_hshk_send_byte
-	JMP	l_bh_hdr_ret
+	JMP	l_bh_hdr_hist
 
 l_bh_hdr_zeros:
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	CLR	R1
+	CLR	R2
+	BL	g_hshk_send_word
+	CI	R2, #HSHK_OK
+	JNE	l_bh_hdr_ret
+	CLR	R2
+	BL	g_hshk_send_word
+	CI	R2, #HSHK_OK
+	JNE	l_bh_hdr_ret
+
+l_bh_hdr_hist:
+	MOV	R6, R2
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_bh_hdr_ret
-	CLR	R1
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
-	JNE	l_bh_hdr_ret
-	CLR	R1
+	CLR	R2
 	BL	g_hshk_send_byte
 l_bh_hdr_ret:
 	MOV	(R10)+, R11

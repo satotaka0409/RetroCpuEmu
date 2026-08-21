@@ -274,13 +274,18 @@ export const BREAK_DIRECTION = {
   WRITE: 1,
 } as const;
 
-/** ブレイク条件 (Bit2-4) */
+/**
+ * ブレイク条件（HandShake.mdc Bit3–5）。
+ * 000=なし / 001:= / 010:<> / 011:>= / 100:<= / 101:AND<>0 / 110:AND=0
+ */
 export const BREAK_CONDITION = {
-  EQ: 0b000,
-  NEQ: 0b001,
-  GTE: 0b010,
-  LTE: 0b011,
-  AND_MASK: 0b100,
+  NONE: 0b000,
+  EQ: 0b001,
+  NEQ: 0b010,
+  GTE: 0b011,
+  LTE: 0b100,
+  AND_NE0: 0b101,
+  AND_EQ0: 0b110,
 } as const;
 
 // ─────────────────────────────────────────────

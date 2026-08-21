@@ -5,8 +5,8 @@
 ;
 ; 18h: 0=通常再開（ARM クリア）/ 1=ステップ（GL_BP_STEP_ARM=1）。ENA はここでは上げない。
 ; INT1 エピローグの g_step_arm_cpld が DELAY/ENA を武装する。
-; INT2 要因=ステップ: 1Bh 通知 → R1=1 でモニタ HALT。
-; 呼び出し: BL / B (R11)。ステータス・停止フラグは R1。
+; INT2 要因=ステップ: 1Bh 通知 → R2=1 でモニタ HALT。
+; 呼び出し: BL / B (R11)。ステータス・停止フラグは R2。
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -23,30 +23,31 @@
 	.global g_hshk_wait_req1_1
 	.global g_hshk_accept_request
 	.global g_hshk_finalize_recv
+	.global g_bp_send_user_state_body
 
 	.area	_CODE		(REL,CON)
 
 ; -------------------------------------------------------
 ; ブレイク復帰（コマンド 18h）
 ; note 残り 1B: 実行方式。0=run / 1=step / それ以外=NG
-; return R1 HSHK_OK / HSHK_NG
+; @return R2 - HSHK_OK / HSHK_NG
 ; -------------------------------------------------------
 g_hshk_break_resume:
 	MOV	R11, R8
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_sr_61_ng
-	ANDI	R1, #0x00ff
-	CI	R1, #HSHK_RESUME_LIMIT
+	ANDI	R3, #0x00ff
+	CI	R3, #HSHK_RESUME_LIMIT
 	JHE	l_sr_61_ng
 
-	MOV	R1, GL_BP_STEP_ARM
-	LI	R1, #HSHK_OK
+	MOV	R3, GL_BP_STEP_ARM
+	LI	R2, #HSHK_OK
 	BL	g_hshk_send_byte
 	B	(R8)
 
 l_sr_61_ng:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	BL	g_hshk_send_byte
 	B	(R8)
 
@@ -68,36 +69,27 @@ l_sr_arm_done:
 
 ; -------------------------------------------------------
 ; ステップヒット（INT2 / INT2_CAUSE=1）
-; return R1=1（モニタ HALT）
+; 1Bh: cmd + pad + addr32 + R0–R15 + stack16 = 70B
+; @return R2 - 1（モニタ HALT）
 ; -------------------------------------------------------
 g_step_interrupt_handler:
 	MOV	R11, R8
 
 	BL	g_hshk_initiate_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
 
-	LI	R1, #HSHK_CMD_STEP_NOTIFY
+	LI	R2, #HSHK_CMD_STEP_NOTIFY
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
 
-	; 1Bh 線上はコマンド後に 69B（pad + addr32 + regs + pad + stack16語）。
-	; TMS9995 CPU 実行コンテキスト未実装のため、現状はゼロ埋めで長さのみ仕様準拠。
-	LI	R7, #69
-l_sr_nt_zlp:
-	MOV	R7, R7
-	JEQ	l_sr_nt_fin
-	CLR	R1
-	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	BL	g_bp_send_user_state_body
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
-	AI	R7, #-1
-	JMP	l_sr_nt_zlp
 
-l_sr_nt_fin:
 	BL	g_hshk_finalize_send
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
 
 	; 応答待ちの前に BUSY を下ろす（IO が配送できる）
@@ -105,16 +97,16 @@ l_sr_nt_fin:
 	SBZ	#INTERRUPT_BUSY_BIT
 
 	BL	g_hshk_wait_req1_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
 	BL	g_hshk_accept_request
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_sr_nt_fail
 	BL	g_hshk_recv_byte
 	BL	g_hshk_finalize_recv
 
 l_sr_nt_fail:
-	LI	R1, #1
+	LI	R2, #1
 	B	(R8)
 
 	.area	_WORK		(REL,NOLOAD)

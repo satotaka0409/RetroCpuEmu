@@ -54,6 +54,10 @@ HSHK_CMD_BREAK_RESUME		.equ	0x18
 HSHK_CMD_IO_BASE		.equ	0x10
 HSHK_CMD_IO_LAST		.equ	0x18
 HSHK_CMD_IO_LIMIT		.equ	0x19
+; 高位 API（80h-89h）→ 線上値（10h-19h）変換（MN1613 と同規約）
+HSHK_CMD_IO_HI_BASE		.equ	0x80
+HSHK_CMD_IO_HI_LIMIT		.equ	0x8a
+HSHK_CMD_IO_WIRE_BIAS		.equ	0x70
 
 HSHK_RESUME_RUN			.equ	0
 HSHK_RESUME_STEP		.equ	1
@@ -64,7 +68,7 @@ HSHK_IRQ_PAY_CLR	.equ	1
 HSHK_IRQ_PAY_EXEC	.equ	5
 HSHK_IRQ_PAY_MEM	.equ	9
 HSHK_IRQ_PAY_IO		.equ	3
-HSHK_IRQ_PAY_HIST	.equ	2
+HSHK_IRQ_PAY_HIST	.equ	1
 
 HSHK_AB_SLOTS		.equ	4
 HSHK_AB_SLOT_WORDS	.equ	6
@@ -102,10 +106,8 @@ HSHK_BH_ENTRY_BYTES	.equ	78
 HSHK_BH_MW_COUNT	.equ	0
 HSHK_BH_MW_NEXT		.equ	1
 HSHK_BH_MW_OVF		.equ	2
-HSHK_BH_CLR		.equ	0x01
-HSHK_BH_ST_OVF		.equ	0x01
-HSHK_BH_ST_NOHIST	.equ	0x02
-HSHK_BH_HDR_CPU		.equ	8
+HSHK_BH_ST_OVF		.equ	0x01	; メタ Bit0（線上には出さない）
+HSHK_BH_HDR_CPU		.equ	10	; count, flags, n_stop, pad, addr32, histCount, pad
 HSHK_IO_MAX		.equ	254
 HSHK_IO_LIMIT		.equ	255
 

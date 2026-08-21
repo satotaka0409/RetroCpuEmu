@@ -6,10 +6,10 @@ BIOS_TABLE_BASE		.equ	0x0110
 
 ; ワークスペースはオンチップ RAM 先頭
 WORKSPACE_BASE		.equ	0xFF00
-; 割り込み用 WP（メインと分離）
-INT_WORKSPACE		.equ	0xF000
-; スタックは FE00 から下へ
-STACK_INIT		.equ	0xFF00
+; 割り込み中のソフトスタック（INT WP の R10）。WP 本体より上
+INT_STACK_INIT		.equ	0xF800
+; スタックは FE00 から下へ（メイン WP の R10）
+STACK_INIT		.equ	0xFE80
 
 ; ブレイク履歴リング（平アドレス。SBR 無し）
 BP_HIST_BASE		.equ	0xE000

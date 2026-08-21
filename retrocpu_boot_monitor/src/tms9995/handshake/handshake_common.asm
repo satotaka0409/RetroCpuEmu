@@ -1,3 +1,9 @@
+; ハンドシェイク線制御（TMS9995）
+; 呼出規約: BL / B (R11)。第1引数 R2、ステータス R2、追加の戻り R3。
+; 本ファイルの公開ルーチンは **R0–R3 と R12 のみ破壊**し、R4–R9 / R10 / R11 を保つ。
+; 上位（BIOS・IRQ ハンドラ）が転送をまたいでアドレスやカウンタを持てるようにするため。
+; ネストする経路は R11 をスタック（R10）へ退避する。
+
 	.cpu	tms9995
 	.include "../memmap.inc"
 	.include "handshake_io.inc"
@@ -18,6 +24,8 @@
 
 	.area	_CODE		(REL,CON)
 
+; CPU→IO 転送を開始する（OUT_DENA=0 → OUT_REQ=1）
+; @return R2 - HSHK_OK / HSHK_NG
 g_hshk_initiate_send:
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
@@ -25,13 +33,18 @@ g_hshk_initiate_send:
 	LI	R12, #0
 	SBZ	#HSHK_OUT_DENA_BIT
 	SBO	#HSHK_OUT_REQ_BIT
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
+; CPU→IO 1バイト送信（2バイト単位ペアの片方）
+; @param R2 - 送信バイト（下位 8bit）
+; @return R2 - HSHK_OK / HSHK_NG
 g_hshk_send_byte:
-	MOV	R1, R3
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_SEND
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	R2, R3
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_SEND
 	JNE	l_hshk_send_phase2
 
 	LI	R12, #HSHK_OUT_DATA_BASE
@@ -39,14 +52,13 @@ g_hshk_send_byte:
 	LI	R12, #0
 	SBO	#HSHK_OUT_DENA_BIT
 	BL	l_hshk_wait_out_dack_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_send_fail
 
-	MOV	GL_HSHK_PAIR, R4
-	ORI	R4, #HSHK_PAIR_SEND
-	MOV	R4, GL_HSHK_PAIR
-	LI	R1, #HSHK_OK
-	B	(R11)
+	MOV	GL_HSHK_PAIR, R1
+	ORI	R1, #HSHK_PAIR_SEND
+	MOV	R1, GL_HSHK_PAIR
+	JMP	l_hshk_send_ok
 
 l_hshk_send_phase2:
 	LI	R12, #HSHK_OUT_DATA_BASE
@@ -54,13 +66,16 @@ l_hshk_send_phase2:
 	LI	R12, #0
 	SBZ	#HSHK_OUT_DENA_BIT
 	BL	l_hshk_wait_out_dack_0
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_send_fail
 
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_RECV
-	MOV	R4, GL_HSHK_PAIR
-	LI	R1, #HSHK_OK
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_RECV
+	MOV	R1, GL_HSHK_PAIR
+
+l_hshk_send_ok:
+	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
 	B	(R11)
 
 l_hshk_send_fail:
@@ -69,29 +84,40 @@ l_hshk_send_fail:
 	SBZ	#HSHK_OUT_DENA_BIT
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
+	MOV	(R10)+, R11
 	B	(R11)
 
+; CPU→IO 16bit 送信（ビッグエンディアン）
+; @param R2 - 送信ワード（16bit）
+; @return R2 - HSHK_OK / HSHK_NG（最後に送ったバイトの結果）
 g_hshk_send_word:
-	MOV	R1, R3
-	SWPB	R3
-	MOV	R3, R1
-	ANDI	R1, #0x00ff
+	DECT	R10
+	MOV	R11, (R10)
+	DECT	R10
+	MOV	R2, (R10)
+	SWPB	R2
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_send_word_done
 
-	MOV	R3, R1
-	SWPB	R1
-	ANDI	R1, #0x00ff
+	MOV	(R10), R2
+	ANDI	R2, #0x00ff
 	BL	g_hshk_send_byte
 
 l_hshk_send_word_done:
+	AI	R10, #2
+	MOV	(R10)+, R11
 	B	(R11)
 
+; CPU→IO 転送を完了する（ペア途中なら 0 パッドを送る）
+; @return R2 - HSHK_OK / HSHK_NG
 g_hshk_finalize_send:
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_SEND
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_SEND
 	JEQ	l_hshk_finalize_send_done
 
 	CLR	R3
@@ -100,25 +126,29 @@ g_hshk_finalize_send:
 	LI	R12, #0
 	SBZ	#HSHK_OUT_DENA_BIT
 	BL	l_hshk_wait_out_dack_0
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_finalize_send_fail
 
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_RECV
-	MOV	R4, GL_HSHK_PAIR
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_RECV
+	MOV	R1, GL_HSHK_PAIR
 
 l_hshk_finalize_send_done:
 	LI	R12, #0
 	SBZ	#HSHK_OUT_REQ_BIT
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
 	B	(R11)
 
 l_hshk_finalize_send_fail:
 	LI	R12, #0
 	SBZ	#HSHK_OUT_REQ_BIT
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
+	MOV	(R10)+, R11
 	B	(R11)
 
+; IO→CPU 依頼を受理する（IN_DACK=0）
+; @return R2 - HSHK_OK / HSHK_NG
 g_hshk_accept_request:
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
@@ -126,45 +156,52 @@ g_hshk_accept_request:
 	LI	R12, #0
 	SBZ	#HSHK_IN_DACK_BIT
 
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
+; IO→CPU 1バイト受信（2バイト単位ペアの片方）
+; @return R2 - HSHK_OK / HSHK_NG
+; @return R3 - 受信バイト（下位 8bit。NG 時は 0）
 g_hshk_recv_byte:
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_RECV
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_RECV
 	JNE	l_hshk_recv_phase2
 
 	BL	l_hshk_wait_in_dena_1
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_recv_fail
 
 	LI	R12, #HSHK_IN_DATA_BASE
-	STCR	R1, #8
-	ANDI	R1, #0x00ff
+	STCR	R3, #8
+	ANDI	R3, #0x00ff
 	LI	R12, #0
 	SBO	#HSHK_IN_DACK_BIT
 
-	MOV	GL_HSHK_PAIR, R4
-	ORI	R4, #HSHK_PAIR_RECV
-	MOV	R4, GL_HSHK_PAIR
-	LI	R2, #HSHK_OK
-	B	(R11)
+	MOV	GL_HSHK_PAIR, R1
+	ORI	R1, #HSHK_PAIR_RECV
+	MOV	R1, GL_HSHK_PAIR
+	JMP	l_hshk_recv_ok
 
 l_hshk_recv_phase2:
 	BL	l_hshk_wait_in_dena_0
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_recv_fail
 
 	LI	R12, #HSHK_IN_DATA_BASE
-	STCR	R1, #8
-	ANDI	R1, #0x00ff
+	STCR	R3, #8
+	ANDI	R3, #0x00ff
 	LI	R12, #0
 	SBZ	#HSHK_IN_DACK_BIT
 
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_SEND
-	MOV	R4, GL_HSHK_PAIR
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_SEND
+	MOV	R1, GL_HSHK_PAIR
+
+l_hshk_recv_ok:
 	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
 	B	(R11)
 
 l_hshk_recv_fail:
@@ -172,91 +209,113 @@ l_hshk_recv_fail:
 	SBZ	#HSHK_IN_DACK_BIT
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
-	CLR	R1
+	CLR	R3
 	LI	R2, #HSHK_NG
+	MOV	(R10)+, R11
 	B	(R11)
 
+; IO→CPU 転送を完了する
+; @return R2 - HSHK_OK / HSHK_NG
 g_hshk_finalize_recv:
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_RECV
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_RECV
 	JEQ	l_hshk_finalize_recv_done
 
 	BL	l_hshk_wait_in_dena_0
-	CI	R1, #HSHK_OK
+	CI	R2, #HSHK_OK
 	JNE	l_hshk_finalize_recv_fail
 	LI	R12, #0
 	SBZ	#HSHK_IN_DACK_BIT
-	MOV	GL_HSHK_PAIR, R4
-	ANDI	R4, #HSHK_PAIR_SEND
-	MOV	R4, GL_HSHK_PAIR
+	MOV	GL_HSHK_PAIR, R1
+	ANDI	R1, #HSHK_PAIR_SEND
+	MOV	R1, GL_HSHK_PAIR
 
 l_hshk_finalize_recv_done:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
 	B	(R11)
 
 l_hshk_finalize_recv_fail:
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
+	MOV	(R10)+, R11
 	B	(R11)
 
+; HSHK_ENA の立ち上がり待ちに使う短いディレイ
+; @return R2 - HSHK_OK
 g_hshk_wait_ena_delay:
 	LI	R0, #0x0010
 l_hshk_delay_loop:
 	AI	R0, #-1
 	JNE	l_hshk_delay_loop
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
+; IO→CPU 依頼（HSHK_IN_REQ=1）をポーリングで待つ
+; @return R2 - HSHK_OK / HSHK_NG（待ち上限超過）
 g_hshk_wait_req1_1:
+	DECT	R10
+	MOV	R11, (R10)
 	BL	l_hshk_wait_req1_1
+	MOV	(R10)+, R11
 	B	(R11)
 
 ; 16bit 平アドレスのバイトアクセス（SBR 無し）
-; param R1 バイトアドレス下位 16bit（上位は無視）
-; return R1 ワードアドレス、R0 奇偶（0=偶数上位バイト / 1=奇数下位）
+; @param R2 - バイトアドレス下位 16bit（上位は無視）
+; @return R2 - ワードアドレス
+; @return R3 - 奇偶（0=偶数=上位バイト / 1=奇数=下位バイト）
 g_hshk_mem_map:
-	MOV	R1, R0
-	ANDI	R0, #1
-	SRL	R1, #1
-	LI	R2, #HSHK_OK
+	MOV	R2, R3
+	ANDI	R3, #1
+	SRL	R2, #1
 	B	(R11)
 
-; param R1 バイトアドレス
-; return R1 データ下位 8bit、R2 OK/NG
+; 平アドレス 1 バイト読み出し
+; @param R2 - バイトアドレス
+; @return R2 - HSHK_OK / HSHK_NG
+; @return R3 - データ（下位 8bit）
 g_hshk_mem_ld8:
-	MOV	R11, R8
+	DECT	R10
+	MOV	R11, (R10)
 	BL	g_hshk_mem_map
-	MOV	(R1), R3
-	MOV	R0, R0
+	MOV	(R2), R0
+	MOV	R3, R3
 	JNE	l_hshk_mld_odd
-	SWPB	R3
+	SWPB	R0
 l_hshk_mld_odd:
-	MOV	R3, R1
-	ANDI	R1, #0x00ff
-	LI	R2, #HSHK_OK
-	B	(R8)
-
-; param R1 バイトアドレス、R2 データ下位 8bit
-; return R1 OK/NG
-g_hshk_mem_st8:
-	MOV	R11, R8
-	MOV	R2, R4
-	BL	g_hshk_mem_map
-	MOV	(R1), R3
-	MOV	R0, R0
-	JNE	l_hshk_mst_odd
+	MOV	R0, R3
 	ANDI	R3, #0x00ff
-	SWPB	R4
-	ANDI	R4, #0xff00
-	SOC	R4, R3
+	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
+	B	(R11)
+
+; 平アドレス 1 バイト書き込み
+; @param R2 - バイトアドレス
+; @param R3 - データ（下位 8bit）
+; @return R2 - HSHK_OK / HSHK_NG
+g_hshk_mem_st8:
+	DECT	R10
+	MOV	R11, (R10)
+	MOV	R3, R1
+	BL	g_hshk_mem_map
+	MOV	(R2), R0
+	MOV	R3, R3
+	JNE	l_hshk_mst_odd
+	ANDI	R0, #0x00ff
+	SWPB	R1
+	ANDI	R1, #0xff00
+	SOC	R1, R0
 	JMP	l_hshk_mst_wr
 l_hshk_mst_odd:
-	ANDI	R3, #0xff00
-	ANDI	R4, #0x00ff
-	SOC	R4, R3
+	ANDI	R0, #0xff00
+	ANDI	R1, #0x00ff
+	SOC	R1, R0
 l_hshk_mst_wr:
-	MOV	R3, (R1)
-	LI	R1, #HSHK_OK
-	B	(R8)
+	MOV	R0, (R2)
+	LI	R2, #HSHK_OK
+	MOV	(R10)+, R11
+	B	(R11)
 
 l_hshk_wait_out_dack_1:
 	LI	R0, #HSHK_WAIT_MAX
@@ -266,10 +325,10 @@ l_hshk_wait_out_dack_1_lp:
 	JEQ	l_hshk_wait_out_dack_1_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_out_dack_1_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_out_dack_1_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 l_hshk_wait_out_dack_0:
@@ -280,10 +339,10 @@ l_hshk_wait_out_dack_0_lp:
 	JNE	l_hshk_wait_out_dack_0_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_out_dack_0_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_out_dack_0_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 l_hshk_wait_in_dena_1:
@@ -294,10 +353,10 @@ l_hshk_wait_in_dena_1_lp:
 	JEQ	l_hshk_wait_in_dena_1_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_in_dena_1_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_in_dena_1_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 l_hshk_wait_in_dena_0:
@@ -308,10 +367,10 @@ l_hshk_wait_in_dena_0_lp:
 	JNE	l_hshk_wait_in_dena_0_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_in_dena_0_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_in_dena_0_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 l_hshk_wait_req1_1:
@@ -322,10 +381,10 @@ l_hshk_wait_req1_1_lp:
 	JEQ	l_hshk_wait_req1_1_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_req1_1_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_req1_1_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 l_hshk_wait_req1_0:
@@ -336,10 +395,10 @@ l_hshk_wait_req1_0_lp:
 	JNE	l_hshk_wait_req1_0_ok
 	AI	R0, #-1
 	JNE	l_hshk_wait_req1_0_lp
-	LI	R1, #HSHK_NG
+	LI	R2, #HSHK_NG
 	B	(R11)
 l_hshk_wait_req1_0_ok:
-	LI	R1, #HSHK_OK
+	LI	R2, #HSHK_OK
 	B	(R11)
 
 	.area	_WORK		(REL,NOLOAD)

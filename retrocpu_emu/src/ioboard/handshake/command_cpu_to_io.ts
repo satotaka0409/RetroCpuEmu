@@ -32,7 +32,7 @@ export const BREAK_HISTORY_ENTRY_SIZE_MN1613 = 66;
 /** 履歴 1 エントリ長（TMS9995。HandShake.mdc） */
 export const BREAK_HISTORY_ENTRY_SIZE_TMS9995 = 78;
 /** ステップ/未定義通知フレーム長（MN1613） */
-export const CPU_STATE_NOTIFY_FRAME_SIZE_MN1613 = 59;
+export const CPU_STATE_NOTIFY_FRAME_SIZE_MN1613 = 60;
 /** ステップ/未定義通知フレーム長（TMS9995） */
 export const CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995 = 70;
 /**
@@ -110,7 +110,10 @@ export interface TimerParams {
   count: number;
 }
 
-/** ステップ通知／未定義命令通知の共通ペイロード（59バイトフレーム） */
+/**
+ * ステップ通知／未定義命令通知の共通ペイロード。
+ * MN1613=60B / TMS9995=70B（HandShake.mdc 1Bh/13h）。
+ */
 export interface CpuStateNotifyInfo {
   addr: number;
   r0: number;
@@ -118,11 +121,19 @@ export interface CpuStateNotifyInfo {
   r2: number;
   r3: number;
   r4: number;
+  /** TMS9995: R5–R15（11 語）。MN1613 は空配列 */
+  r5to15: number[];
+  /** MN1613: SP。TMS9995: R10 のエコー（ワークスペース上の慣例） */
   sp: number;
+  /** MN1613: STR。TMS9995 は 0 */
   str: number;
+  /** MN1613: IC。TMS9995 は 0（アドレスは addr） */
   ic: number;
+  /** MN1613: CSBR<<8|SSBR。TMS9995 は 0 */
   csbrSsbr: number;
+  /** MN1613: TSR0<<8|TSR1。TMS9995 は 0 */
   tsr: number;
+  /** MN1613: NPP。TMS9995 は 0 */
   npp: number;
   stack: number[];
 }
@@ -191,14 +202,15 @@ export interface CpuToIoHandlers {
   }): number;
 
   /**
-   * ステップ通知 (cmd=0x1B): 1 命令実行後。addr はレベル2 IC 退避（バイト相当の 32bit）。
+   * ステップ通知 (cmd=0x1B): 1 命令実行後。addr は停止 IC（32bit BE）。
    * レジスタは 16bit。stack は SP+1 から 16 ワード。
+   * フレーム長は MN1613=60B / TMS9995=70B。
    */
   onStepNotify(info: CpuStateNotifyInfo): number;
 
   /**
    * 未定義命令実行通知 (cmd=0x13): 未定義命令実行時の状態通知。
-   * レイアウトはステップ通知と同一（59バイト）。
+   * レイアウトはステップ通知と同一（CPU 種別ごとの長さ）。
    */
   onUndefNotify(info: CpuStateNotifyInfo): number;
 
@@ -274,9 +286,9 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.LCD_CTRL]: 6,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
   [CMD_CPU_TO_IO.LCD_TEXT]: 20,
-  /** ステップ通知: 既定（MN1613）59B。TMS9995 は 70B。 */
+  /** ステップ通知: 既定（MN1613）60B。TMS9995 は 70B。 */
   [CMD_CPU_TO_IO.STEP_NOTIFY]: CPU_STATE_NOTIFY_FRAME_SIZE_MN1613,
-  /** 未定義命令実行通知: 既定（MN1613）59B。TMS9995 は 70B。 */
+  /** 未定義命令実行通知: 既定（MN1613）60B。TMS9995 は 70B。 */
   [CMD_CPU_TO_IO.UNDEF_NOTIFY]: CPU_STATE_NOTIFY_FRAME_SIZE_MN1613,
   /** RTC 生レジスタ取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.RTC_GET_RAW]: 1,
@@ -671,31 +683,81 @@ export class CpuToIoCommandDispatcher {
   }
 
   /**
-   * 59バイト通知フレーム（1Bh/13h 共通）を構造化データへ展開する。
+   * 1Bh/13h 通知フレームを構造化データへ展開する（CPU 種別でレイアウト分岐）。
    */
   private _decodeCpuStateNotifyInfo(frame: Uint8Array): CpuStateNotifyInfo {
+    if (this.cpuType === HSHK_CPU_TYPE.TMS9995) {
+      return this._decodeTmsCpuStateNotifyInfo(frame);
+    }
+    return this._decodeMn1613CpuStateNotifyInfo(frame);
+  }
+
+  /**
+   * MN1613: cmd + pad + addr32 + R0–R4/SP/STR/IC/SBR/TSR/NPP + stack16（60B）。
+   * HandShake.mdc: addr@0x02, r0@0x06, sp@0x10, npp@0x1a, stack@0x1c。
+   */
+  private _decodeMn1613CpuStateNotifyInfo(
+    frame: Uint8Array,
+  ): CpuStateNotifyInfo {
     const addr =
-      ((frame[0x01]! & 0xff) << 24) |
-      ((frame[0x02]! & 0xff) << 16) |
-      ((frame[0x03]! & 0xff) << 8) |
-      (frame[0x04]! & 0xff);
+      ((frame[0x02]! & 0xff) << 24) |
+      ((frame[0x03]! & 0xff) << 16) |
+      ((frame[0x04]! & 0xff) << 8) |
+      (frame[0x05]! & 0xff);
     const stack: number[] = [];
     for (let i = 0; i < 16; i += 1) {
-      stack.push(read16(frame, 0x1b + i * 2));
+      stack.push(read16(frame, 0x1c + i * 2));
     }
     return {
       addr,
-      r0: read16(frame, 0x05),
-      r1: read16(frame, 0x07),
-      r2: read16(frame, 0x09),
-      r3: read16(frame, 0x0b),
-      r4: read16(frame, 0x0d),
-      sp: read16(frame, 0x0f),
-      str: read16(frame, 0x11),
-      ic: read16(frame, 0x13),
-      csbrSsbr: read16(frame, 0x15),
-      tsr: read16(frame, 0x17),
-      npp: frame[0x19]! & 0xff,
+      r0: read16(frame, 0x06),
+      r1: read16(frame, 0x08),
+      r2: read16(frame, 0x0a),
+      r3: read16(frame, 0x0c),
+      r4: read16(frame, 0x0e),
+      r5to15: [],
+      sp: read16(frame, 0x10),
+      str: read16(frame, 0x12),
+      ic: read16(frame, 0x14),
+      csbrSsbr: read16(frame, 0x16),
+      tsr: read16(frame, 0x18),
+      npp: frame[0x1a]! & 0xff,
+      stack,
+    };
+  }
+
+  /**
+   * TMS9995: cmd + pad + addr32 + R0–R15 + stack16（70B。HandShake.mdc）。
+   * HandShake.mdc: addr@0x02, r0@0x06, stack@0x26（R15 直後。中間 pad なし）。
+   */
+  private _decodeTmsCpuStateNotifyInfo(frame: Uint8Array): CpuStateNotifyInfo {
+    const addr =
+      ((frame[0x02]! & 0xff) << 24) |
+      ((frame[0x03]! & 0xff) << 16) |
+      ((frame[0x04]! & 0xff) << 8) |
+      (frame[0x05]! & 0xff);
+    const regs: number[] = [];
+    for (let i = 0; i < 16; i += 1) {
+      regs.push(read16(frame, 0x06 + i * 2));
+    }
+    const stack: number[] = [];
+    for (let i = 0; i < 16; i += 1) {
+      stack.push(read16(frame, 0x26 + i * 2));
+    }
+    return {
+      addr,
+      r0: regs[0]!,
+      r1: regs[1]!,
+      r2: regs[2]!,
+      r3: regs[3]!,
+      r4: regs[4]!,
+      r5to15: regs.slice(5),
+      sp: regs[10]!,
+      str: 0,
+      ic: 0,
+      csbrSsbr: 0,
+      tsr: 0,
+      npp: 0,
       stack,
     };
   }

@@ -161,11 +161,9 @@ HSHK_BP_SNAP_SP		.equ	5	; ヒット直前のユーザ SP
 HSHK_IRQ_PAY_EXEC	.equ	5
 HSHK_IRQ_PAY_MEM	.equ	9
 HSHK_IRQ_PAY_IO		.equ	3
-HSHK_IRQ_PAY_HIST	.equ	2
-HSHK_BH_CLR		.equ	0x01
-HSHK_BH_ST_OVF		.equ	0x01
-HSHK_BH_ST_NOHIST	.equ	0x02
-HSHK_BH_HDR_CPU		.equ	8
+HSHK_IRQ_PAY_HIST	.equ	1
+HSHK_BH_ST_OVF		.equ	0x01	; メタ Bit0（線上には出さない）
+HSHK_BH_HDR_CPU		.equ	10	; count, flags, n_stop, pad, addr32, histCount, pad
 HSHK_IO_MAX		.equ	254
 HSHK_IO_LIMIT		.equ	255
 
