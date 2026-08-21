@@ -384,7 +384,7 @@ test("10h 設置→1Ah 停止→17h 状態/履歴→18h ステップ復帰", asy
     s.expectRegisters({ R0: 0, R4: BASE_REGS.R4 });
 
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
-    expect(stepBreak.getTriggerWord()).toBe(0x2006);
+    expect(stepBreak.getDelayCount()).toBe(0x01);
     expect(stepBreak.getEnable()).toBe(1);
     expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
   });
@@ -470,7 +470,7 @@ test("START 0x1800: 命令ブレイク停止後にステップ実行を3回行�
         expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(1);
 
         await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
-        expect(stepBreak.getTriggerWord()).toBe(0x2006);
+        expect(stepBreak.getDelayCount()).toBe(0x01);
         expect(stepBreak.getEnable()).toBe(1);
         expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
       }

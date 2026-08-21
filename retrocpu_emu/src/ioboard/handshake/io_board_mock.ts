@@ -33,6 +33,7 @@ import {
   intCauseForTimer,
   MODE,
   RESPONSE_CODE,
+  setHshkInReq,
   waitCondition,
 } from "../../shared/handshake/handshake_type";
 import { createHandshakeIoPortBridge } from "../../cpuboard/handshake/io_port_bridge";
@@ -603,6 +604,20 @@ export class IoBoardHandshakeMock {
     // receive 待ちを起こすため REQ を触らない（タイムアウト待ち）。
     // テストでは短い timeoutMs を渡すこと。
     await this.servePromise?.catch(() => undefined);
+
+    // stop 直後に次の exchangeWithCpu を行うテスト向けに、IO 側の線をアイドルへ戻す。
+    this.bus.HSHK_OUT_DACK = 0;
+    this.bus.HSHK_IN_DENA = 0;
+    setHshkInReq(this.bus, 0, false);
+
+    // CPU 側の OUT_REQ/OUT_DENA が自然に落ちるのを短く待つ（落ちなければそのまま返す）。
+    await waitCondition(
+      () =>
+        this.bus.HSHK_OUT_REQ === 0 &&
+        this.bus.HSHK_OUT_DENA === 0 &&
+        this.bus.HSHK_IN_DACK === 0,
+      50,
+    ).catch(() => undefined);
   }
 
   /**
@@ -782,7 +797,7 @@ export class IoBoardHandshakeMock {
         // 短いスライスで REQ_0 / stop を待ち、stop() がタイムアウト一杯待たないようにする
         await waitCondition(
           () => this.abortServe || this.bus.HSHK_OUT_REQ === 1,
-          100,
+          1,
         );
         if (this.abortServe) return;
         await this.handleOneRequest();
