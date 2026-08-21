@@ -13,11 +13,11 @@ test("CPU→IO の信号とデータをモック越しに読み取れる", () =>
   const cru = new Tms9995CruHandshakeMock();
 
   cru.cpuWriteSignal("HSHK_OUT_REQ", 1);
-  cru.cpuWriteSignal("HSHK_ENA", 1);
+  cru.cpuWriteSignal("HSHK_OUT_DENA", 1);
   cru.cpuWriteOutDataByte(0xa5);
 
   expect(cru.ioReadSignal("HSHK_OUT_REQ")).toBe(1);
-  expect(cru.ioReadSignal("HSHK_ENA")).toBe(1);
+  expect(cru.ioReadSignal("HSHK_OUT_DENA")).toBe(1);
   expect(cru.ioReadOutDataByte()).toBe(0xa5);
 });
 
@@ -67,7 +67,8 @@ test("snapshot は信号・データ・領域範囲を一貫して返す", () =>
   expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMin).toBe(0x0020);
   expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMax).toBe(0x003f);
   expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_REQ).toBe(0x0024);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DACK).toBe(0x002a);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DACK).toBe(0x0026);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_DACK).toBe(0x002a);
   expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INTERRUPT_BUSY).toBe(0x0020);
   expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT2_CAUSE).toBe(0x0023);
 });

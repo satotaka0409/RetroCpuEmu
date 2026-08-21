@@ -14,7 +14,7 @@ import type {
 
 type LegacyReqBus = {
   HSHK_IN_REQ: 0 | 1;
-  HSHK_ENA: 0 | 1;
+  HSHK_ENA?: 0 | 1;
   HSHK_REQ_1?: 0 | 1;
 };
 

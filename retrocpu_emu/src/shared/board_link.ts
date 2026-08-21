@@ -72,6 +72,18 @@ export type BoardLinkRequest =
       resetVectorWord?: number;
     }
   | {
+      /** CPU ボードの配線モード（MN1613/TMS9995）を切り替える */
+      type: "cpu:setCpuType";
+      id: number;
+      cpuType: number;
+    }
+  | {
+      /** CPU ボードのステップ遅延レジスタ（IO:0037）へ値を書き込む */
+      type: "cpu:setStepDelay";
+      id: number;
+      stepDelay: number;
+    }
+  | {
       /** IO ボードから CPU への割り込み要求（タイマー等）。実機は IRQ 線 + 要因線 */
       type: "cpu:irq";
       id: number;

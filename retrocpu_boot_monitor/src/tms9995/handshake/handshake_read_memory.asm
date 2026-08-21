@@ -1,5 +1,5 @@
 ; メモリ読み出し（ハンドシェイク 13h、IO→CPU）
-; コマンド済み。ヘッダ 9B: addr32 BE + count32 BE + pad。
+; コマンド済み。ヘッダ 9B: pad + addr32 BE + count32 BE。
 ; count バイトを mem_ld8 で送ったあと status 1B を受信。
 ; 下位 16bit の addr/count のみ使用（小転送向け）。
 
@@ -16,6 +16,10 @@
 g_hshk_read_memory:
 	MOV	R11, R9
 
+	; pad
+	BL	g_hshk_recv_byte
+	CI	R2, #HSHK_OK
+	JNE	l_rm_fail
 	; addr hi word（破棄）
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
@@ -43,6 +47,9 @@ g_hshk_read_memory:
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_rm_fail
+	BL	g_hshk_recv_byte
+	CI	R2, #HSHK_OK
+	JNE	l_rm_fail
 	; count lo
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
@@ -55,10 +62,6 @@ g_hshk_read_memory:
 	JNE	l_rm_fail
 	ANDI	R1, #0x00ff
 	SOC	R1, R6
-	; pad
-	BL	g_hshk_recv_byte
-	CI	R2, #HSHK_OK
-	JNE	l_rm_fail
 
 l_rm_lp:
 	MOV	R6, R6

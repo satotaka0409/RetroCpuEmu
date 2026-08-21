@@ -101,7 +101,6 @@ export type Tms9995CruBit = 0 | 1;
 /** CPU 出力側（CPU→IO）ハンドシェイク／BUSY 信号名。 */
 export type Tms9995CruCpuOutSignal =
   | "HSHK_OUT_REQ"
-  | "HSHK_ENA"
   | "HSHK_OUT_DENA"
   | "HSHK_IN_DACK"
   | "INTERRUPT_BUSY";
@@ -110,7 +109,6 @@ export type Tms9995CruCpuOutSignal =
 export type Tms9995CruCpuInSignal =
   | "HSHK_IN_REQ"
   | "HSHK_IN_DENA"
-  | "HSHK_IN_DACK"
   | "HSHK_OUT_DACK"
   | "INT1_CAUSE0"
   | "INT1_CAUSE1"

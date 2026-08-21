@@ -313,12 +313,22 @@ async function runIoBoardReset(reason: string): Promise<void> {
     const resetVectorWord = settingRaw
       ? decodeSettingArea(settingRaw).resetVector & 0xffff
       : 0x0108;
+    const cpuType = settingRaw
+      ? decodeSettingArea(settingRaw).cpuType & 0xff
+      : CPU_TYPE.MN1613;
+    const stepDelay = settingRaw
+      ? decodeSettingArea(settingRaw).stepDelay & 0xff
+      : 1;
     const hexPath = resolveBootMonitorHexPath(init.bootMonitorHex);
     log.info("IO ボードリセット開始", {
       reason,
       hexPath,
       resetVectorWord,
+      cpuType,
+      stepDelay,
     });
+    await link.setCpuType(cpuType);
+    await link.setStepDelay(stepDelay);
     const result = await performIoBoardReset(link, hexPath, resetVectorWord);
     consolePanel.notifyCpuReset();
     log.info("IO ボードリセット完了", {
@@ -373,7 +383,10 @@ const cmdHandlers: CpuToIoHandlers = {
    * 12h は MN1613 専用。TMS9995 は内蔵デクリメンタを使うため NG。
    */
   onTimerSet(params) {
-    if (settingRaw && decodeSettingArea(settingRaw).cpuType === CPU_TYPE.TMS9995) {
+    if (
+      settingRaw &&
+      decodeSettingArea(settingRaw).cpuType === CPU_TYPE.TMS9995
+    ) {
       return RESPONSE_CODE.NG;
     }
     return baseCmdHandlers.onTimerSet(params);
@@ -389,6 +402,7 @@ function syncHistoryEntrySizeFromSettings(): void {
   if (!settingRaw) return;
   const { cpuType } = decodeSettingArea(settingRaw);
   cmdDispatcher.setHistoryEntrySize(breakHistoryEntrySizeForCpu(cpuType));
+  cmdDispatcher.setCpuType(cpuType);
 }
 
 /**

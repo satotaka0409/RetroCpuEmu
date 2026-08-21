@@ -156,14 +156,14 @@ describe("IO ボードタイマー割り込み", () => {
     expect(mock.bus.INT_CAUSE).toBe(INT_CAUSE_CODE.TIMER);
   });
 
-  it("転送中 (HSHK_ENA=1) も配送を保留する", () => {
+  it("転送中 (REQ/DENA/DACK) も配送を保留する", () => {
     configureTimer(10, 0);
-    mock.bus.HSHK_ENA = 1;
+    mock.bus.HSHK_OUT_REQ = 1;
 
     sched.fire(10);
     expect(getPendingIrq() & IRQ2_BIT).toBe(0);
 
-    mock.bus.HSHK_ENA = 0;
+    mock.bus.HSHK_OUT_REQ = 0;
     sched.fire(RETRY_MS);
     expect(getPendingIrq() & IRQ2_BIT).toBe(IRQ2_BIT);
   });

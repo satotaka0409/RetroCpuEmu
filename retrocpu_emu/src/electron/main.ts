@@ -236,6 +236,7 @@ if (gotLock) {
 
     host = new EmuHost({
       workerDir: __dirname,
+      cpuType: startup.settings.cpuType,
       cpuStepsPerSlice: 32,
       cpuSliceMs: 4,
       ioSliceMs: 16,

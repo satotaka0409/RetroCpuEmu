@@ -37,12 +37,12 @@ export function setHshkInReq(
 /** CpuIoSignals の初期値を生成する */
 export function createHandshakeBus(): CpuIoSignals {
   const bus: CpuIoSignals & {
+    HSHK_ENA?: 0 | 1;
     HSHK_REQ_0?: 0 | 1;
     HSHK_REQ_1?: 0 | 1;
   } = {
     INTERRUPT_BUSY: 0,
     INT_CAUSE: 0,
-    HSHK_ENA: 0,
     HSHK_OUT_DENA: 0,
     HSHK_OUT_DACK: 0,
     HSHK_IN_DENA: 0,
@@ -56,6 +56,16 @@ export function createHandshakeBus(): CpuIoSignals {
 
   // 旧テスト資産互換: REQ_0/REQ_1 を OUT_REQ/IN_REQ へ透過マップする。
   Object.defineProperties(bus, {
+    HSHK_ENA: {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return bus.HSHK_OUT_DENA;
+      },
+      set(v: number) {
+        bus.HSHK_OUT_DENA = v ? 1 : 0;
+      },
+    },
     HSHK_REQ_0: {
       configurable: true,
       enumerable: true,

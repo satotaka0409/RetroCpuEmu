@@ -1,7 +1,7 @@
 /**
  * ステップ実行（18h / INT1_CAUSE=1 / CPLD 0036・0037）
  * 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
- * MN1613_CPUボードメモリ_IOマップ.mdc（STEP_BRK_ENA / STEP_BRK_COM）
+ * MN1613_CPUボードメモリ_IOマップ.mdc（STEP_BRK_ENA / STEP_BRK_DELAY）
  */
 import { stepBreak } from "../../../../retrocpu_emu/src/cpuboard/mn1613/step_break.js";
 import {
@@ -31,7 +31,7 @@ const BASE_REGS = {
 const IDLE = 0x1b00;
 const OP_H = 0x2000;
 const STR_IRQ_ENABLE = 0x0700;
-const STEP_COM = 0x2006;
+const STEP_DELAY = 0x01;
 const IC_SAVE = 3;
 const USER_IC = 0x1800;
 
@@ -125,24 +125,24 @@ test("18h 方式 2 は NG で ARM を変えない", async () => {
   });
 });
 
-test("g_step_arm_cpld は ARM=1 のとき 0037h=2006h・0036h=1 にしてフラグを落とす", async () => {
+test("g_step_arm_cpld は ARM=1 のとき 0037h=delay・0036h=1 にしてフラグを落とす", async () => {
   await withCase(async (s) => {
     stepBreak.writePort(0x37, 0x1111);
     s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 1);
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
-    expect(stepBreak.getTriggerWord()).toBe(STEP_COM);
+    expect(stepBreak.getDelayCount()).toBe(STEP_DELAY);
     expect(stepBreak.getEnable()).toBe(1);
     expect(s.readWord(s.wordAddr("GL_BP_STEP_ARM"))).toBe(0);
   });
 });
 
-test("g_step_arm_cpld は ARM=0 なら COM だけ書き ENA は触らない", async () => {
+test("g_step_arm_cpld は ARM=0 なら DELAY/ENA を触らない", async () => {
   await withCase(async (s) => {
     stepBreak.writePort(0x36, 0);
     stepBreak.writePort(0x37, 0x1111);
     s.writeWord(s.wordAddr("GL_BP_STEP_ARM"), 0);
     await s.call("g_step_arm_cpld", { registers: { ...BASE_REGS } });
-    expect(stepBreak.getTriggerWord()).toBe(STEP_COM);
+    expect(stepBreak.getDelayCount()).toBe(0x11);
     expect(stepBreak.getEnable()).toBe(0);
   });
 });

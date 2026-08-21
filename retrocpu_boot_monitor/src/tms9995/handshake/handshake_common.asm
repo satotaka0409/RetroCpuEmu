@@ -22,34 +22,10 @@ g_hshk_initiate_send:
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
 
-	; ENA=0 確認（最大 HSHK_ENA0_RETRY 回）
-	LI	R5, #HSHK_ENA0_RETRY
-l_hshk_init_ena0:
-	BL	l_hshk_wait_ena_0
-	CI	R1, #HSHK_OK
-	JEQ	l_hshk_init_ena0_ok
-	AI	R5, #-1
-	JNE	l_hshk_init_ena0
-	JMP	l_hshk_init_fail
-l_hshk_init_ena0_ok:
-
 	LI	R12, #0
 	SBZ	#HSHK_OUT_DENA_BIT
 	SBO	#HSHK_OUT_REQ_BIT
-
-	BL	l_hshk_wait_ena_1
-	CI	R1, #HSHK_OK
-	JNE	l_hshk_init_fail
-
-	LI	R12, #0
-	SBZ	#HSHK_OUT_REQ_BIT
 	LI	R1, #HSHK_OK
-	B	(R11)
-
-l_hshk_init_fail:
-	LI	R12, #0
-	SBZ	#HSHK_OUT_REQ_BIT
-	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_send_byte:
@@ -89,6 +65,7 @@ l_hshk_send_phase2:
 
 l_hshk_send_fail:
 	LI	R12, #0
+	SBZ	#HSHK_OUT_REQ_BIT
 	SBZ	#HSHK_OUT_DENA_BIT
 	CLR	R0
 	MOV	R0, GL_HSHK_PAIR
@@ -115,7 +92,7 @@ l_hshk_send_word_done:
 g_hshk_finalize_send:
 	MOV	GL_HSHK_PAIR, R4
 	ANDI	R4, #HSHK_PAIR_SEND
-	JEQ	l_hshk_finalize_send_wait
+	JEQ	l_hshk_finalize_send_done
 
 	CLR	R3
 	LI	R12, #HSHK_OUT_DATA_BASE
@@ -130,11 +107,15 @@ g_hshk_finalize_send:
 	ANDI	R4, #HSHK_PAIR_RECV
 	MOV	R4, GL_HSHK_PAIR
 
-l_hshk_finalize_send_wait:
-	BL	l_hshk_wait_ena_0
+l_hshk_finalize_send_done:
+	LI	R12, #0
+	SBZ	#HSHK_OUT_REQ_BIT
+	LI	R1, #HSHK_OK
 	B	(R11)
 
 l_hshk_finalize_send_fail:
+	LI	R12, #0
+	SBZ	#HSHK_OUT_REQ_BIT
 	LI	R1, #HSHK_NG
 	B	(R11)
 
@@ -144,19 +125,8 @@ g_hshk_accept_request:
 
 	LI	R12, #0
 	SBZ	#HSHK_IN_DACK_BIT
-	SBO	#HSHK_ENA_BIT
-
-	BL	l_hshk_wait_req1_0
-	CI	R1, #HSHK_OK
-	JNE	l_hshk_accept_fail
 
 	LI	R1, #HSHK_OK
-	B	(R11)
-
-l_hshk_accept_fail:
-	LI	R12, #0
-	SBZ	#HSHK_ENA_BIT
-	LI	R1, #HSHK_NG
 	B	(R11)
 
 g_hshk_recv_byte:
@@ -221,8 +191,6 @@ g_hshk_finalize_recv:
 	MOV	R4, GL_HSHK_PAIR
 
 l_hshk_finalize_recv_done:
-	LI	R12, #0
-	SBZ	#HSHK_ENA_BIT
 	LI	R1, #HSHK_OK
 	B	(R11)
 
@@ -289,34 +257,6 @@ l_hshk_mst_wr:
 	MOV	R3, (R1)
 	LI	R1, #HSHK_OK
 	B	(R8)
-
-l_hshk_wait_ena_1:
-	LI	R0, #HSHK_WAIT_MAX
-l_hshk_wait_ena_1_lp:
-	LI	R12, #0
-	TB	#HSHK_ENA_BIT
-	JEQ	l_hshk_wait_ena_1_ok
-	AI	R0, #-1
-	JNE	l_hshk_wait_ena_1_lp
-	LI	R1, #HSHK_NG
-	B	(R11)
-l_hshk_wait_ena_1_ok:
-	LI	R1, #HSHK_OK
-	B	(R11)
-
-l_hshk_wait_ena_0:
-	LI	R0, #HSHK_WAIT_MAX
-l_hshk_wait_ena_0_lp:
-	LI	R12, #0
-	TB	#HSHK_ENA_BIT
-	JNE	l_hshk_wait_ena_0_ok
-	AI	R0, #-1
-	JNE	l_hshk_wait_ena_0_lp
-	LI	R1, #HSHK_NG
-	B	(R11)
-l_hshk_wait_ena_0_ok:
-	LI	R1, #HSHK_OK
-	B	(R11)
 
 l_hshk_wait_out_dack_1:
 	LI	R0, #HSHK_WAIT_MAX

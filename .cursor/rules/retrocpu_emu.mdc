@@ -80,7 +80,8 @@ json ファイルが指定された場合は、IOボード設定エリアの設�
   "sevenseg_adddress_digit": "5", // MN1613:0x05 TMS9995:0x04 Z8002:0x04 MC68332:0x06
   "sevenseg_data_digit": "4", // MN1613:0x04 TMS9995:0x04 Z8002:0x04 MC68332:0x04
   "emulate_port": "29000", // エミュレータのIOボード 受付ポート番号
-  "boot": "mn1613_mon.ihx"  // ブート用 IntelHexファイル
+  "boot": "mn1613_mon.ihx",  // ブート用 IntelHexファイル
+  "step_delay": "60"  // ステップ実行時、次の割り込みまでのディレイカウント数
 }
 ```
 

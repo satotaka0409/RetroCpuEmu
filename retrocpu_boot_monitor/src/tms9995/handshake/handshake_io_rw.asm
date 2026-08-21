@@ -1,5 +1,5 @@
 ; IO 読み出し／書き込み（ハンドシェイク 15h / 16h、IO→CPU）
-; ヘッダ 3B: addr16 BE + count。読取は 0 埋め＋OK、書込はデータ破棄＋OK。
+; ヘッダ 5B: pad + addr16 BE + count + pad。読取は 0 埋め＋OK、書込はデータ破棄＋OK。
 
 	.cpu	tms9995
 	.include "../memmap.inc"
@@ -82,6 +82,9 @@ l_io_recv_hdr:
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_io_hdr_fail
+	BL	g_hshk_recv_byte
+	CI	R2, #HSHK_OK
+	JNE	l_io_hdr_fail
 	ANDI	R1, #0x00ff
 	SWPB	R1
 	MOV	R1, R3
@@ -95,6 +98,9 @@ l_io_recv_hdr:
 	JNE	l_io_hdr_fail
 	ANDI	R1, #0x00ff
 	MOV	R1, R4
+	BL	g_hshk_recv_byte
+	CI	R2, #HSHK_OK
+	JNE	l_io_hdr_fail
 	LI	R1, #HSHK_OK
 	B	(R7)
 

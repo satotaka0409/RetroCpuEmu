@@ -13,12 +13,6 @@ export interface CpuIoSignals {
    */
   INT_CAUSE: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-  /**
-   * ハンドシェイク処理中（旧 HSHK_ACK）
-   * 1: 依頼受理／セッション中
-   */
-  HSHK_ENA: 0 | 1;
-
   /** CPU->IO データ有効（CPU 出力） */
   HSHK_OUT_DENA: 0 | 1;
 

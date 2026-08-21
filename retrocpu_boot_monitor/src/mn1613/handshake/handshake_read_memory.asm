@@ -3,7 +3,7 @@
 ; 根拠: HandShake.mdc「メモリ読み出し」/ boot_monitor.mdc
 ;
 ; コマンド 1B は IRQ ディスパッチ済み。残りヘッダ 9B:
-;   addr32 BE + count32 BE + パッド 0。
+;   パッド 0 + addr32 BE + count32 BE。
 ; 続けて count バイトを CPU→IO で送り、IO から status 1B を受ける。
 ; g_* は BALD / RET。R3-R4 は非破壊。TSR0 は退避して戻す。
 
@@ -85,6 +85,9 @@ l_hshk_rm_done:
 	ret
 
 l_hshk_rm_recv_hdr:
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_rm_rh_fail
 	mvwi	R2, #HSHK_RM_ADDR_HI
 l_hshk_rm_rh_lp:
 	bald	g_hshk_recv_byte
@@ -104,9 +107,6 @@ l_hshk_rm_rh_lp:
 	ai	R2, #1
 	cwi	R2, #HSHK_RM_TSR0, Z
 	b	l_hshk_rm_rh_lp
-	bald	g_hshk_recv_byte
-	cwi	R0, #HSHK_OK, Z
-	b	l_hshk_rm_rh_fail
 	mvwi	R0, #HSHK_OK
 	ret
 l_hshk_rm_rh_fail:

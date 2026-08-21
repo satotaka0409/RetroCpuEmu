@@ -8,21 +8,21 @@
 
 /** IO:0036 — ステップ ENABLE（Bit0。ヒット後 CPLD が 0） */
 export const IO_PORT_STEP_ENA = 0x0036;
-/** IO:0037 — トリガ命令語 */
-export const IO_PORT_STEP_COM = 0x0037;
+/** IO:0037 — ステップ割り込みディレイ（8bit） */
+export const IO_PORT_STEP_DELAY = 0x0037;
 
-/** 既定トリガ: LPSW 2（`00100 000 0000 0110`） */
-export const STEP_BRK_COM_LPSW2 = 0x2006;
-
-type StepPhase = "idle" | "armed";
+/** 1命令ステップ用の既定ディレイ値（ハード仕様に合わせたラッチ初期値） */
+export const STEP_BRK_DELAY_1STEP = 0x01;
 
 /**
- * ステップ用 CPLD。ENA=1 のときトリガ命令の次の命令フェッチでワンショット IRQ。
+ * ステップ用 CPLD。
+ * ENA=1 かつ delay カウントが 0 に達したときワンショット IRQ を上げる。
  */
 export class StepBreakUnit {
   private ena = 0;
-  private com = STEP_BRK_COM_LPSW2;
-  private phase: StepPhase = "idle";
+  private delay = STEP_BRK_DELAY_1STEP;
+  private remaining = 0;
+  private skipFirstFetch = false;
   private onHit: (() => void) | null = null;
 
   /**
@@ -33,11 +33,12 @@ export class StepBreakUnit {
     this.onHit = cb;
   }
 
-  /** ENA=0・トリガ=LPSW2・idle に戻す */
+  /** ENA=0・ディレイ初期値に戻す */
   reset(): void {
     this.ena = 0;
-    this.com = STEP_BRK_COM_LPSW2;
-    this.phase = "idle";
+    this.delay = STEP_BRK_DELAY_1STEP;
+    this.remaining = 0;
+    this.skipFirstFetch = false;
   }
 
   /**
@@ -48,40 +49,38 @@ export class StepBreakUnit {
     return this.ena;
   }
 
-  /**
-   * トリガ命令語。
-   * @returns 16bit
-   */
-  getTriggerWord(): number {
-    return this.com;
+  /** ラッチされたディレイ値（8bit） */
+  getDelayCount(): number {
+    return this.delay & 0xff;
   }
 
-  /**
-   * 待ち状態。テスト用。
-   * @returns idle=トリガ待ち / armed=次命令フェッチで発火
-   */
-  getPhase(): StepPhase {
-    return this.phase;
+  /** 現在の残りカウント（テスト用） */
+  getRemainingCount(): number {
+    return this.remaining & 0xff;
   }
 
   /**
    * 1 命令の先頭語フェッチ。2 語目やオペランド READ では呼ばない。
    * @param word フェッチした命令語（16bit）
    */
-  onInstructionFetch(word: number): void {
+  onInstructionFetch(_word: number): void {
     if (this.ena === 0) {
-      this.phase = "idle";
       return;
     }
-    const ir = word & 0xffff;
-    if (this.phase === "armed") {
+
+    // 仕様: DELAY 書き込み後の次クロックからカウント開始。
+    // エミュレータでは「次の命令フェッチから開始」として扱う。
+    if (this.skipFirstFetch) {
+      this.skipFirstFetch = false;
+      return;
+    }
+
+    if (this.remaining > 0) {
+      this.remaining = (this.remaining - 1) & 0xff;
+    }
+    if (this.remaining === 0) {
       this.ena = 0;
-      this.phase = "idle";
       this.onHit?.();
-      return;
-    }
-    if (ir === (this.com & 0xffff)) {
-      this.phase = "armed";
     }
   }
 
@@ -93,12 +92,13 @@ export class StepBreakUnit {
   readPort(port: number): number | null {
     const p = port & 0xffff;
     if (p === IO_PORT_STEP_ENA) return this.ena;
-    if (p === IO_PORT_STEP_COM) return this.com & 0xffff;
+    if (p === IO_PORT_STEP_DELAY) return this.delay & 0xff;
     return null;
   }
 
   /**
-   * IO ライト（0036/0037）。ENA=0 で武装解除。ENA=1 はトリガ待ちからやり直す。
+   * IO ライト（0036/0037）。
+   * ENA=1 で現在の delay 値を再ロードしてカウント開始する。
    * @param port ポート番号
    * @param val 16bit
    * @returns 処理したら true
@@ -108,11 +108,19 @@ export class StepBreakUnit {
     const v = val & 0xffff;
     if (p === IO_PORT_STEP_ENA) {
       this.ena = v & 1;
-      this.phase = "idle";
+      if (this.ena !== 0) {
+        // 実機の「次クロックからカウント開始」を命令フェッチ近似すると
+        // 1命令ぶん早く発火しやすいため、+1オフセットで整合を取る。
+        this.remaining = ((this.delay & 0xff) + 1) & 0xff;
+        this.skipFirstFetch = true;
+      } else {
+        this.remaining = 0;
+        this.skipFirstFetch = false;
+      }
       return true;
     }
-    if (p === IO_PORT_STEP_COM) {
-      this.com = v;
+    if (p === IO_PORT_STEP_DELAY) {
+      this.delay = v & 0xff;
       return true;
     }
     return false;

@@ -29,9 +29,11 @@ import { pulseCpuReset } from "./boot";
 import {
   getInterruptBusy,
   isHandshakeActive,
+  setCpuPortMode,
   setResetVector,
   setIntCause,
 } from "./io_ports";
+import { IO_PORT_STEP_DELAY, stepBreak } from "./mn1613/step_break";
 
 /** 割り込み処理中で配送できないときの再試行間隔 (ms) */
 const IRQ_RETRY_MS = 1;
@@ -190,6 +192,18 @@ async function handle(
       reply(port, { type: "link:result", id, ok: true });
       return;
     }
+    if (type === "cpu:setCpuType") {
+      const m = msg as Extract<BoardLinkRequest, { type: "cpu:setCpuType" }>;
+      setCpuPortMode(m.cpuType);
+      reply(port, { type: "link:result", id, ok: true });
+      return;
+    }
+    if (type === "cpu:setStepDelay") {
+      const m = msg as Extract<BoardLinkRequest, { type: "cpu:setStepDelay" }>;
+      stepBreak.writePort(IO_PORT_STEP_DELAY, m.stepDelay & 0xff);
+      reply(port, { type: "link:result", id, ok: true });
+      return;
+    }
     if (type === "cpu:irq") {
       const m = msg as Extract<BoardLinkRequest, { type: "cpu:irq" }>;
       deliverInterrupt(m.level, m.cause);
@@ -221,7 +235,7 @@ async function handle(
 
 /**
  * IO ボード発の割り込みを CPU へ配送する。
- * 割り込み処理中（INTERRUPT_BUSY=1）やハンドシェイク転送中（HSHK_ENA=1）は
+ * 割り込み処理中（INTERRUPT_BUSY=1）やハンドシェイク線が動作中は
  * INT_CAUSE の取り違えを避けるため少し待って再試行し、
  * 上限を超えたら要因を上書きして配送する。
  * 要求は取り下げず、必ず 1 回配送する（レベル線相当）。
@@ -243,6 +257,7 @@ function deliverInterrupt(level: 0 | 1 | 2, cause: number, attempt = 0): void {
     return;
   }
   if (level === 1) {
+    // TMS9995 では INT1 が主経路。MN1613 と同じレベル線 API で運ぶ。
     setPins({ IRQ1: true });
     triggerInterrupt(1);
     setPins({ IRQ1: false });

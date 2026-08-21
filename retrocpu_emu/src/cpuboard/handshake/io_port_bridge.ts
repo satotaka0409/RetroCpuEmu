@@ -4,9 +4,9 @@
  *
  * 0020 INTERRUPT_BUSY Bit0
  * 0021 INT_CAUSE Bit0=INT1, Bit1-2=INT2
- * 0022 出力制御: OUT_REQ/ENA/OUT_DENA/IN_DACK
+ * 0022 出力制御: OUT_REQ/OUT_DENA/IN_DACK
  * 0023 HSHK_OUT_DATA (CPU->IO)
- * 0024 入力制御: IN_REQ/IN_DENA/IN_DACK/OUT_DACK
+ * 0024 入力制御: IN_REQ/IN_DENA/OUT_DACK
  * 0025 HSHK_IN_DATA (IO->CPU)
  */
 
@@ -23,16 +23,14 @@ export const IO_PORT = {
 
 export const HSHK_CTRL_BIT = {
   OUT_REQ: 0x01,
-  ENA: 0x02,
-  OUT_DENA: 0x04,
-  IN_DACK: 0x08,
+  OUT_DENA: 0x02,
+  IN_DACK: 0x04,
 } as const;
 
 export const HSHK_IN_CTRL_BIT = {
   IN_REQ: 0x01,
   IN_DENA: 0x02,
-  IN_DACK: 0x04,
-  OUT_DACK: 0x08,
+  OUT_DACK: 0x04,
 } as const;
 
 export type HandshakeIoPortBridge = {
@@ -56,7 +54,6 @@ export function createHandshakeIoPortBridge(
           return bus.INT_CAUSE & 0x07;
         case IO_PORT.HSHK_OUT_CTRL:
           return (
-            (bus.HSHK_ENA ? HSHK_CTRL_BIT.ENA : 0) |
             (bus.HSHK_OUT_DENA ? HSHK_CTRL_BIT.OUT_DENA : 0) |
             (bus.HSHK_IN_DACK ? HSHK_CTRL_BIT.IN_DACK : 0) |
             (bus.HSHK_OUT_REQ ? HSHK_CTRL_BIT.OUT_REQ : 0)
@@ -67,7 +64,6 @@ export function createHandshakeIoPortBridge(
           return (
             (bus.HSHK_IN_REQ ? HSHK_IN_CTRL_BIT.IN_REQ : 0) |
             (bus.HSHK_IN_DENA ? HSHK_IN_CTRL_BIT.IN_DENA : 0) |
-            (bus.HSHK_IN_DACK ? HSHK_IN_CTRL_BIT.IN_DACK : 0) |
             (bus.HSHK_OUT_DACK ? HSHK_IN_CTRL_BIT.OUT_DACK : 0)
           );
         case IO_PORT.HSHK_IN_DATA:
@@ -86,7 +82,6 @@ export function createHandshakeIoPortBridge(
           bus.INT_CAUSE = (v & 0x07) as CpuIoSignals["INT_CAUSE"];
           break;
         case IO_PORT.HSHK_OUT_CTRL:
-          bus.HSHK_ENA = (v & HSHK_CTRL_BIT.ENA) !== 0 ? 1 : 0;
           bus.HSHK_OUT_DENA = (v & HSHK_CTRL_BIT.OUT_DENA) !== 0 ? 1 : 0;
           bus.HSHK_IN_DACK = (v & HSHK_CTRL_BIT.IN_DACK) !== 0 ? 1 : 0;
           bus.HSHK_OUT_REQ = (v & HSHK_CTRL_BIT.OUT_REQ) !== 0 ? 1 : 0;
@@ -99,7 +94,6 @@ export function createHandshakeIoPortBridge(
           // 通常は IO 側入力だが、テスト用途で書き込みを許可する
           bus.HSHK_IN_REQ = (v & HSHK_IN_CTRL_BIT.IN_REQ) !== 0 ? 1 : 0;
           bus.HSHK_IN_DENA = (v & HSHK_IN_CTRL_BIT.IN_DENA) !== 0 ? 1 : 0;
-          bus.HSHK_IN_DACK = (v & HSHK_IN_CTRL_BIT.IN_DACK) !== 0 ? 1 : 0;
           bus.HSHK_OUT_DACK = (v & HSHK_IN_CTRL_BIT.OUT_DACK) !== 0 ? 1 : 0;
           break;
         case IO_PORT.HSHK_IN_DATA:

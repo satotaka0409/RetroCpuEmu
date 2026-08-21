@@ -2,8 +2,8 @@
 ; IO 読み出し／書き込み（ハンドシェイク 15h / 16h、IO→CPU）
 ; 根拠: HandShake.mdc「IO読み出し」「IO書き込み」
 ;
-; コマンド 1B は IRQ ディスパッチ済み。残りヘッダ 3B:
-;   addr16 BE + バイト数（最大 254）。
+; コマンド 1B は IRQ ディスパッチ済み。残りヘッダ 5B:
+;   パッド 0 + addr16 BE + バイト数（最大 254）+ パッド 0。
 ; 15h: ポートを 16bit 語としてビッグエンディアンで送り、続けて status。
 ; 16h: 同じ並びにデータを受け、status を返す。
 ; g_* は BALD / RET。R3-R4 は非破壊。
@@ -143,10 +143,13 @@ l_hshk_iow_done:
 	ret
 
 ; -------------------------------------------------------
-; ヘッダ 3B: addr16 BE, count。戻り R1=port、R2=count
+; ヘッダ 5B: pad, addr16 BE, count, pad。戻り R1=port、R2=count
 ; @return R0 - HSHK_OK / HSHK_NG
 ; -------------------------------------------------------
 l_hshk_io_recv_hdr:
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_ioh_fail
 	bald	g_hshk_recv_byte
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_ioh_fail
@@ -167,8 +170,11 @@ l_hshk_io_recv_hdr:
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	ret
+	mv	R2, R1
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_ioh_fail2
 l_hshk_ioh_fail2:
-	pop	R1
 l_hshk_ioh_fail:
 	mvwi	R0, #HSHK_NG
 	ret

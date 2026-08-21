@@ -12,7 +12,6 @@
 ;
 ; 引数は第1=R0、第2=R1、第3=R2、第4以降はスタック（asm-rules.mdc）。
 ; g_hshk_recv_byte の受信バイトは R1。ペア途中は _SYS_PAGE0 の GL_HSHK_PAIR。
-; ENA0 待ちの乱数は bios_common.asm の g_get_rnd（BALD）。待ち時間は厳密でなくてよい。
 ; g_* / l_* は BALD / RET。コードはセグメント 0。拡張 SBR はデータ専用。
 
 	.cpu	mn1613
@@ -51,54 +50,6 @@ l_hshk_wad_lp:
 	b	l_hshk_wad_lp
 	pop	R3
 	ret
-; -------------------------------------------------------
-; HSHK_ENA==0 を確認する
-; @return R0 - HSHK_OK / HSHK_NG
-; @Destruction R0, R1, R2
-; -------------------------------------------------------
-l_hshk_wait_ena0:
-	push	R3
-	mvwi	R1, #HSHK_ENA0_RETRY
-l_hshk_we0_lp:
-	bald	g_hshk_wait_ena_delay
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_ENA_BIT, Z
-	b	l_hshk_we0_busy
-	mvwi	R0, #HSHK_OK
-	pop	R3
-	ret
-l_hshk_we0_busy:
-	si	R1, #1, Z
-	b	l_hshk_we0_lp
-	mvwi	R0, #HSHK_NG
-	pop	R3
-	ret
-
-; -------------------------------------------------------
-; HSHK_ENA が期待値になるまで待つ
-; @param R0 - 期待値（0 または HSHK_ENA_BIT）
-; @return R0 - HSHK_OK / HSHK_NG
-; @Destruction R0, R1
-; -------------------------------------------------------
-l_hshk_wait_ena:
-	push	R2
-	mv	R2, R0
-	mvwi	R1, #HSHK_WAIT_MAX
-l_hshk_ena_lp:
-	rd	R0, HSHK_CTRL
-	andi	R0, #HSHK_ENA_BIT
-	c	R0, R2, Z
-	b	l_hshk_ena_cont
-	mvwi	R0, #HSHK_OK
-	pop	R2
-	ret
-l_hshk_ena_cont:
-	si	R1, #1, Z
-	b	l_hshk_ena_lp
-	mvwi	R0, #HSHK_NG
-	pop	R2
-	ret
-
 ; -------------------------------------------------------
 ; HSHK_OUT_DACK が期待値になるまで待つ
 ; @param R0 - 期待値（0 または HSHK_OUT_DACK_BIT）
@@ -214,40 +165,26 @@ l_hshk_ctrl_clr:
 
 ; -------------------------------------------------------
 ; CPU -> IO ハンドシェイク開始
-; @note ENA=0確認 → DENA=0 → REQ_0=1 → ENA=1待ち → REQ_0=0
+; @note DENA=0 → REQ_0=1（REQ_0 は finalize_send で 0）
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_initiate_send:
-	bald	l_hshk_wait_ena0
-	mv	R1, R0
-	mvwi	R0, #HSHK_OK
-	c	R1, R0, Z
-	b	l_hshk_init_send_fail
-
 	bald	l_hshk_pair_reset
+	rd	R0, HSHK_OUT_CTRL
+	andi	R0, #HSHK_OUT_DENA_BIT, Z
+	b	l_hshk_init_ng
 
 	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 
 	mvwi	R0, #HSHK_OUT_REQ_BIT
 	bald	l_hshk_ctrl_set
-
-	mvwi	R0, #HSHK_ENA_BIT
-	bald	l_hshk_wait_ena
-	mv	R1, R0
-	mvwi	R0, #HSHK_OK
-	c	R1, R0, Z
-	b	l_hshk_init_send_fail
-
-	mvwi	R0, #HSHK_OUT_REQ_BIT
-	bald	l_hshk_ctrl_clr
+	bald	g_hshk_wait_ena_delay
 
 	mvwi	R0, #HSHK_OK
 	ret
-l_hshk_init_send_fail:
-	mvwi	R0, #HSHK_OUT_REQ_BIT
-	bald	l_hshk_ctrl_clr
+l_hshk_init_ng:
 	mvwi	R0, #HSHK_NG
 	ret
 ; -------------------------------------------------------
@@ -371,6 +308,8 @@ l_hshk_send_2:
 	pop	R3
 	ret
 l_hshk_send_fail:
+	mvwi	R0, #HSHK_OUT_REQ_BIT
+	bald	l_hshk_ctrl_clr
 	mvwi	R0, #HSHK_OUT_DENA_BIT
 	bald	l_hshk_ctrl_clr
 	eor	R0, R0
@@ -405,12 +344,14 @@ l_hshk_sw_done:
 ; -------------------------------------------------------
 g_hshk_finalize_send:
 	bald	l_hshk_flush_send
-	eor	R0, R0
-	bald	l_hshk_wait_ena
+	mv	R1, R0
+	mvwi	R0, #HSHK_OUT_REQ_BIT
+	bald	l_hshk_ctrl_clr
+	mv	R0, R1
 	ret
 ; -------------------------------------------------------
 ; IO -> CPU 依頼受理（割り込みハンドラから）
-; @note DACK=0 → ENA=1 → REQ_1=0待ち
+; @note DACK=0
 ; @return R0 - HSHK_OK / HSHK_NG
 ; @Destruction R0, R1
 ; -------------------------------------------------------
@@ -419,21 +360,7 @@ g_hshk_accept_request:
 	mvwi	R0, #HSHK_IN_DACK_BIT
 	bald	l_hshk_ctrl_clr
 
-	mvwi	R0, #HSHK_ENA_BIT
-	bald	l_hshk_ctrl_set
-
-	bald	l_hshk_wait_req1_0
-	mv	R1, R0
 	mvwi	R0, #HSHK_OK
-	c	R1, R0, Z
-	b	l_hshk_accept_fail
-
-	mvwi	R0, #HSHK_OK
-	ret
-l_hshk_accept_fail:
-	mvwi	R0, #HSHK_ENA_BIT
-	bald	l_hshk_ctrl_clr
-	mvwi	R0, #HSHK_NG
 	ret
 ; -------------------------------------------------------
 ; IO -> CPU 1バイト受信（2バイト単位の片方。奇数は finalize でパッド捨て）
@@ -498,10 +425,10 @@ l_hshk_recv_fail:
 ; @Destruction R0, R1
 ; -------------------------------------------------------
 g_hshk_finalize_recv:
+	mvwi	R0, #HSHK_OUT_DENA_BIT
+	bald	l_hshk_ctrl_clr
 	bald	l_hshk_flush_send
 	bald	l_hshk_flush_recv
-	mvwi	R0, #HSHK_ENA_BIT
-	bald	l_hshk_ctrl_clr
 	mvwi	R0, #HSHK_OK
 	ret
 ; -------------------------------------------------------

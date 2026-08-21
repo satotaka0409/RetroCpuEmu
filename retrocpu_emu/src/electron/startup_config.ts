@@ -84,6 +84,12 @@ export function parseStartupConfigObject(raw: unknown): StartupConfig {
       65535,
       cpuDefaults.emulatePort,
     ),
+    stepDelay: clampTo(
+      parseNumberish(src.step_delay),
+      0,
+      255,
+      cpuDefaults.stepDelay,
+    ),
   };
 
   const bootMonitorHex = parseNonEmptyString(src.boot);

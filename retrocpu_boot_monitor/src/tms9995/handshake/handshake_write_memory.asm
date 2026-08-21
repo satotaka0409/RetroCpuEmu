@@ -15,12 +15,20 @@
 g_hshk_write_memory:
 	MOV	R11, R9
 
+	; pad
+	BL	g_hshk_recv_byte
+	CI	R2, #HSHK_OK
+	JNE	l_wm_fail
+
+	; addr hi（破棄）
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
+
+	; addr lo
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
@@ -33,12 +41,15 @@ g_hshk_write_memory:
 	ANDI	R1, #0x00ff
 	SOC	R1, R5
 
+	; count hi（破棄）
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
+
+	; count lo
 	BL	g_hshk_recv_byte
 	CI	R2, #HSHK_OK
 	JNE	l_wm_fail
@@ -50,9 +61,6 @@ g_hshk_write_memory:
 	JNE	l_wm_fail
 	ANDI	R1, #0x00ff
 	SOC	R1, R6
-	BL	g_hshk_recv_byte
-	CI	R2, #HSHK_OK
-	JNE	l_wm_fail
 
 l_wm_lp:
 	MOV	R6, R6

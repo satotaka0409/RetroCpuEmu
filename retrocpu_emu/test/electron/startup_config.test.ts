@@ -28,6 +28,7 @@ describe("startup_config", () => {
     expect(cfg.settings.sevenSegAddrDigits).toBe(0x05);
     expect(cfg.settings.sevenSegDataDigits).toBe(0x04);
     expect(cfg.settings.emulatePort).toBe(DEFAULT_EMULATE_PORT);
+    expect(cfg.settings.stepDelay).toBe(1);
     expect(cfg.emulatePort).toBe(DEFAULT_EMULATE_PORT);
   });
 
@@ -40,6 +41,7 @@ describe("startup_config", () => {
       sevenseg_adddress_digit: "4",
       sevenseg_data_digit: "6",
       emulate_port: "29001",
+      step_delay: "60",
       boot: "mn1613_mon.ihx",
     });
     expect(cfg.settings.cpuType).toBe(CPU_TYPE.TMS9995);
@@ -49,6 +51,7 @@ describe("startup_config", () => {
     expect(cfg.settings.sevenSegAddrDigits).toBe(0x04);
     expect(cfg.settings.sevenSegDataDigits).toBe(0x06);
     expect(cfg.settings.emulatePort).toBe(29001);
+    expect(cfg.settings.stepDelay).toBe(60);
     expect(cfg.emulatePort).toBe(29001);
     expect(cfg.bootMonitorHex).toBe("mn1613_mon.ihx");
   });
@@ -66,6 +69,7 @@ describe("startup_config", () => {
     expect(cfg.settings.addrStep).toBe(ADDR_STEP_1);
     expect(cfg.settings.resetVector).toBe(0x0108);
     expect(cfg.settings.emulatePort).toBe(DEFAULT_EMULATE_PORT);
+    expect(cfg.settings.stepDelay).toBe(1);
     expect(cfg.emulatePort).toBe(DEFAULT_EMULATE_PORT);
   });
 
@@ -123,6 +127,7 @@ describe("startup_config", () => {
       sevenseg_adddress_digit: "5",
       sevenseg_data_digit: "4",
       emulate_port: "29001",
+      step_delay: "60",
       boot: "mn1613_mon.ihx",
     });
 
@@ -140,8 +145,10 @@ describe("startup_config", () => {
     expect(decoded.sevenSegAddrDigits).toBe(0x05);
     expect(decoded.sevenSegDataDigits).toBe(0x04);
     expect(decoded.emulatePort).toBe(29001);
+    expect(decoded.stepDelay).toBe(60);
     expect(raw[OFFSETS.EMULATE_PORT_HI]).toBe(0x71);
     expect(raw[OFFSETS.EMULATE_PORT_LO]).toBe(0x49);
+    expect(raw[OFFSETS.STEP_DELAY]).toBe(60);
     expect(Buffer.from(raw).includes(Buffer.from("mn1613_mon.ihx"))).toBe(
       false,
     );

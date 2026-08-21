@@ -1,6 +1,6 @@
 /**
  * IOボード設定エリア（save/load/initialize）
- * 根拠: ioboard.mdc 「IOボード設定エリア」（00h–0Dh）
+ * 根拠: ioboard.mdc 「IOボード設定エリア」（00h–0Eh）
  */
 
 import { describe, it, expect } from "vitest";
@@ -43,7 +43,9 @@ function createMemoryStorage(initial?: Uint8Array | null): MemoryStorage {
 }
 
 /** テスト用の MN1613 設定（clockDiv だけ変えるとき用） */
-function mn1613Settings(partial: Partial<IoBoardSettings> = {}): IoBoardSettings {
+function mn1613Settings(
+  partial: Partial<IoBoardSettings> = {},
+): IoBoardSettings {
   return {
     ...defaultSettingsForCpu(CPU_TYPE.MN1613),
     ...partial,
@@ -51,7 +53,7 @@ function mn1613Settings(partial: Partial<IoBoardSettings> = {}): IoBoardSettings
 }
 
 describe("setting_area", () => {
-  it("オフセットは ioboard.mdc の 00h–0Dh に一致する", () => {
+  it("オフセットは ioboard.mdc の 00h–0Eh に一致する", () => {
     expect(OFFSETS).toEqual({
       MARK_HI: 0x00,
       MARK_LO: 0x01,
@@ -67,6 +69,7 @@ describe("setting_area", () => {
       SEVEN_SEG_DATA_DIGITS: 0x0b,
       EMULATE_PORT_HI: 0x0c,
       EMULATE_PORT_LO: 0x0d,
+      STEP_DELAY: 0x0e,
     });
   });
 
@@ -98,6 +101,7 @@ describe("setting_area", () => {
       (DEFAULT_EMULATE_PORT >>> 8) & 0xff,
     );
     expect(raw[OFFSETS.EMULATE_PORT_LO]).toBe(DEFAULT_EMULATE_PORT & 0xff);
+    expect(raw[OFFSETS.STEP_DELAY]).toBe(0x01);
   });
 
   it("未保存またはマーク不正なら初期化し既定値を書き込む", async () => {
@@ -143,6 +147,7 @@ describe("setting_area", () => {
       sevenSegAddrDigits: 0x00,
       sevenSegDataDigits: 0x00,
       emulatePort: 0x1234,
+      stepDelay: 0x44,
     });
     const storage = createMemoryStorage(raw);
 
@@ -156,6 +161,7 @@ describe("setting_area", () => {
     expect(inited.settings.resetVector).toBe(0);
     expect(inited.settings.sevenSegAddrDigits).toBe(0x06);
     expect(inited.settings.sevenSegDataDigits).toBe(0x04);
+    expect(inited.settings.stepDelay).toBe(0x01);
   });
 
   it("有効マークかつ再設定フラグなしなら初期化しない", async () => {
@@ -181,6 +187,7 @@ describe("setting_area", () => {
       sevenSegAddrDigits: 0x09,
       sevenSegDataDigits: 0x09,
       emulatePort: 0x1234,
+      stepDelay: 0x77,
     });
 
     const written = writeSettingAreaByte(raw, OFFSETS.CPU_TYPE_RESET, 1);
@@ -192,6 +199,7 @@ describe("setting_area", () => {
     expect(loaded.resetVector).toBe(0);
     expect(loaded.sevenSegAddrDigits).toBe(0x04);
     expect(loaded.sevenSegDataDigits).toBe(0x04);
+    expect(loaded.stepDelay).toBe(0x01);
   });
 
   it("増加数 2 のとき奇数アドレスはアクション前に -1 する", () => {
@@ -222,5 +230,6 @@ function loadFromRaw(raw: Uint8Array) {
     emulatePort:
       ((raw[OFFSETS.EMULATE_PORT_HI] ?? 0) << 8) |
       (raw[OFFSETS.EMULATE_PORT_LO] ?? 0),
+    stepDelay: raw[OFFSETS.STEP_DELAY]! & 0xff,
   };
 }

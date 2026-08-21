@@ -13,6 +13,8 @@ import type { BeepWire } from "../shared/emu_api";
 import { getLogger } from "../log/logger";
 
 export type EmuHostOptions = {
+  /** CPU 種類（setting_area と同値。1=MN1613, 2=TMS9995） */
+  cpuType?: number;
   cpuStepsPerSlice?: number;
   cpuSliceMs?: number;
   ioSliceMs?: number;
@@ -247,6 +249,7 @@ export class EmuHost {
     this.cpu = new Worker(path.join(this.opts.workerDir, "cpu_worker.js"), {
       workerData: {
         ...shared,
+        cpuType: this.opts.cpuType,
         stepsPerSlice: this.opts.cpuStepsPerSlice ?? 32,
         sliceMs: this.opts.cpuSliceMs ?? 4,
         logDir: this.opts.logDir,

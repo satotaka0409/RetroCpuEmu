@@ -31,6 +31,10 @@ export const BREAK_NOTIFY_HEADER_SIZE = 11;
 export const BREAK_HISTORY_ENTRY_SIZE_MN1613 = 66;
 /** 履歴 1 エントリ長（TMS9995。HandShake.mdc） */
 export const BREAK_HISTORY_ENTRY_SIZE_TMS9995 = 78;
+/** ステップ/未定義通知フレーム長（MN1613） */
+export const CPU_STATE_NOTIFY_FRAME_SIZE_MN1613 = 59;
+/** ステップ/未定義通知フレーム長（TMS9995） */
+export const CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995 = 70;
 /**
  * 履歴 1 エントリの既定バイト長（MN1613）。
  * CPU 種別依存の切替は `breakHistoryEntrySizeForCpu` / ディスパッチャ引数を使う。
@@ -54,6 +58,18 @@ export function breakHistoryEntrySizeForCpu(cpuType: number): number {
   return cpuType === HSHK_CPU_TYPE.TMS9995
     ? BREAK_HISTORY_ENTRY_SIZE_TMS9995
     : BREAK_HISTORY_ENTRY_SIZE_MN1613;
+}
+
+/**
+ * CPU 種別を考慮したコマンド総フレーム長を返す。
+ */
+function cpuFrameSizeForCpu(cmd: number, cpuType: number): number {
+  if (cmd === CMD_CPU_TO_IO.STEP_NOTIFY || cmd === CMD_CPU_TO_IO.UNDEF_NOTIFY) {
+    return cpuType === HSHK_CPU_TYPE.TMS9995
+      ? CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995
+      : CPU_STATE_NOTIFY_FRAME_SIZE_MN1613;
+  }
+  return CPU_FRAME_SIZE[cmd] ?? 1;
 }
 
 // ─────────────────────────────────────────────
@@ -258,10 +274,10 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.LCD_CTRL]: 5,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
   [CMD_CPU_TO_IO.LCD_TEXT]: 20,
-  /** ステップ通知: cmd(1) + addr32(4) + レジスタ 22B + スタック 32B = 59バイト */
-  [CMD_CPU_TO_IO.STEP_NOTIFY]: 59,
-  /** 未定義命令実行通知: ステップ通知と同じ 59 バイト */
-  [CMD_CPU_TO_IO.UNDEF_NOTIFY]: 59,
+  /** ステップ通知: 既定（MN1613）59B。TMS9995 は 70B。 */
+  [CMD_CPU_TO_IO.STEP_NOTIFY]: CPU_STATE_NOTIFY_FRAME_SIZE_MN1613,
+  /** 未定義命令実行通知: 既定（MN1613）59B。TMS9995 は 70B。 */
+  [CMD_CPU_TO_IO.UNDEF_NOTIFY]: CPU_STATE_NOTIFY_FRAME_SIZE_MN1613,
   /** RTC 生レジスタ取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.RTC_GET_RAW]: 1,
   /** 温度生レジスタ取得: cmd(1)のみ */
@@ -307,11 +323,12 @@ export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
 export function cpuToIoRemainingSize(
   frameSoFar: Uint8Array,
   entrySize: number = BREAK_HISTORY_ENTRY_SIZE_MN1613,
+  cpuType: number = HSHK_CPU_TYPE.MN1613,
 ): number {
   if (frameSoFar.length === 0) return 0;
   const cmd = frameSoFar[0] & 0xff;
   if (cmd !== CMD_CPU_TO_IO.BREAK_NOTIFY) {
-    const total = CPU_FRAME_SIZE[cmd] ?? 1;
+    const total = cpuFrameSizeForCpu(cmd, cpuType);
     return Math.max(0, total - frameSoFar.length);
   }
 
@@ -336,8 +353,9 @@ export function cpuToIoRemainingSize(
  */
 export function makeCpuToIoRemainingSize(
   entrySize: number,
+  cpuType: number = HSHK_CPU_TYPE.MN1613,
 ): (frameSoFar: Uint8Array) => number {
-  return (frameSoFar) => cpuToIoRemainingSize(frameSoFar, entrySize);
+  return (frameSoFar) => cpuToIoRemainingSize(frameSoFar, entrySize, cpuType);
 }
 
 // ─────────────────────────────────────────────
@@ -374,17 +392,27 @@ function read16(buf: Uint8Array, ofs: number): number {
  */
 export class CpuToIoCommandDispatcher {
   private historyEntrySize: number;
+  private cpuType: number;
 
   /**
    * @param handlers コマンドごとの処理を実装したハンドラ集合
    * @param options.historyEntrySize 1Ah/87h 相当の履歴エントリ長（省略時 MN1613=66）
+   * @param options.cpuType setting_area の cpuType（省略時 MN1613）
    */
   constructor(
     private readonly handlers: CpuToIoHandlers,
-    options: { historyEntrySize?: number } = {},
+    options: { historyEntrySize?: number; cpuType?: number } = {},
   ) {
     this.historyEntrySize =
       options.historyEntrySize ?? BREAK_HISTORY_ENTRY_SIZE_MN1613;
+    this.cpuType = options.cpuType ?? HSHK_CPU_TYPE.MN1613;
+  }
+
+  /**
+   * CPU 種別を切り替える（13h/1Bh の最小フレーム長判定に使用）。
+   */
+  setCpuType(cpuType: number): void {
+    this.cpuType = cpuType;
   }
 
   /**
@@ -415,7 +443,7 @@ export class CpuToIoCommandDispatcher {
 
     const cmd = frame[0];
     // 知っているコマンドは最小フレーム長を先に検査する。
-    const expectedSize = CPU_FRAME_SIZE[cmd];
+    const expectedSize = cpuFrameSizeForCpu(cmd, this.cpuType);
     if (expectedSize !== undefined && frame.length < expectedSize) {
       // フレームが短すぎる場合は NG を返す
       return new Uint8Array([RESPONSE_CODE.NG]);

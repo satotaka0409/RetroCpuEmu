@@ -24,6 +24,7 @@ export const OFFSETS = {
   SEVEN_SEG_DATA_DIGITS: 0x0b,
   EMULATE_PORT_HI: 0x0c,
   EMULATE_PORT_LO: 0x0d,
+  STEP_DELAY: 0x0e,
 } as const;
 
 /** エミュレータ受付ポート既定値（ioboard.mdc 0C–0D。0x7148 = 29000） */
@@ -52,6 +53,8 @@ export type IoBoardSettings = {
   sevenSegDataDigits: number;
   /** エミュレータ IO ボード受付ポート（16bit。既定 0x7148） */
   emulatePort: number;
+  /** ステップ実行時、次の割り込みまでのディレイカウント（0-255） */
+  stepDelay: number;
 };
 
 export type LoadSettingAreaResult = {
@@ -141,6 +144,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         sevenSegAddrDigits: 0x04,
         sevenSegDataDigits: 0x04,
         emulatePort: DEFAULT_EMULATE_PORT,
+        stepDelay: 1,
       };
     case CPU_TYPE.Z8002:
       return {
@@ -152,6 +156,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         sevenSegAddrDigits: 0x04,
         sevenSegDataDigits: 0x04,
         emulatePort: DEFAULT_EMULATE_PORT,
+        stepDelay: 1,
       };
     case CPU_TYPE.MC68332:
       return {
@@ -163,6 +168,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         sevenSegAddrDigits: 0x06,
         sevenSegDataDigits: 0x04,
         emulatePort: DEFAULT_EMULATE_PORT,
+        stepDelay: 1,
       };
     case CPU_TYPE.MN1613:
     default:
@@ -175,6 +181,7 @@ export function defaultSettingsForCpu(cpuType: number): IoBoardSettings {
         sevenSegAddrDigits: 0x05,
         sevenSegDataDigits: 0x04,
         emulatePort: DEFAULT_EMULATE_PORT,
+        stepDelay: 1,
       };
   }
 }
@@ -193,6 +200,7 @@ export function decodeSettingArea(raw: Uint8Array): IoBoardSettings {
     sevenSegAddrDigits: clampByte(buf[OFFSETS.SEVEN_SEG_ADDR_DIGITS]),
     sevenSegDataDigits: clampByte(buf[OFFSETS.SEVEN_SEG_DATA_DIGITS]),
     emulatePort: normalizeEmulatePort(readU16be(buf, OFFSETS.EMULATE_PORT_HI)),
+    stepDelay: clampByte(buf[OFFSETS.STEP_DELAY]),
   };
 }
 
@@ -215,6 +223,7 @@ export function encodeSettingArea(settings: IoBoardSettings): Uint8Array {
     OFFSETS.EMULATE_PORT_HI,
     normalizeEmulatePort(settings.emulatePort),
   );
+  raw[OFFSETS.STEP_DELAY] = clampByte(settings.stepDelay);
   return raw;
 }
 

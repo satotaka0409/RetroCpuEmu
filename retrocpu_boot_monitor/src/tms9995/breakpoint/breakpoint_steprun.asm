@@ -1,10 +1,10 @@
 ; breakpoint_steprun.asm
 ; 1 命令ステップ（CRU ワンショット。比較器は使わない）
 ; 根拠: breakpoint.mdc / HandShake.mdc 18h・1Bh /
-;   TMS9995_CPUボードメモリ_IOマップ.mdc（0068 / 0070、トリガ RTWP=0380h）
+;   TMS9995_CPUボードメモリ_IOマップ.mdc（0068=ENA / 0078=DELAY）
 ;
 ; 18h: 0=通常再開（ARM クリア）/ 1=ステップ（GL_BP_STEP_ARM=1）。ENA はここでは上げない。
-; INT1 エピローグの g_step_arm_cpld が COM/ENA を武装する。
+; INT1 エピローグの g_step_arm_cpld が DELAY/ENA を武装する。
 ; INT2 要因=ステップ: 1Bh 通知 → R1=1 でモニタ HALT。
 ; 呼び出し: BL / B (R11)。ステータス・停止フラグは R1。
 
@@ -51,16 +51,16 @@ l_sr_61_ng:
 	B	(R8)
 
 ; -------------------------------------------------------
-; INT1 エピローグから呼ぶ。ARM≠0 なら COM=RTWP・ENA=1
+; INT1 エピローグから呼ぶ。ARM≠0 なら DELAY=STEP_BRK_DELAY_1STEP・ENA=1
 ; -------------------------------------------------------
 g_step_arm_cpld:
 	MOV	GL_BP_STEP_ARM, R0
 	JEQ	l_sr_arm_done
 	CLR	R0
 	MOV	R0, GL_BP_STEP_ARM
-	LI	R0, #STEP_BRK_COM_RTWP
-	LI	R12, #IO_STEP_BRK_COM
-	LDCR	R0, #0			; 16bit
+	LI	R0, #STEP_BRK_DELAY_1STEP
+	LI	R12, #IO_STEP_BRK_DELAY
+	LDCR	R0, #8			; 8bit
 	LI	R12, #0
 	SBO	#IO_STEP_BRK_ENA
 l_sr_arm_done:
@@ -82,8 +82,9 @@ g_step_interrupt_handler:
 	CI	R1, #HSHK_OK
 	JNE	l_sr_nt_fail
 
-	; addr32(4) + レジスタ簡略(22) + スタック16語(32) = 58 バイトを 0
-	LI	R7, #58
+	; 1Bh 線上はコマンド後に 69B（pad + addr32 + regs + pad + stack16語）。
+	; TMS9995 CPU 実行コンテキスト未実装のため、現状はゼロ埋めで長さのみ仕様準拠。
+	LI	R7, #69
 l_sr_nt_zlp:
 	MOV	R7, R7
 	JEQ	l_sr_nt_fin

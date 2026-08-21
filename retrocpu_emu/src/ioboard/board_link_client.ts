@@ -268,6 +268,36 @@ export class BoardLinkClient {
   }
 
   /**
+   * CPU ボードの配線モードを切り替える。
+   * 1=MN1613 / 2=TMS9995（不正値は CPU 側で MN1613 扱い）。
+   */
+  async setCpuType(cpuType: number): Promise<void> {
+    const port = this.requirePort();
+    const id = this.nextId++;
+    const req: BoardLinkRequest = {
+      type: "cpu:setCpuType",
+      id,
+      cpuType: cpuType & 0xff,
+    };
+    await this.send(port, req);
+  }
+
+  /**
+   * CPU ボードのステップ遅延レジスタ（IO:0037）へ値を書き込む。
+   * @param stepDelay 0-255
+   */
+  async setStepDelay(stepDelay: number): Promise<void> {
+    const port = this.requirePort();
+    const id = this.nextId++;
+    const req: BoardLinkRequest = {
+      type: "cpu:setStepDelay",
+      id,
+      stepDelay: stepDelay & 0xff,
+    };
+    await this.send(port, req);
+  }
+
+  /**
    * リクエストを送り、同じ id の応答が返るまで待つ。
    * @param port 送信先ポート
    * @param req リクエスト（id は呼び出し側で採番済み）

@@ -17,20 +17,26 @@ export type CpuSlicePlan = {
 
 /**
  * ハンドシェイクが線上で動いているか（CPU を連続実行すべきか）。
- * ENA だけでなく、受理前の REQ と INT2 処理中も含む。
+ * REQ/ACK/DENA のいずれかが立っている間と、INT2 処理中を含む。
  * @param bus ハンドシェイクバス
  * @returns 転送中・依頼中なら true
  */
 export function handshakeBusyFromBus(bus: {
-  HSHK_ENA: number;
   HSHK_OUT_REQ: number;
+  HSHK_OUT_DENA: number;
+  HSHK_IN_DACK: number;
   HSHK_IN_REQ: number;
+  HSHK_IN_DENA: number;
+  HSHK_OUT_DACK: number;
   INTERRUPT_BUSY: number;
 }): boolean {
   return (
-    bus.HSHK_ENA === 1 ||
     bus.HSHK_OUT_REQ === 1 ||
+    bus.HSHK_OUT_DENA === 1 ||
+    bus.HSHK_IN_DACK === 1 ||
     bus.HSHK_IN_REQ === 1 ||
+    bus.HSHK_IN_DENA === 1 ||
+    bus.HSHK_OUT_DACK === 1 ||
     bus.INTERRUPT_BUSY === 1
   );
 }

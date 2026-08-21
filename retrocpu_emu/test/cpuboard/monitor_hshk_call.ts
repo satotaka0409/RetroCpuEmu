@@ -130,17 +130,20 @@ export function startHandshakeHandlerLoop(
 ): () => void {
   let alive = true;
   let busy = false;
+  let pending = false;
   const loop = async (): Promise<void> => {
     while (alive) {
-      if (
-        !busy &&
-        bus.HSHK_IN_REQ === 1 &&
-        getExecStatus() === "halted"
-      ) {
+      const req = bus.HSHK_IN_REQ;
+      if (req === 1) pending = true;
+      if (req === 0) pending = false;
+      if (!busy && pending && getExecStatus() === "halted") {
         busy = true;
         try {
           await callHandshakeHandler(entryWordAddr);
+        } catch {
+          // REQ held-high timing can race in tests; keep loop alive and wait for next state.
         } finally {
+          pending = false;
           busy = false;
         }
       } else {

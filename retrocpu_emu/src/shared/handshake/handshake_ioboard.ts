@@ -16,7 +16,6 @@ import {
   RESPONSE_CODE,
   setHshkInReq,
   u32be,
-  waitEna0Check,
   waitCondition,
 } from "./handshake_type";
 
@@ -282,12 +281,10 @@ export class IoControlHandshake {
     return Uint8Array.from(bytes);
   }
 
-  /** CPU の REQ_0 を待って依頼を受理する（DACK=0 → ENA=1 → REQ_0=0 待ち） */
+  /** CPU の REQ を待って依頼を受理する（DACK 初期化後、REQ 解除を待つ） */
   private async waitForCpuRequest(): Promise<void> {
     await this.wait(() => this.bus.HSHK_OUT_REQ === 1);
     this.bus.HSHK_OUT_DACK = 0;
-    this.bus.HSHK_ENA = 1;
-    await this.wait(() => this.bus.HSHK_OUT_REQ === 0);
   }
 
   /**
@@ -332,25 +329,27 @@ export class IoControlHandshake {
     return waitCondition(condition, this.timeoutMs, this.onPoll);
   }
 
-  /** ENA=0 にして受信完了を CPU へ通知する */
+  /** 受信完了（CPU 側が REQ_0 を下げるまで待つ） */
   private async finalizeReceive(): Promise<void> {
-    this.bus.HSHK_ENA = 0;
+    await this.wait(() => this.bus.HSHK_OUT_REQ === 0);
   }
 
   /**
    * IO→CPU 送信を開始する。
-   * ENA=0 を確認し、割り込み要因を HANDSHAKE にして REQ_1 で CPU へ依頼する。
+   * 割り込み要因を HANDSHAKE にして REQ で CPU へ依頼する。
    * @param options raiseIrq=false なら REQ_1 のみ（INT2 なし）
    */
   private async initiateSend(options?: HandshakeSendOptions): Promise<void> {
     const raiseIrq = options?.raiseIrq !== false;
-    await waitEna0Check(() => this.bus.HSHK_ENA === 0);
-    await this.wait(() => this.bus.INTERRUPT_BUSY === 0);
+    await this.wait(
+      () =>
+        this.bus.INTERRUPT_BUSY === 0 &&
+        this.bus.HSHK_OUT_REQ === 0 &&
+        this.bus.HSHK_IN_REQ === 0,
+    );
     this.bus.HSHK_IN_DENA = 0;
     this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
     setHshkInReq(this.bus, 1, raiseIrq);
-    await this.wait(() => this.bus.HSHK_ENA === 1);
-    this.bus.HSHK_IN_REQ = 0;
   }
 
   /**
@@ -378,9 +377,10 @@ export class IoControlHandshake {
     }
   }
 
-  /** CPU が ENA=0 にするのを待って送信完了とする */
+  /** 送信完了（信号は transfer 内で終端済み） */
   private async finalizeSend(): Promise<void> {
-    await this.wait(() => this.bus.HSHK_ENA === 0);
+    await this.wait(() => this.bus.HSHK_IN_DACK === 0);
+    setHshkInReq(this.bus, 0, false);
   }
 
   /**

@@ -546,12 +546,19 @@ export class IoBoardHandshakeMock {
 
   /**
    * 保留中のタイマー割り込みを配送する。
-   * INTERRUPT_BUSY=1（CPU が割り込み処理中）または HSHK_ENA=1（転送中）の間は
+   * INTERRUPT_BUSY=1（CPU が割り込み処理中）またはハンドシェイク線が動作中の間は
    * INT_CAUSE の取り違えを避けるため配送せず、短い間隔で再試行する。
    */
   private flushTimerInterrupt(): void {
     if (!this.timerIrqPending) return;
-    if (this.bus.INTERRUPT_BUSY === 1 || this.bus.HSHK_ENA === 1) {
+    const handshakeBusy =
+      this.bus.HSHK_OUT_REQ === 1 ||
+      this.bus.HSHK_OUT_DENA === 1 ||
+      this.bus.HSHK_IN_DACK === 1 ||
+      this.bus.HSHK_IN_REQ === 1 ||
+      this.bus.HSHK_IN_DENA === 1 ||
+      this.bus.HSHK_OUT_DACK === 1;
+    if (this.bus.INTERRUPT_BUSY === 1 || handshakeBusy) {
       this.scheduleTimerIrqRetry();
       return;
     }

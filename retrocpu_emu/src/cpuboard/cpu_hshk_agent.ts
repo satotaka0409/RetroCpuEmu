@@ -8,7 +8,11 @@
  * Worker 間で GPIO を共有できないための橋。
  */
 
-import { CPU_PAYLOAD_REMAINING_SIZE } from "../ioboard/handshake/command_cpu_to_io";
+import {
+  breakHistoryEntrySizeForCpu,
+  HSHK_CPU_TYPE,
+  makeCpuToIoRemainingSize,
+} from "../ioboard/handshake/command_cpu_to_io";
 import { wireHshkReq1ToIrq2 } from "../ioboard/handshake/io_board_mock";
 import { IoControlHandshake } from "../shared/handshake/handshake_ioboard";
 import {
@@ -47,6 +51,8 @@ export type CpuHandshakeAgentOptions = {
    * （IRQ2 と BALD 呼び出しが重ならないようにする。BIOS 結合テストと同じ）。
    */
   wireIrq2?: boolean;
+  /** CPU 種類（1=MN1613, 2=TMS9995）。可変フレーム長判定に使用。 */
+  cpuType?: number;
 };
 
 export class CpuHandshakeAgent {
@@ -58,6 +64,7 @@ export class CpuHandshakeAgent {
   private serving = false;
   private servePromise: Promise<void> | null = null;
   private abortServe = false;
+  private readonly remainingFromSoFar: (frameSoFar: Uint8Array) => number;
   /** CPU→IO 受信ループと IO→CPU（13h/14h）を直列化する */
   private busLock: Promise<void> = Promise.resolve();
 
@@ -66,6 +73,11 @@ export class CpuHandshakeAgent {
    */
   constructor(options: CpuHandshakeAgentOptions) {
     this.options = options;
+    const cpuType = options.cpuType ?? HSHK_CPU_TYPE.MN1613;
+    this.remainingFromSoFar = makeCpuToIoRemainingSize(
+      breakHistoryEntrySizeForCpu(cpuType),
+      cpuType,
+    );
     this.bus = createHandshakeBus();
     /**
      * IO 側待ちと同一スレッドで CPU を進める（2 バイト DENA/DACK を setTimeout 連打しない）。
@@ -170,8 +182,8 @@ export class CpuHandshakeAgent {
    */
   async handleOneRequest(): Promise<Uint8Array> {
     return this.withBusLock(async () => {
-      const frame = await this.io.receiveFramed(
-        (cmd) => CPU_PAYLOAD_REMAINING_SIZE[cmd] ?? 0,
+      const frame = await this.io.receiveFramedAdaptive(
+        this.remainingFromSoFar,
       );
       const response = await this.options.forward(frame);
       this.options.onTransaction?.(frame[0] ?? 0, frame, response);

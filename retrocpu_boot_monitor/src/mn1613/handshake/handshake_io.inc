@@ -9,30 +9,26 @@
 ; 制御信号ポート（方向分離）
 HSHK_OUT_CTRL	.equ	0x22
 ; Bit0  HSHK_OUT_REQ（CPU→IO 要求・CPU出力）
-; Bit1  HSHK_ENA（処理中／依頼受理）
-; Bit2  HSHK_OUT_DENA（CPU→IO データ有効・CPU出力）
-; Bit3  HSHK_IN_DACK（IO→CPU データ受信完了・CPU出力）
+; Bit1  HSHK_OUT_DENA（CPU→IO データ有効・CPU出力）
+; Bit2  HSHK_IN_DACK（IO→CPU データ受信完了・CPU出力）
 
 HSHK_OUT_DATA	.equ	0x23	; CPU→IO データ Bit0-7
 
 HSHK_IN_CTRL	.equ	0x24
 ; Bit0  HSHK_IN_REQ（IO→CPU 要求・CPU入力）
 ; Bit1  HSHK_IN_DENA（IO→CPU データ有効・CPU入力）
-; Bit2  HSHK_IN_DACK（IO→CPU データ受信完了・CPU入力）
-; Bit3  HSHK_OUT_DACK（CPU→IO データ受信完了・CPU入力）
+; Bit2  HSHK_OUT_DACK（CPU→IO データ受信完了・CPU入力）
 
 HSHK_IN_DATA	.equ	0x25	; IO→CPU データ Bit0-7
 
 ; ビットマスク（LSB=Bit0）
 HSHK_OUT_REQ_BIT	.equ	0x01
-HSHK_ENA_BIT		.equ	0x02
-HSHK_OUT_DENA_BIT	.equ	0x04
-HSHK_IN_DACK_BIT	.equ	0x08
+HSHK_OUT_DENA_BIT	.equ	0x02
+HSHK_IN_DACK_BIT	.equ	0x04
 
 HSHK_IN_REQ_BIT		.equ	0x01
 HSHK_IN_DENA_BIT	.equ	0x02
-HSHK_IN_DACK_IN_BIT	.equ	0x04
-HSHK_OUT_DACK_BIT	.equ	0x08
+HSHK_OUT_DACK_BIT	.equ	0x04
 
 ; 互換エイリアス（旧名）
 HSHK_CTRL	.equ	HSHK_OUT_CTRL

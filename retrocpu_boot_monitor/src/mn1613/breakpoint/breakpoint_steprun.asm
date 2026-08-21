@@ -1,11 +1,11 @@
 ; breakpoint_steprun.asm
 ; 1 命令ステップ（CPLD ワンショット。比較器は使わない）
 ; 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
-;   MN1613_CPUボードメモリ_IOマップ.mdc（0036/0037）
+;   MN1613_CPUボードメモリ_IOマップ.mdc（0036=ENA / 0037=DELAY）
 ;
 ; 18h 方式 1: GL_BP_STEP_ARM を立て、OK を返す。ENA はここでは上げない
 ;   （ハンドラ途中のフェッチで発火するため）。INT1 の LPSW 1 直前に
-;   g_step_arm_cpld が 0037h=2006h・0036h=1 を書く。
+;   g_step_arm_cpld が 0037h=delay・0036h=1 を書く。
 ; 要因 1: 1Bh（アドレス・レジスタ・スタック 16 ワード）を送りモニタ HALT（R0=1）。
 ; 履歴リングには書かない。
 
@@ -63,13 +63,11 @@ l_sr_61_ok:
 
 ; -------------------------------------------------------
 ; LPSW 1 の直前に CPLD を武装する（INT1 エピローグから BALD）。
-; @note 常に 0037h へ LPSW 2 の語を書く。GL_BP_STEP_ARM≠0 のときだけ
-;   0036h=1 にしてフラグを落とす。通常再開では ENA を触らない。
+; @note GL_BP_STEP_ARM≠0 のときだけ 0037h=delay / 0036h=1 にして
+;   フラグを落とす。通常再開では DELAY/ENA を触らない。
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
 g_step_arm_cpld:
-	mvwi	R0, #STEP_BRK_COM_LPSW2
-	wt	R0, IO_STEP_BRK_COM
 	l	R0, *GL_BP_STEP_ARM
 	or	R0, R0, Z
 	b	l_sr_arm_go
@@ -77,6 +75,8 @@ g_step_arm_cpld:
 l_sr_arm_go:
 	eor	R0, R0
 	st	R0, *GL_BP_STEP_ARM
+	mvwi	R0, #STEP_BRK_DELAY_1STEP
+	wt	R0, IO_STEP_BRK_DELAY
 	mvi	R0, #1
 	wt	R0, IO_STEP_BRK_ENA
 	ret

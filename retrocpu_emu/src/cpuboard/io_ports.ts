@@ -5,7 +5,7 @@
  * 0000 RESET_VECTOR — リセット時 CPU が読むベクタ表の先頭（+2=STR / +3=IC）
  * 0020〜0024 — ハンドシェイク（任意で bridge 接続）
  * 0030〜0034 — CPLD アドレス比較器（設定・ヒット・前回書込値）
- * 0036〜0037 — CPLD ステップ実行（ENA / トリガ命令語）
+ * 0036〜0037 — CPLD ステップ実行（ENA / DELAY）
  */
 
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
@@ -18,6 +18,7 @@ import {
   createHandshakeIoPortBridge,
   IO_PORT as HSHK_IO_PORT,
 } from "./handshake/io_port_bridge";
+import { Tms9995CruHandshake } from "./tms9995";
 import {
   addrComparators,
   IO_PORT_BREAK_ADDR_HI,
@@ -27,7 +28,7 @@ import {
   IO_PORT_BREAK_PREV,
 } from "./mn1613/addr_comparator";
 import {
-  IO_PORT_STEP_COM,
+  IO_PORT_STEP_DELAY,
   IO_PORT_STEP_ENA,
   stepBreak,
 } from "./mn1613/step_break";
@@ -46,10 +47,67 @@ export const RESET_VECTOR_IC_OFF = 3;
 /** H 命令オペコード */
 export const OPCODE_H = 0x2000;
 
+export const CPU_PORT_MODE = {
+  MN1613: 1,
+  TMS9995: 2,
+} as const;
+
 let _resetVector = MONITOR_ENTRY_WORD;
 let _handshakeBus: CpuIoSignals | null = null;
 let _intCause = 0;
 let _interruptBusy = 0;
+let _cpuPortMode: number = CPU_PORT_MODE.MN1613;
+let _tmsCru = new Tms9995CruHandshake({ strictRoles: false });
+let _hshkBridge: ReturnType<typeof createHandshakeIoPortBridge> | null = null;
+
+function toBit(v: number): 0 | 1 {
+  return (v & 1) === 0 ? 0 : 1;
+}
+
+function syncBusToTmsCru(): void {
+  if (!_handshakeBus) return;
+  _tmsCru.cpuWriteSignal("INTERRUPT_BUSY", toBit(_handshakeBus.INTERRUPT_BUSY));
+  _tmsCru.ioSetInt1Cause(_handshakeBus.INT_CAUSE & 0x03);
+  _tmsCru.ioSetInt2Cause((_handshakeBus.INT_CAUSE >> 1) & 0x01);
+
+  _tmsCru.cpuWriteSignal("HSHK_OUT_REQ", toBit(_handshakeBus.HSHK_OUT_REQ));
+  _tmsCru.cpuWriteSignal("HSHK_OUT_DENA", toBit(_handshakeBus.HSHK_OUT_DENA));
+  _tmsCru.cpuWriteSignal("HSHK_IN_DACK", toBit(_handshakeBus.HSHK_IN_DACK));
+
+  _tmsCru.ioWriteSignal("HSHK_IN_REQ", toBit(_handshakeBus.HSHK_IN_REQ));
+  _tmsCru.ioWriteSignal("HSHK_IN_DENA", toBit(_handshakeBus.HSHK_IN_DENA));
+  _tmsCru.ioWriteSignal("HSHK_OUT_DACK", toBit(_handshakeBus.HSHK_OUT_DACK));
+
+  _tmsCru.cpuWriteOutDataByte(_handshakeBus.HSHK_OUT_DATA & 0xff);
+  _tmsCru.ioWriteInDataByte(_handshakeBus.HSHK_IN_DATA & 0xff);
+}
+
+function syncTmsCruToBus(): void {
+  if (!_handshakeBus) return;
+  const snap = _tmsCru.snapshot();
+  _handshakeBus.INTERRUPT_BUSY = snap.cpuOutSignals.INTERRUPT_BUSY;
+  _handshakeBus.INT_CAUSE = (snap.cpuInSignals.INT1_CAUSE0 |
+    (snap.cpuInSignals.INT1_CAUSE1 << 1) |
+    (snap.cpuInSignals.INT2_CAUSE << 1)) as CpuIoSignals["INT_CAUSE"];
+
+  _handshakeBus.HSHK_OUT_REQ = snap.cpuOutSignals.HSHK_OUT_REQ;
+  _handshakeBus.HSHK_OUT_DENA = snap.cpuOutSignals.HSHK_OUT_DENA;
+  _handshakeBus.HSHK_IN_DACK = snap.cpuOutSignals.HSHK_IN_DACK;
+
+  _handshakeBus.HSHK_IN_REQ = snap.cpuInSignals.HSHK_IN_REQ;
+  _handshakeBus.HSHK_IN_DENA = snap.cpuInSignals.HSHK_IN_DENA;
+  _handshakeBus.HSHK_OUT_DACK = snap.cpuInSignals.HSHK_OUT_DACK;
+
+  _handshakeBus.HSHK_OUT_DATA = snap.outDataByte & 0xff;
+  _handshakeBus.HSHK_IN_DATA = snap.inDataByte & 0xff;
+}
+
+function splitIntCause(cause: number): { int1: number; int2: 0 | 1 } {
+  return {
+    int1: cause & 0x03,
+    int2: toBit((cause >> 1) & 0x01),
+  };
+}
 
 /**
  * リセット時に CPU が IO:0 から読むベクタ表の先頭を返す。
@@ -70,6 +128,27 @@ export function setResetVector(wordAddr: number): void {
  */
 export function attachHandshakeBus(bus: CpuIoSignals | null): void {
   _handshakeBus = bus;
+  _hshkBridge = bus ? createHandshakeIoPortBridge(bus) : null;
+  syncBusToTmsCru();
+}
+
+/**
+ * CPU 側で使うハンドシェイク配線モードを切り替える。
+ * 1=MN1613（既定）/ 2=TMS9995（CRU）。
+ */
+export function setCpuPortMode(cpuType: number): void {
+  _cpuPortMode =
+    cpuType === CPU_PORT_MODE.TMS9995
+      ? CPU_PORT_MODE.TMS9995
+      : CPU_PORT_MODE.MN1613;
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    syncBusToTmsCru();
+  }
+}
+
+/** 現在の CPU 配線モード（1=MN1613 / 2=TMS9995）を返す。 */
+export function getCpuPortMode(): number {
+  return _cpuPortMode;
 }
 
 /**
@@ -79,6 +158,12 @@ export function attachHandshakeBus(bus: CpuIoSignals | null): void {
  */
 export function setIntCause(cause: number): void {
   _intCause = cause & 0x07;
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    const split = splitIntCause(_intCause);
+    _tmsCru.ioSetInt1Cause(split.int1);
+    _tmsCru.ioSetInt2Cause(split.int2);
+    syncTmsCruToBus();
+  }
   if (_handshakeBus) {
     _handshakeBus.INT_CAUSE = _intCause as CpuIoSignals["INT_CAUSE"];
   }
@@ -90,16 +175,66 @@ export function setIntCause(cause: number): void {
  * @returns 0 または 1
  */
 export function getInterruptBusy(): number {
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    return _tmsCru.ioReadSignal("INTERRUPT_BUSY");
+  }
   return _handshakeBus ? _handshakeBus.INTERRUPT_BUSY : _interruptBusy;
 }
 
 /**
- * ハンドシェイク転送中（HSHK_ENA=1）かどうかを返す。
+ * ハンドシェイク転送中（REQ/DENA/DACK のいずれかが 1）かどうかを返す。
  * バス未接続時は常に false。
  * @returns 転送中なら true
  */
 export function isHandshakeActive(): boolean {
-  return _handshakeBus ? _handshakeBus.HSHK_ENA === 1 : false;
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    const snap = _tmsCru.snapshot();
+    return (
+      snap.cpuOutSignals.HSHK_OUT_REQ === 1 ||
+      snap.cpuOutSignals.HSHK_OUT_DENA === 1 ||
+      snap.cpuOutSignals.HSHK_IN_DACK === 1 ||
+      snap.cpuInSignals.HSHK_IN_REQ === 1 ||
+      snap.cpuInSignals.HSHK_IN_DENA === 1 ||
+      snap.cpuInSignals.HSHK_OUT_DACK === 1
+    );
+  }
+  if (!_handshakeBus) return false;
+  return (
+    _handshakeBus.HSHK_OUT_REQ === 1 ||
+    _handshakeBus.HSHK_OUT_DENA === 1 ||
+    _handshakeBus.HSHK_IN_DACK === 1 ||
+    _handshakeBus.HSHK_IN_REQ === 1 ||
+    _handshakeBus.HSHK_IN_DENA === 1 ||
+    _handshakeBus.HSHK_OUT_DACK === 1
+  );
+}
+
+/**
+ * TMS9995 CPU コア用: CRU 1bit 書き込み。
+ * モードが TMS9995 のときのみ有効（MN1613 モードでは no-op）。
+ */
+export function tms9995CpuWriteCruBit(bitAddr: number, value: 0 | 1): void {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return;
+  _tmsCru.writeBit("cpu", bitAddr, value);
+  const snap = _tmsCru.snapshot();
+  _interruptBusy = snap.cpuOutSignals.INTERRUPT_BUSY;
+  _intCause =
+    (snap.cpuInSignals.INT1_CAUSE0 |
+      (snap.cpuInSignals.INT1_CAUSE1 << 1) |
+      (snap.cpuInSignals.INT2_CAUSE << 1)) &
+    0x07;
+  syncTmsCruToBus();
+}
+
+/**
+ * TMS9995 CPU コア用: CRU 1bit 読み出し。
+ * モードが TMS9995 以外なら 0 を返す。
+ */
+export function tms9995CpuReadCruBit(bitAddr: number): 0 | 1 {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return 0;
+  const bit = _tmsCru.readBit("cpu", bitAddr);
+  syncTmsCruToBus();
+  return bit;
 }
 
 /**
@@ -127,10 +262,6 @@ function raiseStepBreakIrq(): void {
  * 0036〜0037 はステップ。ヒット時は INT1・INT1_CAUSE=1。
  */
 export function attachIoBoardPorts(): void {
-  const hshk = _handshakeBus
-    ? createHandshakeIoPortBridge(_handshakeBus)
-    : null;
-
   addrComparators.setOnHit(raiseAddrBreakIrq);
   stepBreak.setOnHit(raiseStepBreakIrq);
 
@@ -148,7 +279,7 @@ export function attachIoBoardPorts(): void {
       return stepVal;
     }
     if (
-      hshk &&
+      _hshkBridge &&
       (p === HSHK_IO_PORT.INTERRUPT_BUSY ||
         p === HSHK_IO_PORT.INT_CAUSE ||
         p === HSHK_IO_PORT.HSHK_OUT_CTRL ||
@@ -156,7 +287,7 @@ export function attachIoBoardPorts(): void {
         p === HSHK_IO_PORT.HSHK_OUT_DATA ||
         p === HSHK_IO_PORT.HSHK_IN_DATA)
     ) {
-      return hshk.read(p);
+      return _hshkBridge.read(p);
     }
     // バス未接続でも割り込み要因・処理中フラグは CPU から見える必要がある
     if (p === HSHK_IO_PORT.INTERRUPT_BUSY) return _interruptBusy;
@@ -180,12 +311,12 @@ export function attachIoBoardPorts(): void {
       addrComparators.writePort(p, val);
       return;
     }
-    if (p === IO_PORT_STEP_ENA || p === IO_PORT_STEP_COM) {
+    if (p === IO_PORT_STEP_ENA || p === IO_PORT_STEP_DELAY) {
       stepBreak.writePort(p, val);
       return;
     }
-    if (hshk) {
-      hshk.write(p, val);
+    if (_hshkBridge) {
+      _hshkBridge.write(p, val);
       return;
     }
     if (p === HSHK_IO_PORT.INTERRUPT_BUSY) {

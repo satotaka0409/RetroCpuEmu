@@ -113,7 +113,9 @@ export class Tms9995ArtifactSession {
   readWordBe(byteAddr: number): number {
     const a = byteAddr >>> 0;
     if (a & 1) {
-      throw new Error(`readWordBe requires even address (got 0x${a.toString(16)})`);
+      throw new Error(
+        `readWordBe requires even address (got 0x${a.toString(16)})`,
+      );
     }
     if (a + 1 >= this.memoryBytes) {
       throw new Error(`readWordBe out of range: 0x${a.toString(16)}`);
@@ -169,7 +171,7 @@ export class Tms9995ArtifactSession {
       args: options.args,
       returnAddr: options.returnAddr,
       stackInit: options.stackInit ?? TMS9995_DEFAULT_STACK_INIT,
-      argRegisters,
+      argRegisters: [...argRegisters],
       allowSpecialPurposeRegisters:
         options.allowSpecialPurposeRegisters ?? !useAsm,
     });

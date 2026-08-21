@@ -14,12 +14,9 @@ import {
   type SharedBoard,
 } from "../shared/shared_board";
 import { CpuDmaTarget } from "./cpu_dma";
-import {
-  attachCpuBoardLink,
-  sendCpuToIoFrame,
-} from "./cpu_board_link";
+import { attachCpuBoardLink, sendCpuToIoFrame } from "./cpu_board_link";
 import { CpuHandshakeAgent } from "./cpu_hshk_agent";
-import { attachHandshakeBus } from "./io_ports";
+import { attachHandshakeBus, setCpuPortMode } from "./io_ports";
 import { enterResetWait } from "./boot";
 import {
   getClockCount,
@@ -29,14 +26,12 @@ import {
   tickCpu,
 } from "./mn1613/mn1613";
 import { getLogger, initLogging } from "../log/logger";
-import {
-  cpuSlicePlan,
-  handshakeBusyFromBus,
-} from "./cpu_slice";
+import { cpuSlicePlan, handshakeBusyFromBus } from "./cpu_slice";
 
 type WorkerInit = {
   control: SharedArrayBuffer;
   status: SharedArrayBuffer;
+  cpuType?: number;
   stepsPerSlice?: number;
   sliceMs?: number;
   logDir?: string;
@@ -55,6 +50,7 @@ const sliceMs = init.sliceMs ?? 4;
  */
 const hshkAgent = new CpuHandshakeAgent({
   forward: (frame) => sendCpuToIoFrame(frame),
+  cpuType: init.cpuType,
   onTransaction: (cmd, frame, response) => {
     log.debug("CPU→IO コマンドを転送", {
       cmd: `0x${cmd.toString(16)}`,
@@ -67,6 +63,7 @@ const hshkAgent = new CpuHandshakeAgent({
   },
 });
 attachHandshakeBus(hshkAgent.bus);
+setCpuPortMode(init.cpuType ?? 1);
 // 電源投入は idle。ブートモニタ DMA と RST は IO ボード（F7 / 電源投入）が行う。
 enterResetWait();
 
@@ -155,10 +152,7 @@ function slice(): void {
   }
 
   publishStatus();
-  timer = setTimeout(
-    slice,
-    handshakeBusyFromBus(hshkAgent.bus) ? 0 : sliceMs,
-  );
+  timer = setTimeout(slice, handshakeBusyFromBus(hshkAgent.bus) ? 0 : sliceMs);
 }
 
 /** スライス実行を開始する（多重呼び出しは無視） */
@@ -186,21 +180,18 @@ function stop(): void {
   parentPort?.postMessage({ type: "cpu:stopped" });
 }
 
-parentPort?.on(
-  "message",
-  (msg: { type: string; port?: MessagePort }) => {
-    if (msg?.type === "start") start();
-    else if (msg?.type === "stop") stop();
-    else if (
-      (msg?.type === "link:port" || msg?.type === "dma:port") &&
-      msg.port
-    ) {
-      // dma:port は旧名（互換）
-      attachCpuBoardLink(msg.port, dma, hshkAgent);
-      hshkAgent.start();
-    }
-  },
-);
+parentPort?.on("message", (msg: { type: string; port?: MessagePort }) => {
+  if (msg?.type === "start") start();
+  else if (msg?.type === "stop") stop();
+  else if (
+    (msg?.type === "link:port" || msg?.type === "dma:port") &&
+    msg.port
+  ) {
+    // dma:port は旧名（互換）
+    attachCpuBoardLink(msg.port, dma, hshkAgent);
+    hshkAgent.start();
+  }
+});
 
 log.info("CPU Worker 準備完了");
 parentPort?.postMessage({ type: "cpu:ready" });

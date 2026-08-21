@@ -32,6 +32,6 @@ IO_BREAK_PREV		.equ	0x34
 
 ; ステップ実行ワンショット（比較器を使わない）
 IO_STEP_BRK_ENA		.equ	0x36
-IO_STEP_BRK_COM		.equ	0x37
-; 既定トリガ: LPSW 2
-STEP_BRK_COM_LPSW2	.equ	0x2006
+IO_STEP_BRK_DELAY	.equ	0x37
+; 1命令ステップ用の既定ディレイ値
+STEP_BRK_DELAY_1STEP	.equ	0x01
