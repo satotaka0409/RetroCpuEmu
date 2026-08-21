@@ -75,12 +75,12 @@ describe("CPU_FRAME_SIZE", () => {
   it("モード設定は 2 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.MODE_SET]).toBe(2);
   });
-  it("16進キー・PCキー取得はコマンドのみ 1 バイト", () => {
+  it("16進キーは 1 バイト、PCキー取得は pad を含めて 2 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.HEX_KEY_GET]).toBe(1);
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.PC_KEY_GET]).toBe(1);
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.PC_KEY_GET]).toBe(2);
   });
-  it("LED表示依頼は 15 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(15);
+  it("LED表示依頼は 16 バイト（末尾 pad を含む）", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY]).toBe(16);
   });
   it("BEEP は 6 バイト（pad 含む）、タイマーは番号込みで 6 バイト", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP]).toBe(6);
@@ -94,8 +94,8 @@ describe("CPU_FRAME_SIZE", () => {
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.STEP_NOTIFY]).toBe(59);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.UNDEF_NOTIFY]).toBe(59);
   });
-  it("LCD制御は 5 バイト、文字列表示は 20 バイト", () => {
-    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(5);
+  it("LCD制御は 6 バイト（cmd+pad+4引数）、文字列表示は 20 バイト", () => {
+    expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_CTRL]).toBe(6);
     expect(CPU_FRAME_SIZE[CMD_CPU_TO_IO.LCD_TEXT]).toBe(20);
   });
 
@@ -201,7 +201,7 @@ describe("CpuToIoCommandDispatcher — PCキー入力取得(0x15)", () => {
 
   it("getPcKey が呼ばれ 3バイト(ASCII + キーコード + ステータス)を返す", () => {
     const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET]),
+      new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET, 0x00]),
     );
     expect(handlers.getPcKey).toHaveBeenCalledOnce();
     expect(response.length).toBe(3);
@@ -214,7 +214,7 @@ describe("CpuToIoCommandDispatcher — PCキー入力取得(0x15)", () => {
       status: RESPONSE_CODE.OK,
     });
     const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET]),
+      new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET, 0x00]),
     );
     expect(response[0]).toBe(0x41);
     expect(response[1]).toBe(0x26);
@@ -238,21 +238,22 @@ describe("CpuToIoCommandDispatcher — LED表示依頼(0x16)", () => {
    * LED 表示依頼フレームを組み立てる。
    * @param bullet0_7 砲弾 0–7
    * @param bullet8_F 砲弾 8–F
-   * @returns cmd 0x16 + 7seg×12 + 砲弾 2 バイト
+   * @returns cmd 0x16 + pad + 7seg×12 + 砲弾 2 バイト
    */
   function ledFrame(bullet0_7: number, bullet8_F: number): Uint8Array {
-    const frame = new Uint8Array(15);
+    const frame = new Uint8Array(16);
     frame[0] = CMD_CPU_TO_IO.LED_DISPLAY;
-    frame.set(sevenSeg, 1);
-    frame[13] = bullet0_7;
-    frame[14] = bullet8_F;
+    frame[1] = 0x00;
+    frame.set(sevenSeg, 2);
+    frame[14] = bullet0_7;
+    frame[15] = bullet8_F;
     return frame;
   }
 
   it("onLedDisplay が呼ばれ OK を返す", () => {
     const response = dispatcher.dispatch(ledFrame(0xff, 0x00));
     expect(handlers.onLedDisplay).toHaveBeenCalledOnce();
-    expect(response[0]).toBe(RESPONSE_CODE.OK);
+    expect(response).toEqual(new Uint8Array([RESPONSE_CODE.OK]));
   });
 
   it("onLedDisplay に渡される sevenSeg・bulletLed が正確", () => {
@@ -714,10 +715,10 @@ describe("CpuToIoCommandDispatcher — LCD(0x17/0x18)", () => {
   });
 
   it("17h を onLcdControl へ渡し OK を返す", () => {
-    const frame = new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0, 0, 0]);
+    const frame = new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0, 0, 0, 0]);
     const response = dispatcher.dispatch(frame);
     expect(handlers.onLcdControl).toHaveBeenCalledWith(frame);
-    expect(response[0]).toBe(RESPONSE_CODE.OK);
+    expect(response).toEqual(new Uint8Array([RESPONSE_CODE.OK]));
   });
 
   it("18h を onLcdText へ渡し OK を返す", () => {
@@ -730,7 +731,7 @@ describe("CpuToIoCommandDispatcher — LCD(0x17/0x18)", () => {
 
   it("17h のフレーム不足は NG でハンドラを呼ばない", () => {
     const response = dispatcher.dispatch(
-      new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0]),
+      new Uint8Array([CMD_CPU_TO_IO.LCD_CTRL, 0, 0, 0, 0]),
     );
     expect(handlers.onLcdControl).not.toHaveBeenCalled();
     expect(response[0]).toBe(RESPONSE_CODE.NG);
@@ -823,6 +824,11 @@ describe("CpuToIoCommandDispatcher — エラーケース", () => {
 
   it("フレーム長が不足している場合は NG を返す（BEEP - 4バイト）", () => {
     const short = new Uint8Array([CMD_CPU_TO_IO.BEEP, 0x00, 0x01, 0x00]);
+    expect(dispatcher.dispatch(short)[0]).toBe(RESPONSE_CODE.NG);
+  });
+
+  it("フレーム長が不足している場合は NG を返す（PCキー取得 - pad 欠落）", () => {
+    const short = new Uint8Array([CMD_CPU_TO_IO.PC_KEY_GET]);
     expect(dispatcher.dispatch(short)[0]).toBe(RESPONSE_CODE.NG);
   });
 });

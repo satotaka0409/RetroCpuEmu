@@ -46,7 +46,7 @@ describe("LcdConsoleEmulator", () => {
 
   it("17h Clear で全消去しカーソルをホームへ戻す", () => {
     lcd.writeText(1, 0, "ABC");
-    const frame = new Uint8Array([0x17, 0, 0, 0, 0]);
+    const frame = new Uint8Array([0x17, 0x00, 0, 0, 0, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.OK);
     const snap = lcd.snapshot();
     expect(snap.lines[1]).toBe(" ".repeat(16));
@@ -55,12 +55,12 @@ describe("LcdConsoleEmulator", () => {
   });
 
   it("17h SetCursor の行不正は NG", () => {
-    const frame = new Uint8Array([0x17, 3, 0, 2, 0]);
+    const frame = new Uint8Array([0x17, 0x00, 3, 0, 2, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.NG);
   });
 
   it("DisplayCtrl で表示OFF/カーソル/点滅を切り替える", () => {
-    const frame = new Uint8Array([0x17, 2, 0b110, 0, 0]);
+    const frame = new Uint8Array([0x17, 0x00, 2, 0b110, 0, 0]);
     expect(lcd.handleControlFrame(frame)).toBe(LCD_RESPONSE.OK);
     const snap = lcd.snapshot();
     expect(snap.displayOn).toBe(false);

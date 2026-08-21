@@ -1,5 +1,5 @@
 ; LCD制御（ハンドシェイク 17h）
-; 線上 送信 5B: 17h, kind, argA, argB, argC → 受信 1B: status
+; 線上 送信 6B: 17h, pad(00), kind, argA, argB, argC → 受信 1B: status
 ; param R1 種別
 ; param R2 引数A
 ; param R3 Bit8-9=行 / Bit0-7=列（SetCursor）
@@ -36,6 +36,11 @@ g_bios_lcd_control_:
 	JNE	l_lcd1_fail
 
 	LI	R1, #HSHK_CMD_LCD_CTRL
+	BL	g_hshk_send_byte
+	CI	R1, #HSHK_OK
+	JNE	l_lcd1_fail
+
+	CLR	R1
 	BL	g_hshk_send_byte
 	CI	R1, #HSHK_OK
 	JNE	l_lcd1_fail

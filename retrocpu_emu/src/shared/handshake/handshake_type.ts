@@ -189,7 +189,7 @@ export const CMD_CPU_TO_IO = {
   DISTANCE_GET_RAW: 0x1f,
 } as const;
 
-/** I/O -> CPU 方向コマンド（HandShake.mdc 概要表の順。番号は CPU→IO と独立） */
+/** I/O -> CPU 方向コマンド（HandShake.mdc 概要表の順。TCP も同じ番号を使う） */
 export const CMD_IO_TO_CPU = {
   /** 比較器ブレイク設定（命令／メモリ／IO、スロット 0–3） */
   BREAK_MEM_IO_SET: 0x80,
@@ -209,6 +209,8 @@ export const CMD_IO_TO_CPU = {
   BREAK_HIST_GET: 0x87,
   /** ブレイクから復帰して実行する（0=通常 / 1=ステップ） */
   BREAK_RESUME: 0x88,
+  /** TTY コンソール入力 */
+  TTY_CONSOLE_INPUT: 0x89,
   /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */
   BREAK_INST_SET: 0x42,
   /** 廃止（旧 INT3 命令パッチ。ディスパッチ範囲外） */

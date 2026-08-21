@@ -150,6 +150,7 @@ l_hshk_io_recv_hdr:
 	bald	g_hshk_recv_byte
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_ioh_fail
+	; pad(00)
 	bald	g_hshk_recv_byte
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_ioh_fail
@@ -161,6 +162,7 @@ l_hshk_io_recv_hdr:
 	andi	R1, #0x00ff
 	or	R2, R1
 	push	R2
+	; count
 	bald	g_hshk_recv_byte
 	cwi	R0, #HSHK_OK, Z
 	b	l_hshk_ioh_fail2
@@ -168,12 +170,12 @@ l_hshk_io_recv_hdr:
 	pop	R0
 	mv	R2, R1
 	mv	R1, R0
-	mvwi	R0, #HSHK_OK
-	ret
-	mv	R2, R1
+	; trailing pad(00)
 	bald	g_hshk_recv_byte
 	cwi	R0, #HSHK_OK, Z
-	b	l_hshk_ioh_fail2
+	b	l_hshk_ioh_fail
+	mvwi	R0, #HSHK_OK
+	ret
 l_hshk_ioh_fail2:
 l_hshk_ioh_fail:
 	mvwi	R0, #HSHK_NG

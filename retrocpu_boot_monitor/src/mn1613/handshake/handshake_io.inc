@@ -91,9 +91,14 @@ HSHK_CMD_IO_READ		.equ	0x15
 HSHK_CMD_IO_WRITE		.equ	0x16
 HSHK_CMD_BREAK_HIST_GET		.equ	0x17
 HSHK_CMD_BREAK_RESUME		.equ	0x18
+; 89h(TTY入力) は仕様予約。monitor IRQ ディスパッチは現状 10h-18h。
 HSHK_CMD_IO_BASE		.equ	0x10
 HSHK_CMD_IO_LAST		.equ	0x18
 HSHK_CMD_IO_LIMIT		.equ	0x19
+; 高位 API（80h-89h）→ 線上値（10h-19h）変換
+HSHK_CMD_IO_HI_BASE		.equ	0x80
+HSHK_CMD_IO_HI_LIMIT		.equ	0x8a
+HSHK_CMD_IO_WIRE_BIAS		.equ	0x70
 ; 廃止（ディスパッチ範囲外。INT3 命令パッチ）
 HSHK_CMD_BREAK_INST_SET		.equ	0x42
 HSHK_CMD_BREAK_INST_CLR		.equ	0x43

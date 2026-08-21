@@ -88,7 +88,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ読み出し（コマンド 13h）。ヘッダ 10B（末尾パッド）→データ→OK。
+   * IO→CPU メモリ読み出し（コマンド 13h）。ヘッダ 10B（cmd, pad, addr32, count32）→データ→OK。
    * @param byteAddr 読み出し開始バイトアドレス
    * @param byteCount 読み出しバイト数（0 ならデータなしで status のみ）
    * @returns 読み出したバイト列
@@ -98,10 +98,10 @@ export class IoControlHandshake {
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
-        this.toWireIoToCpuCmd(CMD_IO_TO_CPU.MEM_READ),
+        CMD_IO_TO_CPU.MEM_READ,
+        0,
         ...u32be(byteAddr >>> 0),
         ...u32be(count),
-        0,
       ]),
     );
     const out =
@@ -122,7 +122,7 @@ export class IoControlHandshake {
       return RESPONSE_CODE.NG;
     }
     const frame = new Uint8Array(ADDR_BREAK_SET_FRAME_LEN);
-    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.BREAK_MEM_IO_SET);
+    frame[0] = CMD_IO_TO_CPU.BREAK_MEM_IO_SET;
     frame.set(payload, 1);
     const reply = await this.sendReceive(frame, 1);
     return (reply[0] ?? RESPONSE_CODE.NG) & 0xff;
@@ -135,7 +135,7 @@ export class IoControlHandshake {
    */
   async addrBreakClr(slot: number): Promise<number> {
     const frame = Uint8Array.from([
-      this.toWireIoToCpuCmd(CMD_IO_TO_CPU.BREAK_MEM_IO_CLR),
+      CMD_IO_TO_CPU.BREAK_MEM_IO_CLR,
       slot & 0xff,
     ]);
     const reply = await this.sendReceive(frame, 1);
@@ -143,17 +143,17 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU メモリ書き込み（コマンド 14h）。ヘッダ 10B（末尾パッド）＋データ→OK/NG。
+   * IO→CPU メモリ書き込み（コマンド 14h）。ヘッダ 10B（cmd, pad, addr32, count32）＋データ→OK/NG。
    * @param byteAddr 書き込み開始バイトアドレス
    * @param data 書き込むバイト列（0 長ならヘッダのあと status のみ）
    */
   async memWrite(byteAddr: number, data: Uint8Array): Promise<void> {
     const n = data.length >>> 0;
     const frame = new Uint8Array(10 + n);
-    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.MEM_WRITE);
-    frame.set(u32be(byteAddr >>> 0), 1);
-    frame.set(u32be(n), 5);
-    frame[9] = 0;
+    frame[0] = CMD_IO_TO_CPU.MEM_WRITE;
+    frame[1] = 0;
+    frame.set(u32be(byteAddr >>> 0), 2);
+    frame.set(u32be(n), 6);
     frame.set(data, 10);
     await this.initiateSend();
     await this.transferBytesToCpu(frame);
@@ -165,7 +165,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU IO読み出し（コマンド 15h）。ヘッダのあと CPU がデータ＋status を返す。
+   * IO→CPU IO読み出し（コマンド 15h）。ヘッダ 6B（cmd, pad, addr16, count, pad）のあと CPU がデータ＋status を返す。
    * @param ioAddr 16bit IO アドレス
    * @param byteCount バイト数（0–254）
    * @returns 読み出したバイト列
@@ -178,10 +178,12 @@ export class IoControlHandshake {
     await this.initiateSend();
     await this.transferBytesToCpu(
       Uint8Array.from([
-        this.toWireIoToCpuCmd(CMD_IO_TO_CPU.IO_READ),
+        CMD_IO_TO_CPU.IO_READ,
+        0,
         (ioAddr >>> 8) & 0xff,
         ioAddr & 0xff,
         count,
+        0,
       ]),
     );
     const rec = await this.receiveBytesFromCpu(count + 1);
@@ -193,7 +195,7 @@ export class IoControlHandshake {
   }
 
   /**
-   * IO→CPU IO書き込み（コマンド 16h）。ヘッダ＋データのあと status。
+   * IO→CPU IO書き込み（コマンド 16h）。ヘッダ 6B（cmd, pad, addr16, count, pad）＋データのあと status。
    * @param ioAddr 16bit IO アドレス
    * @param data 書き込むバイト列（長さ 0–254）
    */
@@ -202,12 +204,14 @@ export class IoControlHandshake {
     if (n > HSHK_IO_MAX_BYTES) {
       throw new Error("handshake 16h count");
     }
-    const frame = new Uint8Array(4 + n);
-    frame[0] = this.toWireIoToCpuCmd(CMD_IO_TO_CPU.IO_WRITE);
-    frame[1] = (ioAddr >>> 8) & 0xff;
-    frame[2] = ioAddr & 0xff;
-    frame[3] = n & 0xff;
-    frame.set(data, 4);
+    const frame = new Uint8Array(6 + n);
+    frame[0] = CMD_IO_TO_CPU.IO_WRITE;
+    frame[1] = 0;
+    frame[2] = (ioAddr >>> 8) & 0xff;
+    frame[3] = ioAddr & 0xff;
+    frame[4] = n & 0xff;
+    frame[5] = 0;
+    frame.set(data, 6);
     await this.initiateSend();
     await this.transferBytesToCpu(frame);
     const st = await this.receiveBytesFromCpu(1);
@@ -341,6 +345,15 @@ export class IoControlHandshake {
    */
   private async initiateSend(options?: HandshakeSendOptions): Promise<void> {
     const raiseIrq = options?.raiseIrq !== false;
+    if (!raiseIrq) {
+      await this.wait(() => this.bus.HSHK_IN_REQ === 0);
+      this.bus.HSHK_IN_DENA = 0;
+      this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
+      setHshkInReq(this.bus, 1, false);
+      await this.wait(() => this.bus.HSHK_OUT_REQ === 0);
+      return;
+    }
+
     await this.wait(
       () =>
         this.bus.INTERRUPT_BUSY === 0 &&
@@ -349,7 +362,7 @@ export class IoControlHandshake {
     );
     this.bus.HSHK_IN_DENA = 0;
     this.bus.INT_CAUSE = INT_CAUSE_CODE.HANDSHAKE;
-    setHshkInReq(this.bus, 1, raiseIrq);
+    setHshkInReq(this.bus, 1, true);
   }
 
   /**
@@ -381,17 +394,5 @@ export class IoControlHandshake {
   private async finalizeSend(): Promise<void> {
     await this.wait(() => this.bus.HSHK_IN_DACK === 0);
     setHshkInReq(this.bus, 0, false);
-  }
-
-  /**
-   * IO→CPU コマンドIDを線上値へ正規化する。
-   * 高位 API では 0x80-0x88 を使うが、ハンドシェイク線上は 0x10-0x18。
-   */
-  private toWireIoToCpuCmd(cmd: number): number {
-    const v = cmd & 0xff;
-    if (v >= 0x80 && v <= 0x88) {
-      return (v - 0x70) & 0xff;
-    }
-    return v;
   }
 }

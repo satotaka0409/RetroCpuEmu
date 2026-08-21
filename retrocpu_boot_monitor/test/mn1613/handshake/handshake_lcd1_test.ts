@@ -75,7 +75,9 @@ test("17h フレーム（kind/argA/argB/argC）を正しく送る", async () => 
     expect(last).toBeTruthy();
     expect(last!.dir).toBe("cpu_to_io");
     expect(last!.cmd).toBe(0x17);
-    expect(Array.from(last!.frame)).toEqual([0x17, 0x03, 0x05, 0x01, 0x0f]);
+    expect(Array.from(last!.frame)).toEqual([
+      0x17, 0x00, 0x03, 0x05, 0x01, 0x0f,
+    ]);
 
     const status = last!.response?.[0] ?? 0;
     s.expectRegisters({ R0: status & 0xff });

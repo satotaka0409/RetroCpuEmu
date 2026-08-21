@@ -2,7 +2,7 @@
 ; PCキー入力取得（ハンドシェイク 15h）
 ; 根拠: HandShake.mdc「PCキー入力取得」/ boot_monitor.mdc / asm-rules.mdc
 ;
-; 線上 送信 1B: 15h → 受信 3B: ascii, keyCode, status
+; 線上 送信 2B: 15h, pad(00) → 受信 3B: ascii, keyCode, status
 ; モード不問。未入力時は ASCII/コードとも 0、status=OK もあり得る。
 ;
 ; 戻り: R0=OK/NG、R1=ASCII（下位 8bit）、R2=キーコード（下位 8bit）。
@@ -51,13 +51,14 @@ g_bios_pc_key_get_:
 	c	R1, R0, Z
 	b	l_pc_key_fail
 
-	bald	g_hshk_finalize_send
+	eor	R0, R0
+	bald	g_hshk_send_byte
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z
 	b	l_pc_key_fail
 
-	bald	g_hshk_wait_req1_1
+	bald	g_hshk_finalize_send
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z

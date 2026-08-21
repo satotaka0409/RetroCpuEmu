@@ -1,6 +1,6 @@
 /**
  * IO ボード側のデバッグ TCP サーバ（PC＝クライアントがつなぐ）。
- * 根拠: retrocpu_debug.mdc。コマンド番号は当面ハンドシェイクと同じ（80h/81h/83h/84h）。
+ * 根拠: retrocpu_debug.mdc。コマンド番号はハンドシェイクと同じ（80h/81h/83h/84h）。
  */
 
 import net from "node:net";

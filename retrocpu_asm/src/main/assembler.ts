@@ -6,7 +6,12 @@ import {
   matchWordDiffReloc,
   substLenCalls,
 } from "./expression";
-import { encodeInstruction, TWO_WORD_OPS, u16 } from "./mn1613/mn1613_encoder";
+import {
+  encodeInstruction,
+  splitAiSiImm4Chunks,
+  TWO_WORD_OPS,
+  u16,
+} from "./mn1613/mn1613_encoder";
 import {
   encodeTms9995Instruction,
   tms9995InstructionSize,
@@ -529,7 +534,13 @@ function pass1(
     if (byteMode) {
       setAreaPc(areas, areaPc(areas) + tms9995InstructionSize(line));
     } else {
-      setAreaPc(areas, areaPc(areas) + (TWO_WORD_OPS.has(op) ? 2 : 1));
+      const aiSiChunks = splitAiSiImm4Chunks(line, symbols, true);
+      const size = aiSiChunks
+        ? aiSiChunks.length
+        : TWO_WORD_OPS.has(op)
+          ? 2
+          : 1;
+      setAreaPc(areas, areaPc(areas) + size);
     }
   }
 

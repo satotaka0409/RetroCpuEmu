@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのメモリ書き込み（TCP 84h → ハンドシェイク 84h）
+ * Cursor 拡張 ↔ IO ボードのメモリ書き込み（TCP 14h → ハンドシェイク 14h）
  * 根拠: HandShake.mdc メモリ書き込み、retrocpu_debug.mdc メモリダンプ
  */
 
@@ -9,7 +9,7 @@ import {
   MEM_WRITE_REQ_HEADER_LEN,
 } from "../shared/handshake/handshake_type";
 
-/** 84h 要求（ヘッダ＋データ） */
+/** 14h 要求（ヘッダ＋データ） */
 export type MemWriteReq = {
   /** 開始バイトアドレス */
   byteAddr: number;
@@ -18,7 +18,7 @@ export type MemWriteReq = {
 };
 
 /**
- * 84h 要求フレームを組み立てる。
+ * 14h 要求フレームを組み立てる。
  * @param byteAddr 開始バイトアドレス
  * @param data 書き込むバイト列
  * @returns cmd + addr32 BE + count32 BE + data
@@ -44,8 +44,8 @@ export function encodeMemWriteFrame(
 }
 
 /**
- * 84h 要求を読む。
- * @param frame 先頭が 84h、長さ 9+count
+ * 14h 要求を読む。
+ * @param frame 先頭が 14h、長さ 9+count
  * @returns フィールド。不正なら null
  */
 export function parseMemWriteFrame(frame: Uint8Array): MemWriteReq | null {

@@ -60,7 +60,7 @@ async function waitReq1(
 
 test("15h は指定バイト数＋status を返す", async () => {
   await withCase(async (s, mock) => {
-    const toCpu = Uint8Array.from([0x15, 0x00, 0xa0, 0x02]);
+    const toCpu = Uint8Array.from([0x15, 0x00, 0x00, 0xa0, 0x02, 0x00]);
     const io = mock.exchangeWithCpu(toCpu, 3);
     await waitReq1(mock);
     await s.call("g_handshake_interrupt_handler", {

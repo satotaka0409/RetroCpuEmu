@@ -392,10 +392,8 @@ l_bp_send_fin:
 	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_nt_wait
 	bd	l_bp_notify_fail
-	; IO→CPU の status を受ける。BUSY=1 だと IO が送らない
+	; IO→CPU の status を受ける。
 l_bp_nt_wait:
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
 	bald	g_hshk_wait_req1_1
 	cwi	R0, #HSHK_OK, NZ
 	b	l_bp_nt_accept

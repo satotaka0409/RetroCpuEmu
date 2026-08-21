@@ -2,7 +2,7 @@
 ; LCD制御（ハンドシェイク 17h）
 ; 根拠: HandShake.mdc「LCD制御」/ boot_monitor.mdc
 ;
-; 線上 送信 5B: 17h, kind, argA, argB, argC → 受信 1B: status
+; 線上 送信 6B: 17h, pad(00), kind, argA, argB, argC → 受信 1B: status
 ; モード制約なし（モニター/フリー共通）。
 ;
 ; 引数は第1=R0、第2=R1、第3=R2（R3 は引数に使わない）。
@@ -27,7 +27,7 @@
 	.global g_hshk_recv_byte
 	.global g_hshk_finalize_recv
 
-BIOS_LCD1_FRAME_LEN	.equ	5
+BIOS_LCD1_FRAME_LEN	.equ	6
 
 ; -------------------------------------------------------
 ; LCD制御（17h）
@@ -47,17 +47,19 @@ g_bios_lcd_control_:
 	mv	X0, SP
 	mvwi	R4, #HSHK_CMD_LCD_CTRL
 	st	R4, 1(X0)
+	eor	R4, R4
+	st	R4, 2(X0)
 	andi	R0, #0x00ff
-	st	R0, 2(X0)
+	st	R0, 3(X0)
 	andi	R1, #0x00ff
-	st	R1, 3(X0)
+	st	R1, 4(X0)
 	; 行 = R2 Bit8-9
 	bswp	R4, R2
 	andi	R4, #0x0003
-	st	R4, 4(X0)
+	st	R4, 5(X0)
 	; 列 = R2 Bit0-7
 	andi	R2, #0x00ff
-	st	R2, 5(X0)
+	st	R2, 6(X0)
 
 	bald	g_hshk_initiate_send
 	mv	R1, R0
@@ -82,12 +84,6 @@ l_bios_lcd1_send_lp:
 	b	l_bios_lcd1_send_lp
 
 	bald	g_hshk_finalize_send
-	mv	R1, R0
-	mvwi	R0, #HSHK_OK
-	c	R1, R0, Z
-	b	l_bios_lcd1_fail
-
-	bald	g_hshk_wait_req1_1
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z

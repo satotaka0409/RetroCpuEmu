@@ -1,5 +1,5 @@
 /**
- * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（80h / 81h）
+ * Cursor 拡張 ↔ IO ボードのアドレス／IO ブレイク（10h / 11h）
  * 根拠: retrocpu_debug.mdc「アドレスブレイク設定」「メモリ/IOブレイク解除」
  * 線上レイアウトは HandShake.mdc と同じ。TCP も同じバイナリを載せる。
  */
@@ -16,7 +16,7 @@ import {
   RESPONSE_CODE,
 } from "../shared/handshake/handshake_type";
 
-/** 80h 設定フレーム（コマンド除くフィールド） */
+/** 10h 設定フレーム（コマンド除くフィールド） */
 export type AddrBreakSetFields = {
   /** スロット 0–3 */
   slot: number;
@@ -31,7 +31,7 @@ export type AddrBreakSetFields = {
 };
 
 /**
- * 80h の TCP／線上フレーム（10 バイト）を組み立てる。
+ * 10h の TCP／線上フレーム（10 バイト）を組み立てる。
  * @param fields スロット・フラグ・アドレス・比較データ
  * @returns cmd + 9 バイト
  */
@@ -55,8 +55,8 @@ export function encodeAddrBreakSetFrame(
 }
 
 /**
- * 80h フレームからフィールドを読む。長さ・コマンドが違うと null。
- * @param frame 受信バイト（先頭が 80h、長さ 10）
+ * 10h フレームからフィールドを読む。長さ・コマンドが違うと null。
+ * @param frame 受信バイト（先頭が 10h、長さ 10）
  * @returns フィールド。不正なら null
  */
 export function parseAddrBreakSetFrame(
@@ -76,7 +76,7 @@ export function parseAddrBreakSetFrame(
 }
 
 /**
- * 80h のコマンド除く 9 バイトを取り出す。
+ * 10h のコマンド除く 9 バイトを取り出す。
  * @param frame 10 バイトフレーム
  * @returns payload。不正なら null
  */
@@ -86,7 +86,7 @@ export function addrBreakSetPayload(frame: Uint8Array): Uint8Array | null {
 }
 
 /**
- * 81h フレーム（cmd + slot）を組み立てる。
+ * 11h フレーム（cmd + slot）を組み立てる。
  * @param slot ブレイク設定番号（0–3）
  * @returns 2 バイト
  */
@@ -95,8 +95,8 @@ export function encodeAddrBreakClrFrame(slot: number): Uint8Array {
 }
 
 /**
- * 81h のスロット番号を読む。
- * @param frame 受信バイト（先頭が 81h、長さ 2）
+ * 11h のスロット番号を読む。
+ * @param frame 受信バイト（先頭が 11h、長さ 2）
  * @returns スロット。不正なら null
  */
 export function parseAddrBreakClrSlot(frame: Uint8Array): number | null {
@@ -116,7 +116,7 @@ export function isAddrBreakSlot(slot: number): boolean {
 
 /**
  * 受信バッファから次フレームの必要長を返す。ヘッダ不足なら null。
- * 84h は count がヘッダに入ってから全長が決まる。
+ * 14h は count がヘッダに入ってから全長が決まる。
  * @param buf 未処理受信
  * @returns 必要バイト数。まだ足りないときは null
  */
@@ -136,7 +136,7 @@ export function debugPcNeededBytes(buf: Uint8Array): number | null {
 /**
  * コマンド先頭バイトから、続きを含めた必要バイト数を返す。
  * 未知コマンドは 1（そのバイトだけ消費して NG）。
- * 84h は可変長なので {@link debugPcNeededBytes} を使う。
+ * 14h は可変長なので {@link debugPcNeededBytes} を使う。
  * @param cmd 先頭バイト
  * @returns フレーム全長
  */

@@ -2,7 +2,7 @@
 ; LED表示依頼（ハンドシェイク 16h）
 ; 根拠: HandShake.mdc「LED表示依頼」/ boot_monitor.mdc
 ;
-; 線上 送信 15B: 16h + 7seg×12 + bullet0_7 + bullet8_F → 受信 1B: status
+; 線上 送信 16B: 16h, pad(00) + 7seg×12 + bullet0_7 + bullet8_F → 受信 1B: status
 ; フリーモード専用。モニターモードは IO が 01h（モードエラー）を返す。
 ; 7セグと砲弾は同一トランザクションのため、片方だけ更新する API は
 ; システムゼロページ（_SYS_PAGE0 の GL_HSHK_LED_LATCH、14 ワード。
@@ -132,6 +132,13 @@ l_hshk_led_xfer:
 	c	R1, R0, Z
 	b	l_led_xfer_fail
 
+	eor	R0, R0
+	bald	g_hshk_send_byte
+	mv	R1, R0
+	mvwi	R0, #HSHK_OK
+	c	R1, R0, Z
+	b	l_led_xfer_fail
+
 	mvwi	X0, #GL_HSHK_LED_LATCH
 	mvwi	X1, #HSHK_LED_DATA_LEN
 l_led_xfer_send_lp:
@@ -149,12 +156,6 @@ l_led_xfer_send_lp:
 	b	l_led_xfer_send_lp
 
 	bald	g_hshk_finalize_send
-	mv	R1, R0
-	mvwi	R0, #HSHK_OK
-	c	R1, R0, Z
-	b	l_led_xfer_fail
-
-	bald	g_hshk_wait_req1_1
 	mv	R1, R0
 	mvwi	R0, #HSHK_OK
 	c	R1, R0, Z

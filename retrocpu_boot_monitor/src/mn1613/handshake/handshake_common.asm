@@ -127,16 +127,17 @@ l_hshk_req1_cont:
 ; -------------------------------------------------------
 g_hshk_wait_req1_1:
 	mvwi	R1, #HSHK_WAIT_MAX
-l_hshk_req1s_lp:
+l_hshk_req1_1_lp:
 	rd	R0, HSHK_IN_CTRL
-	andi	R0, #HSHK_IN_REQ_BIT, Z
-	b	l_hshk_req1s_ok
-	si	R1, #1, Z
-	b	l_hshk_req1s_lp
-	mvwi	R0, #HSHK_NG
-	ret
-l_hshk_req1s_ok:
+	andi	R0, #HSHK_IN_REQ_BIT
+	cwi	R0, #HSHK_IN_REQ_BIT, Z
+	b	l_hshk_req1_1_cont
 	mvwi	R0, #HSHK_OK
+	ret
+l_hshk_req1_1_cont:
+	si	R1, #1, Z
+	b	l_hshk_req1_1_lp
+	mvwi	R0, #HSHK_NG
 	ret
 ; -------------------------------------------------------
 ; 制御ポート RMW: ビットセット
@@ -221,6 +222,9 @@ l_hshk_flush_send:
 	b	l_hshk_fs_fail
 	ret
 l_hshk_fs_even:
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	st	R0, *GL_HSHK_PAIR
 	mvwi	R0, #HSHK_OK
 	ret
 l_hshk_fs_fail:
@@ -345,8 +349,13 @@ l_hshk_sw_done:
 g_hshk_finalize_send:
 	bald	l_hshk_flush_send
 	mv	R1, R0
+	push	R1
 	mvwi	R0, #HSHK_OUT_REQ_BIT
 	bald	l_hshk_ctrl_clr
+	l	R0, *GL_HSHK_PAIR
+	andi	R0, #HSHK_PAIR_RECV
+	st	R0, *GL_HSHK_PAIR
+	pop	R1
 	mv	R0, R1
 	ret
 ; -------------------------------------------------------

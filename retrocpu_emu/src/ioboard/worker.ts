@@ -436,8 +436,8 @@ link.setCpuToIoFrameHandler((frame) => {
     log.info("LED表示 (16h)", {
       status: response[0],
       mode: cmdState.mode,
-      bulletLed0_7: frame[0x0d],
-      bulletLed8_F: frame[0x0e],
+      bulletLed0_7: frame[0x0e],
+      bulletLed8_F: frame[0x0f],
     });
   } else if (cmd === CMD_CPU_TO_IO.BEEP) {
     const beep = cmdState.lastBeep;
@@ -454,7 +454,7 @@ link.setCpuToIoFrameHandler((frame) => {
     log.info("LCD (17h/18h)", {
       cmd: `0x${cmd.toString(16)}`,
       status: response[0],
-      kind: cmd === CMD_CPU_TO_IO.LCD_CTRL ? frame[1] : undefined,
+      kind: cmd === CMD_CPU_TO_IO.LCD_CTRL ? frame[2] : undefined,
       row: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[1] : undefined,
       col: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[2] : undefined,
       len: cmd === CMD_CPU_TO_IO.LCD_TEXT ? frame[3] : undefined,

@@ -229,6 +229,43 @@ function parseImm4(
 }
 
 /**
+ * AI/SI の即値を 4bit チャンクに分割する。
+ * skip 指定なしで 16 以上の定数を与えたとき、15 ずつ複数命令へ展開する。
+ * @param line - 解析済み行
+ * @param symbols - シンボル表
+ * @param allowUndefined - 未定義シンボル許容（pass1 用）
+ * @returns 4bit 即値チャンク配列。対象外なら null
+ */
+export function splitAiSiImm4Chunks(
+  line: ParsedLine,
+  symbols: SymbolTable,
+  allowUndefined: boolean,
+): number[] | null {
+  if (!line.op) return null;
+  const op = line.op.toUpperCase();
+  if (op !== "AI" && op !== "SI") return null;
+  if (line.args.length !== 2) return null;
+  const imm = evalExpr(
+    requireImmHash(line.args[1], "I4"),
+    symbols,
+    allowUndefined,
+  );
+  if (!Number.isInteger(imm) || imm < 0) {
+    throw new Error(`I4 out of 4-bit range: ${imm}`);
+  }
+  if (imm <= 0x0f) return [imm];
+
+  const chunks: number[] = [];
+  let remain = imm;
+  while (remain > 0) {
+    const step = Math.min(0x0f, remain);
+    chunks.push(step);
+    remain -= step;
+  }
+  return chunks;
+}
+
+/**
  * 8ビット即値を解析する。`#` 必須（MVI など）。
  * @param arg - 即値を表す文字列（例: "#200"）
  * @param symbols - シンボルテーブル
@@ -874,15 +911,15 @@ export function encodeInstruction(
     case "SI": {
       expectArgs(line, 2, 3);
       const r = parseReg(line.args[0], true);
-      const i4 = parseImm4(line.args[1], symbols, allowUndefined);
       const skip = parseSkip(line.args[2]);
-      return [
-        (((op === "AI" ? 0b01001 : 0b01000) << 11) |
-          (r << 8) |
-          (skip << 4) |
-          i4) &
-          0xffff,
-      ];
+      const base =
+        ((op === "AI" ? 0b01001 : 0b01000) << 11) | (r << 8) | (skip << 4);
+      const chunks = splitAiSiImm4Chunks(line, symbols, allowUndefined);
+      if (chunks) {
+        return chunks.map((i4) => (base | i4) & 0xffff);
+      }
+      const i4 = parseImm4(line.args[1], symbols, allowUndefined);
+      return [(base | i4) & 0xffff];
     }
 
     case "LPSW": {

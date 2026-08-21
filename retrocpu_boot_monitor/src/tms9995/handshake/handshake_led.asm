@@ -1,5 +1,5 @@
 ; LED表示依頼（ハンドシェイク 16h）
-; 線上 送信 15B: 16h + 14 バイト（バッファ各語の下位 8bit）→ 受信 1B: status
+; 線上 送信 16B: 16h, pad(00) + 14 バイト（バッファ各語の下位 8bit）→ 受信 1B: status
 ; param R1 バッファ先頭（14 ワード）
 ; return R1 OK/モードエラー/その他
 ; seven_seg / bullet は OK スタブ
@@ -29,6 +29,11 @@ g_bios_led_display_:
 	JNE	l_led_fail
 
 	LI	R1, #HSHK_CMD_LED_DISPLAY
+	BL	g_hshk_send_byte
+	CI	R1, #HSHK_OK
+	JNE	l_led_fail
+
+	CLR	R1
 	BL	g_hshk_send_byte
 	CI	R1, #HSHK_OK
 	JNE	l_led_fail

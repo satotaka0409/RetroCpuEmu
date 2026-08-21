@@ -4,7 +4,8 @@
 ;
 ; g_int2_handler から BALD で呼ばれるので、戻りは RET。
 ; 受理 → コマンド 1 バイト受信 → 1 ワード表 + ゼロページ BAL で分岐 → finalize。
-; IO→CPU コマンド 0x10–0x18。g_* は BALD / RET。コードはセグメント 0。
+; IO→CPU コマンド 0x10–0x18。高位 ID（0x80–0x89）受信時は 0x70 を引いて正規化。
+; g_* は BALD / RET。コードはセグメント 0。
 
 	.cpu	mn1613
 
@@ -45,6 +46,20 @@ g_handshake_interrupt_handler:
 
 	mv	R0, R1
 	andi	R0, #0x00ff
+	mv	R2, R0
+	andi	R2, #0x00f0
+	cwi	R2, #HSHK_CMD_IO_HI_BASE, Z
+	b	l_hshk_irq_range
+	b	l_hshk_irq_hi_chk
+l_hshk_irq_hi_chk:
+	mv	R2, R0
+	andi	R2, #0x000f
+	cwi	R2, #0x000a, M
+	b	l_hshk_irq_range
+	b	l_hshk_irq_hi_norm
+l_hshk_irq_hi_norm:
+	swi	R0, #HSHK_CMD_IO_WIRE_BIAS
+l_hshk_irq_range:
 	cwi	R0, #HSHK_CMD_IO_BASE, M
 	b	l_hshk_irq_ge_base
 	b	l_hshk_irq_fin

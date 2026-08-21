@@ -85,9 +85,6 @@ l_hshk_wm_done:
 	ret
 
 l_hshk_wm_recv_hdr:
-	bald	g_hshk_recv_byte
-	cwi	R0, #HSHK_OK, Z
-	b	l_hshk_wm_rh_fail
 	mvwi	R2, #HSHK_WM_ADDR_HI
 l_hshk_wm_rh_lp:
 	bald	g_hshk_recv_byte
@@ -107,6 +104,9 @@ l_hshk_wm_rh_lp:
 	ai	R2, #1
 	cwi	R2, #HSHK_WM_TSR0, Z
 	b	l_hshk_wm_rh_lp
+	bald	g_hshk_recv_byte
+	cwi	R0, #HSHK_OK, Z
+	b	l_hshk_wm_rh_fail
 	mvwi	R0, #HSHK_OK
 	ret
 l_hshk_wm_rh_fail:

@@ -124,18 +124,18 @@ export class LcdConsoleEmulator {
 
   /**
    * HandShake.mdc の 17h（LCD制御）を処理する。
-   * frame = [cmd(17h), kind, argA, argB, argC]
+   * frame = [cmd(17h), pad, kind, argA, argB, argC]
    * - kind=0: Clear
    * - kind=1: Home
    * - kind=2: DisplayCtrl（argA 使用）
    * - kind=3: SetCursor（argB=row, argC=col）
    */
   handleControlFrame(frame: Uint8Array): number {
-    if (frame.length < 5) return LCD_RESPONSE.NG;
-    const kind = frame[1] ?? 0;
-    const argA = frame[2] ?? 0;
-    const argB = frame[3] ?? 0;
-    const argC = frame[4] ?? 0;
+    if (frame.length < 6) return LCD_RESPONSE.NG;
+    const kind = frame[2] ?? 0;
+    const argA = frame[3] ?? 0;
+    const argB = frame[4] ?? 0;
+    const argC = frame[5] ?? 0;
 
     switch (kind) {
       case 0: // Clear

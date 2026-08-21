@@ -258,10 +258,10 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.MODE_SET]: 2,
   /** 16進キー入力取得: cmd(1)のみ */
   [CMD_CPU_TO_IO.HEX_KEY_GET]: 1,
-  /** PCキー入力取得: cmd(1)のみ */
-  [CMD_CPU_TO_IO.PC_KEY_GET]: 1,
-  /** LED表示依頼: cmd(1) + 7seg×12(12) + 砲弾LED×2(2) = 15バイト */
-  [CMD_CPU_TO_IO.LED_DISPLAY]: 15,
+  /** PCキー入力取得: cmd(1) + pad(1) = 2バイト */
+  [CMD_CPU_TO_IO.PC_KEY_GET]: 2,
+  /** LED表示依頼: cmd(1) + 7seg×12(12) + 砲弾LED×2(2) + pad(1) = 16バイト */
+  [CMD_CPU_TO_IO.LED_DISPLAY]: 16,
   /** BEEP音: cmd(1) + 周波数(2) + 長さ(2) + pad(1) = 6バイト */
   [CMD_CPU_TO_IO.BEEP]: 6,
   /** タイマー設定: cmd(1) + タイマー番号(1) + 周期(2) + 回数(2) = 6バイト */
@@ -270,8 +270,8 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.TIME_GET]: 1,
   /** ブレイク通知: ヘッダ 11 バイト + 履歴エントリ×件数（最小 11 バイト。エントリ長は CPU 依存） */
   [CMD_CPU_TO_IO.BREAK_NOTIFY]: BREAK_NOTIFY_HEADER_SIZE,
-  /** LCD制御: cmd(1) + kind(1) + argA(1) + argB(1) + argC(1) = 5バイト */
-  [CMD_CPU_TO_IO.LCD_CTRL]: 5,
+  /** LCD制御: cmd(1) + pad(1) + kind(1) + argA(1) + argB(1) + argC(1) = 6バイト */
+  [CMD_CPU_TO_IO.LCD_CTRL]: 6,
   /** LCD文字列表示: cmd(1) + row(1) + col(1) + len(1) + text16(16) = 20バイト */
   [CMD_CPU_TO_IO.LCD_TEXT]: 20,
   /** ステップ通知: 既定（MN1613）59B。TMS9995 は 70B。 */
@@ -296,7 +296,7 @@ export const CPU_FRAME_SIZE: Readonly<Record<number, number>> = {
 export const CPU_PAYLOAD_REMAINING_SIZE: Readonly<Record<number, number>> = {
   [CMD_CPU_TO_IO.MODE_SET]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.MODE_SET] - 1,
   [CMD_CPU_TO_IO.HEX_KEY_GET]: 0,
-  [CMD_CPU_TO_IO.PC_KEY_GET]: 0,
+  [CMD_CPU_TO_IO.PC_KEY_GET]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.PC_KEY_GET] - 1,
   [CMD_CPU_TO_IO.LED_DISPLAY]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.LED_DISPLAY] - 1,
   [CMD_CPU_TO_IO.BEEP]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.BEEP] - 1,
   [CMD_CPU_TO_IO.TIMER_SET]: CPU_FRAME_SIZE[CMD_CPU_TO_IO.TIMER_SET] - 1,
@@ -542,9 +542,10 @@ export class CpuToIoCommandDispatcher {
    */
   private _handleLedDisplay(frame: Uint8Array): Uint8Array {
     const data: LedDisplayData = {
-      sevenSeg: frame.slice(0x01, 0x0d), // 0x01〜0x0C: 12バイト
-      bulletLed0_7: frame[0x0d]!,
-      bulletLed8_F: frame[0x0e]!,
+      // frame = [cmd, pad, sevenSeg(12), bullet0_7, bullet8_F]
+      sevenSeg: frame.slice(0x02, 0x0e), // 0x02〜0x0D: 12バイト
+      bulletLed0_7: frame[0x0e]!,
+      bulletLed8_F: frame[0x0f]!,
     };
     const result = this.handlers.onLedDisplay(data);
     return new Uint8Array([result]);

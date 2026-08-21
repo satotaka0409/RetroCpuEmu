@@ -1,5 +1,5 @@
 ; PCキー入力取得（ハンドシェイク 15h）
-; 線上 送信 1B: 15h → 受信 3B: ascii, keyCode, status
+; 線上 送信 2B: 15h, pad(00) → 受信 3B: ascii, keyCode, status
 ; return R1 status、R2 ASCII、R3 キーコード（失敗時 R2=R3=0）
 
 	.cpu	tms9995
@@ -24,6 +24,11 @@ g_bios_pc_key_get_:
 	JNE	l_pckey_fail
 
 	LI	R1, #HSHK_CMD_PC_KEY
+	BL	g_hshk_send_byte
+	CI	R1, #HSHK_OK
+	JNE	l_pckey_fail
+
+	CLR	R1
 	BL	g_hshk_send_byte
 	CI	R1, #HSHK_OK
 	JNE	l_pckey_fail
