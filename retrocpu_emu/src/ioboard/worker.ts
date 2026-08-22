@@ -330,7 +330,7 @@ async function runIoBoardReset(reason: string): Promise<void> {
     await link.setCpuType(cpuType);
     await link.setStepDelay(stepDelay);
     const result = await performIoBoardReset(link, hexPath, resetVectorWord);
-    consolePanel.notifyCpuReset();
+    await consolePanel.notifyCpuReset();
     log.info("IO ボードリセット完了", {
       reason,
       bytesWritten: result.bytesWritten,

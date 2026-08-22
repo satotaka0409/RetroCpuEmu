@@ -1,7 +1,6 @@
-; breakpoint_steprun.asm
-; 1 命令ステップ（CRU ワンショット。比較器は使わない）
+; 1 命令ステップ（メモリマップド ワンショット。比較器は使わない）
 ; 根拠: breakpoint.mdc / HandShake.mdc 18h・1Bh /
-;   TMS9995_CPUボードメモリ_IOマップ.mdc（0068=ENA / 0078=DELAY）
+;   TMS9995_CPUボードメモリ_IOマップ.mdc（FE86=ENA / FE87=DELAY）
 ;
 ; 18h: 0=通常再開（ARM クリア）/ 1=ステップ（GL_BP_STEP_ARM=1）。ENA はここでは上げない。
 ; INT1 エピローグの g_step_arm_cpld が DELAY/ENA を武装する。
@@ -60,10 +59,13 @@ g_step_arm_cpld:
 	CLR	R0
 	MOV	R0, GL_BP_STEP_ARM
 	LI	R0, #STEP_BRK_DELAY_1STEP
-	LI	R12, #IO_STEP_BRK_DELAY
-	LDCR	R0, #8			; 8bit
-	LI	R12, #0
-	SBO	#IO_STEP_BRK_ENA
+	SWPB	R0
+	LI	R1, #IO_STEP_BRK_DELAY
+	MOVB	R0, (R1)
+	LI	R0, #1
+	SWPB	R0
+	LI	R1, #IO_STEP_BRK_ENA
+	MOVB	R0, (R1)
 l_sr_arm_done:
 	B	(R11)
 

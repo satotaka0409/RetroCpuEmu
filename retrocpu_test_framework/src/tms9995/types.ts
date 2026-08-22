@@ -110,8 +110,7 @@ export type Tms9995CruCpuInSignal =
   | "HSHK_IN_REQ"
   | "HSHK_IN_DENA"
   | "HSHK_OUT_DACK"
-  | "INT1_CAUSE0"
-  | "INT1_CAUSE1"
+  | "INT1_CAUSE"
   | "INT2_CAUSE";
 
 /** ハンドシェイク信号名（入出力両方）。 */
@@ -146,7 +145,7 @@ export type Tms9995CruHandshakeSnapshot = {
 export type Tms9995CruHandshakeOptions = {
   /**
    * true: 役割外アクセスを例外にする（既定）。
-   * false: 0x0020..0x003F 内の読み書きをすべて許可。
+   * false: 0x0010..0x0027 内の読み書きをすべて許可。
    */
   strictRoles?: boolean;
 };

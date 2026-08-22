@@ -9,7 +9,7 @@ MN1613 / TMS9995 向けの **Intel HEX + CDB** テスト補助ライブラリ（
 
 TMS9995 CRU モック:
 
-- `Tms9995CruHandshakeMock`: CRU `0x0020..0x003F`（BUSY / INT1・INT2 要因 + ハンドシェイク線）
+- `Tms9995CruHandshakeMock`: CRU `0x0010..0x0027`（BUSY / INT1・INT2 要因 + ハンドシェイク線・DATA ラッチ）
 - `TMS9995_CRU_HANDSHAKE_SIGNALS` / `TMS9995_CRU_HANDSHAKE_REGION`
 
 呼び出し規約:

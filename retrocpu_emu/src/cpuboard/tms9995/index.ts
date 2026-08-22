@@ -12,3 +12,34 @@ export {
   type Tms9995CruSnapshot,
   type Tms9995CruWriteLog,
 } from "./cru_handshake";
+
+export {
+  Tms9995IoMmap,
+  tms9995IoMmap,
+  TMS9995_IO_BASE,
+  TMS9995_IO_END,
+  TMS9995_IO_BREAK_SLOT,
+  TMS9995_IO_BREAK_CTRL,
+  TMS9995_IO_BREAK_ADDR_HI,
+  TMS9995_IO_BREAK_ADDR_LO,
+  TMS9995_IO_BREAK_HIT,
+  TMS9995_IO_BREAK_PREV,
+  TMS9995_IO_STEP_ENA,
+  TMS9995_IO_STEP_DELAY,
+} from "./io_mmap";
+
+export {
+  powerOnIdle,
+  reset,
+  setMemory,
+  getMemory,
+  tickCpu,
+  getState,
+  getPins,
+  getExecStatus,
+  getClockCount,
+  setPins,
+  triggerInterrupt,
+  pokeByte,
+  peekByte,
+} from "./tms9995";

@@ -1,8 +1,8 @@
 /**
  * TMS9995 の CRU ボード周辺モック（ハンドシェイク + 割り込み要因）。
  * 根拠: TMS9995_CPUボードメモリ_IOマップ.mdc
- * - 0x0020..0x0023: INTERRUPT_BUSY / INT1_CAUSE / INT2_CAUSE
- * - 0x0024..0x003F: ハンドシェイク制御・データ
+ * - 0x0010..0x0012: INTERRUPT_BUSY / INT1_CAUSE / INT2_CAUSE
+ * - 0x0020..0x0027: ハンドシェイク制御・DATA ラッチ
  */
 
 import type {
@@ -17,50 +17,48 @@ import type {
   Tms9995CruWriteLog,
 } from "./types.js";
 
-const BIT_MIN = 0x0020;
-const BIT_MAX = 0x003f;
-const OUT_DATA_START = 0x0030;
-const IN_DATA_START = 0x0038;
+const BIT_MIN = 0x0010;
+const BIT_MAX = 0x0027;
 
 const IRQ_BITS = {
-  INTERRUPT_BUSY: 0x0020,
-  INT1_CAUSE0: 0x0021,
-  INT1_CAUSE1: 0x0022,
-  INT2_CAUSE: 0x0023,
+  INTERRUPT_BUSY: 0x0010,
+  INT1_CAUSE: 0x0011,
+  INT2_CAUSE: 0x0012,
 } as const;
 
 const CPU_OUT_SIGNALS: Record<Tms9995CruCpuOutSignal, number> = {
-  HSHK_OUT_REQ: 0x0024,
-  HSHK_OUT_DENA: 0x0025,
-  HSHK_IN_DACK: 0x0026,
   INTERRUPT_BUSY: IRQ_BITS.INTERRUPT_BUSY,
+  HSHK_OUT_REQ: 0x0020,
+  HSHK_OUT_DENA: 0x0021,
+  HSHK_IN_DACK: 0x0022,
 };
 
 const CPU_IN_SIGNALS: Record<Tms9995CruCpuInSignal, number> = {
-  HSHK_IN_REQ: 0x0028,
-  HSHK_IN_DENA: 0x0029,
-  HSHK_OUT_DACK: 0x002a,
-  INT1_CAUSE0: IRQ_BITS.INT1_CAUSE0,
-  INT1_CAUSE1: IRQ_BITS.INT1_CAUSE1,
+  INT1_CAUSE: IRQ_BITS.INT1_CAUSE,
   INT2_CAUSE: IRQ_BITS.INT2_CAUSE,
+  HSHK_IN_REQ: 0x0024,
+  HSHK_IN_DENA: 0x0025,
+  HSHK_OUT_DACK: 0x0026,
 };
 
+const OUT_DATA_BASE = 0x0023;
+const IN_DATA_BASE = 0x0027;
+
 const CPU_WRITABLE = new Set<number>([
+  CPU_OUT_SIGNALS.INTERRUPT_BUSY,
   CPU_OUT_SIGNALS.HSHK_OUT_REQ,
   CPU_OUT_SIGNALS.HSHK_OUT_DENA,
   CPU_OUT_SIGNALS.HSHK_IN_DACK,
-  CPU_OUT_SIGNALS.INTERRUPT_BUSY,
-  ...range(OUT_DATA_START, OUT_DATA_START + 7),
+  OUT_DATA_BASE,
 ]);
 
 const IO_WRITABLE = new Set<number>([
+  CPU_IN_SIGNALS.INT1_CAUSE,
+  CPU_IN_SIGNALS.INT2_CAUSE,
   CPU_IN_SIGNALS.HSHK_IN_REQ,
   CPU_IN_SIGNALS.HSHK_IN_DENA,
   CPU_IN_SIGNALS.HSHK_OUT_DACK,
-  CPU_IN_SIGNALS.INT1_CAUSE0,
-  CPU_IN_SIGNALS.INT1_CAUSE1,
-  CPU_IN_SIGNALS.INT2_CAUSE,
-  ...range(IN_DATA_START, IN_DATA_START + 7),
+  IN_DATA_BASE,
 ]);
 
 function range(from: number, to: number): number[] {
@@ -96,6 +94,8 @@ export class Tms9995CruHandshakeMock {
 
   private readonly strictRoles: boolean;
   private readonly bits = new Map<number, Tms9995CruBit>();
+  private outDataByte = 0;
+  private inDataByte = 0;
 
   constructor(options: Tms9995CruHandshakeOptions = {}) {
     this.strictRoles = options.strictRoles !== false;
@@ -109,6 +109,8 @@ export class Tms9995CruHandshakeMock {
     for (const bitAddr of this.bits.keys()) {
       this.bits.set(bitAddr, 0);
     }
+    this.outDataByte = 0;
+    this.inDataByte = 0;
     this.writes.length = 0;
     this.reads.length = 0;
   }
@@ -130,6 +132,11 @@ export class Tms9995CruHandshakeMock {
         `${actor} cannot write CRU bit ${fmtBitAddr(addr)} in handshake region`,
       );
     }
+    if (addr === OUT_DATA_BASE) {
+      this.outDataByte = (this.outDataByte & ~1) | (value & 1);
+    } else if (addr === IN_DATA_BASE) {
+      this.inDataByte = (this.inDataByte & ~1) | (value & 1);
+    }
     this.bits.set(addr, value);
     this.writes.push({ actor, bitAddr: addr, value });
   }
@@ -147,7 +154,14 @@ export class Tms9995CruHandshakeMock {
         `${actor} cannot read CRU bit ${fmtBitAddr(addr)} in handshake region`,
       );
     }
-    const value = this.bits.get(addr) ?? 0;
+    let value: Tms9995CruBit;
+    if (addr === OUT_DATA_BASE) {
+      value = toBit(this.outDataByte & 1);
+    } else if (addr === IN_DATA_BASE) {
+      value = toBit(this.inDataByte & 1);
+    } else {
+      value = this.bits.get(addr) ?? 0;
+    }
     this.reads.push({ actor, bitAddr: addr, value });
     return value;
   }
@@ -173,24 +187,19 @@ export class Tms9995CruHandshakeMock {
   }
 
   /**
-   * INT1 要因（2bit）を IO がセットする。
-   * 本ボードでは 01=ハンドシェイクのみ（タイマーは TMS9995 内蔵レベル3）。
-   * @param cause 0..3（運用上は 1）
+   * INT1 要因を IO がセットする（1=ハンドシェイク）。
+   * @param cause 下位 1bit
    */
   ioSetInt1Cause(cause: number): void {
-    const c = cause & 0x3;
-    this.writeBit("io", IRQ_BITS.INT1_CAUSE0, toBit(c & 1));
-    this.writeBit("io", IRQ_BITS.INT1_CAUSE1, toBit((c >> 1) & 1));
+    this.writeBit("io", IRQ_BITS.INT1_CAUSE, toBit(cause & 1));
   }
 
   /**
    * INT1 要因を CPU 視点で読む。
-   * @returns 0..3
+   * @returns 0 または 1
    */
-  cpuReadInt1Cause(): number {
-    const b0 = this.readBit("cpu", IRQ_BITS.INT1_CAUSE0);
-    const b1 = this.readBit("cpu", IRQ_BITS.INT1_CAUSE1);
-    return b0 | (b1 << 1);
+  cpuReadInt1Cause(): Tms9995CruBit {
+    return this.readBit("cpu", IRQ_BITS.INT1_CAUSE);
   }
 
   /**
@@ -206,30 +215,48 @@ export class Tms9995CruHandshakeMock {
     return this.readBit("cpu", IRQ_BITS.INT2_CAUSE);
   }
 
-  /** CPU→IO データ線（0x0030..0x0037）へ 1 バイトを載せる。 */
+  /** CPU→IO データラッチへ 1 バイトを載せる（LDCR #8 相当）。 */
   cpuWriteOutDataByte(value: number): void {
     const b = asByte(value);
-    for (let i = 0; i < 8; i += 1) {
-      this.writeBit("cpu", OUT_DATA_START + i, toBit((b >> i) & 1));
-    }
+    this.outDataByte = b;
+    this.bits.set(OUT_DATA_BASE, toBit(b & 1));
+    this.writes.push({
+      actor: "cpu",
+      bitAddr: OUT_DATA_BASE,
+      value: toBit(b & 1),
+    });
   }
 
-  /** IO 側が CPU→IO データ線（0x0030..0x0037）を 1 バイトとして読む。 */
+  /** IO 側が CPU→IO データラッチを 1 バイトとして読む。 */
   ioReadOutDataByte(): number {
-    return this.readByte("io", OUT_DATA_START);
+    this.reads.push({
+      actor: "io",
+      bitAddr: OUT_DATA_BASE,
+      value: toBit(this.outDataByte & 1),
+    });
+    return this.outDataByte & 0xff;
   }
 
-  /** IO→CPU データ線（0x0038..0x003F）へ 1 バイトを載せる。 */
+  /** IO→CPU データラッチへ 1 バイトを載せる。 */
   ioWriteInDataByte(value: number): void {
     const b = asByte(value);
-    for (let i = 0; i < 8; i += 1) {
-      this.writeBit("io", IN_DATA_START + i, toBit((b >> i) & 1));
-    }
+    this.inDataByte = b;
+    this.bits.set(IN_DATA_BASE, toBit(b & 1));
+    this.writes.push({
+      actor: "io",
+      bitAddr: IN_DATA_BASE,
+      value: toBit(b & 1),
+    });
   }
 
-  /** CPU 側が IO→CPU データ線（0x0038..0x003F）を 1 バイトとして読む。 */
+  /** CPU 側が IO→CPU データラッチを 1 バイトとして読む（STCR #8 相当）。 */
   cpuReadInDataByte(): number {
-    return this.readByte("cpu", IN_DATA_START);
+    this.reads.push({
+      actor: "cpu",
+      bitAddr: IN_DATA_BASE,
+      value: toBit(this.inDataByte & 1),
+    });
+    return this.inDataByte & 0xff;
   }
 
   /** 任意の信号アドレスを名前で引く（テスト用）。 */
@@ -245,47 +272,35 @@ export class Tms9995CruHandshakeMock {
   /** 現在の線状態を取り出す。 */
   snapshot(): Tms9995CruHandshakeSnapshot {
     const cpuOutSignals = {
+      INTERRUPT_BUSY: this.peekBit(CPU_OUT_SIGNALS.INTERRUPT_BUSY),
       HSHK_OUT_REQ: this.peekBit(CPU_OUT_SIGNALS.HSHK_OUT_REQ),
       HSHK_OUT_DENA: this.peekBit(CPU_OUT_SIGNALS.HSHK_OUT_DENA),
       HSHK_IN_DACK: this.peekBit(CPU_OUT_SIGNALS.HSHK_IN_DACK),
-      INTERRUPT_BUSY: this.peekBit(CPU_OUT_SIGNALS.INTERRUPT_BUSY),
     };
     const cpuInSignals = {
+      INT1_CAUSE: this.peekBit(CPU_IN_SIGNALS.INT1_CAUSE),
+      INT2_CAUSE: this.peekBit(CPU_IN_SIGNALS.INT2_CAUSE),
       HSHK_IN_REQ: this.peekBit(CPU_IN_SIGNALS.HSHK_IN_REQ),
       HSHK_IN_DENA: this.peekBit(CPU_IN_SIGNALS.HSHK_IN_DENA),
       HSHK_OUT_DACK: this.peekBit(CPU_IN_SIGNALS.HSHK_OUT_DACK),
-      INT1_CAUSE0: this.peekBit(CPU_IN_SIGNALS.INT1_CAUSE0),
-      INT1_CAUSE1: this.peekBit(CPU_IN_SIGNALS.INT1_CAUSE1),
-      INT2_CAUSE: this.peekBit(CPU_IN_SIGNALS.INT2_CAUSE),
     };
     const bits: Record<string, Tms9995CruBit> = {};
     for (const bitAddr of range(BIT_MIN, BIT_MAX)) {
-      bits[fmtBitAddr(bitAddr)] = this.peekBit(bitAddr);
+      if (bitAddr === OUT_DATA_BASE) {
+        bits[fmtBitAddr(bitAddr)] = toBit(this.outDataByte & 1);
+      } else if (bitAddr === IN_DATA_BASE) {
+        bits[fmtBitAddr(bitAddr)] = toBit(this.inDataByte & 1);
+      } else {
+        bits[fmtBitAddr(bitAddr)] = this.peekBit(bitAddr);
+      }
     }
     return {
       cpuOutSignals,
       cpuInSignals,
-      outDataByte: this.peekByte(OUT_DATA_START),
-      inDataByte: this.peekByte(IN_DATA_START),
+      outDataByte: this.outDataByte & 0xff,
+      inDataByte: this.inDataByte & 0xff,
       bits,
     };
-  }
-
-  private readByte(actor: Tms9995CruActor, fromBitAddr: number): number {
-    let out = 0;
-    for (let i = 0; i < 8; i += 1) {
-      const bit = this.readBit(actor, fromBitAddr + i);
-      out |= bit << i;
-    }
-    return out;
-  }
-
-  private peekByte(fromBitAddr: number): number {
-    let out = 0;
-    for (let i = 0; i < 8; i += 1) {
-      out |= this.peekBit(fromBitAddr + i) << i;
-    }
-    return out;
   }
 
   private peekBit(bitAddr: number): Tms9995CruBit {
@@ -323,11 +338,10 @@ export class Tms9995CruHandshakeMock {
 export const TMS9995_CRU_HANDSHAKE_REGION = {
   bitAddrMin: BIT_MIN,
   bitAddrMax: BIT_MAX,
-  outDataStart: OUT_DATA_START,
-  inDataStart: IN_DATA_START,
+  outDataBase: OUT_DATA_BASE,
+  inDataBase: IN_DATA_BASE,
   irqBusy: IRQ_BITS.INTERRUPT_BUSY,
-  int1Cause0: IRQ_BITS.INT1_CAUSE0,
-  int1Cause1: IRQ_BITS.INT1_CAUSE1,
+  int1Cause: IRQ_BITS.INT1_CAUSE,
   int2Cause: IRQ_BITS.INT2_CAUSE,
 } as const;
 
@@ -335,4 +349,6 @@ export const TMS9995_CRU_HANDSHAKE_REGION = {
 export const TMS9995_CRU_HANDSHAKE_SIGNALS = {
   ...CPU_OUT_SIGNALS,
   ...CPU_IN_SIGNALS,
+  HSHK_OUT_DATA: OUT_DATA_BASE,
+  HSHK_IN_DATA: IN_DATA_BASE,
 } as const;

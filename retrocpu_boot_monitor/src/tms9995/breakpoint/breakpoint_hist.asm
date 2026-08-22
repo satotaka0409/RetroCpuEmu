@@ -108,8 +108,10 @@ l_ha_after_st:
 	MOV	2(R6), R1
 	ANDI	R1, #HSHK_AB_F_WR
 	JEQ	l_ha_prev_st
-	LI	R12, #IO_BREAK_PREV
-	STCR	R0, #8
+	LI	R1, #IO_BREAK_PREV
+	CLR	R0
+	MOVB	(R1), R0
+	SWPB	R0
 	ANDI	R0, #0x00ff
 l_ha_prev_st:
 	MOV	R0, (R7)+

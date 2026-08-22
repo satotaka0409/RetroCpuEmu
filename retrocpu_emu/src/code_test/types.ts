@@ -64,6 +64,17 @@ export type Mn1613CodeTestOptions = {
   ioMock?: CodeTestIoMockEntry[];
 };
 
+export type Tms9995CodeTestOptions = {
+  /** ワークスペース先頭（バイト）。既定 0xFE00 */
+  workspaceByteAddr?: number;
+  /** スタックポインタ R10 初期値（バイト）。既定 0xFE00 */
+  stackInit?: number;
+  /** 戻りスタブ（IDLE）を置くバイトアドレス。既定 0x8100 */
+  returnStubByteAddr?: number;
+  /** tickCpu の最大回数。既定 100000 */
+  maxCycles?: number;
+};
+
 /**
  * ポートモックへの 1 回の WT 記録。
  * @see CodeTestIoMock.writes

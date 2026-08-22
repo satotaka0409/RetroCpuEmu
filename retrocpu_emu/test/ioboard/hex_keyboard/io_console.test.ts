@@ -4,6 +4,10 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  CPU_TYPE,
+  OFFSETS,
+} from "../../../src/ioboard/setting_area";
+import {
   IoConsole,
   type ConsoleCpuBridge,
 } from "../../../src/ioboard/hex_keyboard/io_console";
@@ -143,13 +147,13 @@ describe("IoConsole", () => {
     expect((getLedDisplay().bulletLed8_F >> 5) & 1).toBe(1); // D=HALT
   });
 
-  it("notifyCpuReset は UNDEF を消し ADDR フォーカス・HALT 表示に戻す", () => {
+  it("notifyCpuReset は UNDEF を消し ADDR フォーカス・HALT 表示に戻す", async () => {
     const c = new IoConsole(mockBridge());
     c.onHex("1");
     c.onHex("8");
     c.setUndefLed(true);
     expect(c.getState().undefInsn).toBe(true);
-    c.notifyCpuReset();
+    await c.notifyCpuReset();
     expect(c.getState().undefInsn).toBe(false);
     expect(c.getState().halted).toBe(true);
     expect(c.getState().focus).toBe("addr");
@@ -261,5 +265,32 @@ describe("IoConsole", () => {
     await c.onFunction("F2");
     expect(c.getState().wordAddr).toBe(0x12);
     expect(c.getState().dataWord).toBe(0x1212);
+  });
+
+  it("TMS9995 設定では ADDR 7セグは 4 桁表示になる", async () => {
+    const bridge = mockBridge();
+    await bridge.writeSettingByte(OFFSETS.CPU_TYPE, CPU_TYPE.TMS9995);
+    await bridge.writeSettingByte(OFFSETS.SEVEN_SEG_ADDR_DIGITS, 4);
+
+    const c = new IoConsole(bridge);
+    await c.syncMonitorSettings();
+
+    const addrSegs = getLedDisplay().sevenSeg.slice(0, 8);
+    expect(addrSegs[3]).toBe(0);
+    expect(addrSegs[4]).toBe(0x3f);
+    expect(addrSegs[7]).toBe(0x3f);
+  });
+
+  it("notifyCpuReset は設定エリアの ADDR 桁数を再読込する", async () => {
+    const bridge = mockBridge();
+    await bridge.writeSettingByte(OFFSETS.CPU_TYPE, CPU_TYPE.TMS9995);
+    await bridge.writeSettingByte(OFFSETS.SEVEN_SEG_ADDR_DIGITS, 4);
+
+    const c = new IoConsole(bridge);
+    await c.notifyCpuReset();
+
+    const addrSegs = getLedDisplay().sevenSeg.slice(0, 8);
+    expect(addrSegs[3]).toBe(0);
+    expect(addrSegs[7]).toBe(0x3f);
   });
 });

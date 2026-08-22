@@ -18,14 +18,13 @@ describe("Tms9995CruHandshake", () => {
     expect(s.cpuInSignals.HSHK_IN_REQ).toBe(0);
     expect(s.cpuInSignals.HSHK_IN_DENA).toBe(0);
     expect(s.cpuInSignals.HSHK_OUT_DACK).toBe(0);
-    expect(s.cpuInSignals.INT1_CAUSE0).toBe(0);
-    expect(s.cpuInSignals.INT1_CAUSE1).toBe(0);
+    expect(s.cpuInSignals.INT1_CAUSE).toBe(0);
     expect(s.cpuInSignals.INT2_CAUSE).toBe(0);
 
     expect(s.outDataByte).toBe(0);
     expect(s.inDataByte).toBe(0);
-    expect(s.bits["0x0020"]).toBe(0);
-    expect(s.bits["0x003F"]).toBe(0);
+    expect(s.bits["0x0010"]).toBe(0);
+    expect(s.bits["0x0027"]).toBe(0);
   });
 
   it("CPU出力線は IO 側から読める", () => {
@@ -55,21 +54,23 @@ describe("Tms9995CruHandshake", () => {
   it("INT1/INT2要因線を CRU ビットで扱える", () => {
     const cru = new Tms9995CruHandshake();
 
-    cru.ioSetInt1Cause(2);
+    cru.ioSetInt1Cause(1);
     cru.ioSetInt2Cause(1);
 
-    expect(cru.cpuReadInt1Cause()).toBe(2);
+    expect(cru.cpuReadInt1Cause()).toBe(1);
     expect(cru.cpuReadInt2Cause()).toBe(1);
   });
 
-  it("OUT_DATA と IN_DATA を 8bit 単位で転送できる", () => {
+  it("OUT_DATA と IN_DATA を 8bit ラッチで転送できる（制御線を壊さない）", () => {
     const cru = new Tms9995CruHandshake();
 
+    cru.ioWriteSignal("HSHK_IN_REQ", 1);
     cru.cpuWriteOutDataByte(0xa5);
     cru.ioWriteInDataByte(0x3c);
 
     expect(cru.ioReadOutDataByte()).toBe(0xa5);
     expect(cru.cpuReadInDataByte()).toBe(0x3c);
+    expect(cru.cpuReadSignal("HSHK_IN_REQ")).toBe(1);
   });
 
   it("strictRoles=true では逆方向の書き込みはエラー", () => {
@@ -120,7 +121,17 @@ describe("Tms9995CruHandshake", () => {
 
     expect(cru.writes.length).toBe(0);
     expect(cru.reads.length).toBe(0);
+    expect(cru.snapshot().bits["0x0020"]).toBe(0);
     expect(cru.snapshot().bits["0x0024"]).toBe(0);
-    expect(cru.snapshot().bits["0x0028"]).toBe(0);
+  });
+
+  it("信号アドレスは IO マップどおり", () => {
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INTERRUPT_BUSY).toBe(0x0010);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT1_CAUSE).toBe(0x0011);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT2_CAUSE).toBe(0x0012);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_REQ).toBe(0x0020);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_DATA).toBe(0x0023);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_REQ).toBe(0x0024);
+    expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DATA).toBe(0x0027);
   });
 });

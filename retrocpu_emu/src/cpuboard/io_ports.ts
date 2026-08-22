@@ -1,11 +1,10 @@
 /**
  * 1階 IO ボードのポートマップ（簡易）
- * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+ * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc /
+ *       TMS9995_CPUボードメモリ_IOマップ.mdc
  *
- * 0000 RESET_VECTOR — リセット時 CPU が読むベクタ表の先頭（+2=STR / +3=IC）
- * 0020〜0024 — ハンドシェイク（任意で bridge 接続）
- * 0030〜0034 — CPLD アドレス比較器（設定・ヒット・前回書込値）
- * 0036〜0037 — CPLD ステップ実行（ENA / DELAY）
+ * MN1613: IO 0000 / 0020〜0024 / 0030〜0034 / 0036〜0037
+ * TMS9995: CRU 0010〜0012・0020〜0027、メモリ FE80〜FE87（比較器・ステップ）
  */
 
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
@@ -18,7 +17,11 @@ import {
   createHandshakeIoPortBridge,
   IO_PORT as HSHK_IO_PORT,
 } from "./handshake/io_port_bridge";
-import { Tms9995CruHandshake } from "./tms9995";
+import { Tms9995CruHandshake, tms9995IoMmap } from "./tms9995";
+import {
+  notifyCruFlagWrite,
+  readCruTimerFlagBit,
+} from "./tms9995/cru_timer";
 import {
   addrComparators,
   IO_PORT_BREAK_ADDR_HI,
@@ -32,7 +35,10 @@ import {
   IO_PORT_STEP_ENA,
   stepBreak,
 } from "./mn1613/step_break";
-import { INT_CAUSE_CODE } from "../shared/handshake/handshake_type";
+import {
+  INT_CAUSE_CODE,
+  INT2_CAUSE_CODE,
+} from "../shared/handshake/handshake_type";
 
 /** IO:0000 — リセットベクタ（ワードアドレス） */
 export const IO_PORT_RESET_VECTOR = 0x0000;
@@ -67,8 +73,7 @@ function toBit(v: number): 0 | 1 {
 function syncBusToTmsCru(): void {
   if (!_handshakeBus) return;
   _tmsCru.cpuWriteSignal("INTERRUPT_BUSY", toBit(_handshakeBus.INTERRUPT_BUSY));
-  _tmsCru.ioSetInt1Cause(_handshakeBus.INT_CAUSE & 0x03);
-  _tmsCru.ioSetInt2Cause((_handshakeBus.INT_CAUSE >> 1) & 0x01);
+  applyPackedCauseToTmsCru(_handshakeBus.INT_CAUSE);
 
   _tmsCru.cpuWriteSignal("HSHK_OUT_REQ", toBit(_handshakeBus.HSHK_OUT_REQ));
   _tmsCru.cpuWriteSignal("HSHK_OUT_DENA", toBit(_handshakeBus.HSHK_OUT_DENA));
@@ -86,8 +91,8 @@ function syncTmsCruToBus(): void {
   if (!_handshakeBus) return;
   const snap = _tmsCru.snapshot();
   _handshakeBus.INTERRUPT_BUSY = snap.cpuOutSignals.INTERRUPT_BUSY;
-  _handshakeBus.INT_CAUSE = (snap.cpuInSignals.INT1_CAUSE0 |
-    (snap.cpuInSignals.INT1_CAUSE1 << 1) |
+  // 共有バス用に MN 風へ畳む: INT1→Bit0、INT2→Bit1
+  _handshakeBus.INT_CAUSE = (snap.cpuInSignals.INT1_CAUSE |
     (snap.cpuInSignals.INT2_CAUSE << 1)) as CpuIoSignals["INT_CAUSE"];
 
   _handshakeBus.HSHK_OUT_REQ = snap.cpuOutSignals.HSHK_OUT_REQ;
@@ -102,11 +107,19 @@ function syncTmsCruToBus(): void {
   _handshakeBus.HSHK_IN_DATA = snap.inDataByte & 0xff;
 }
 
-function splitIntCause(cause: number): { int1: number; int2: 0 | 1 } {
-  return {
-    int1: cause & 0x03,
-    int2: toBit((cause >> 1) & 0x01),
-  };
+/**
+ * MN 風 INT_CAUSE を TMS CRU（INT1=ハンドシェイク、INT2=ブレイク/ステップ）へ載せる。
+ * @param cause 下位 3bit
+ */
+function applyPackedCauseToTmsCru(cause: number): void {
+  const c = cause & 0x07;
+  _tmsCru.ioSetInt1Cause((c & 0x06) === INT2_CAUSE_CODE.HANDSHAKE ? 1 : 0);
+  if (c === INT_CAUSE_CODE.STEP) {
+    _tmsCru.ioSetInt2Cause(1);
+  } else {
+    // ADDR_BREAK / HANDSHAKE / TIMER / クリアは INT2=0
+    _tmsCru.ioSetInt2Cause(0);
+  }
 }
 
 /**
@@ -152,16 +165,14 @@ export function getCpuPortMode(): number {
 }
 
 /**
- * 割り込み要因（IO:0021）を IO ボード側から設定する。
- * Bit0=INT1 要因、Bit1-2=INT2 要因。
+ * 割り込み要因を IO ボード側から設定する。
+ * MN1613: IO:0021 のパック値。TMS9995: CRU INT1/INT2 に分解。
  * @param cause ポート値（下位 3bit のみ有効）
  */
 export function setIntCause(cause: number): void {
   _intCause = cause & 0x07;
   if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
-    const split = splitIntCause(_intCause);
-    _tmsCru.ioSetInt1Cause(split.int1);
-    _tmsCru.ioSetInt2Cause(split.int2);
+    applyPackedCauseToTmsCru(_intCause);
     syncTmsCruToBus();
   }
   if (_handshakeBus) {
@@ -212,58 +223,128 @@ export function isHandshakeActive(): boolean {
 /**
  * TMS9995 CPU コア用: CRU 1bit 書き込み。
  * モードが TMS9995 のときのみ有効（MN1613 モードでは no-op）。
+ * @param bitAddr CRU ビットアドレス
+ * @param value 0/1
  */
 export function tms9995CpuWriteCruBit(bitAddr: number, value: 0 | 1): void {
   if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return;
-  _tmsCru.writeBit("cpu", bitAddr, value);
-  const snap = _tmsCru.snapshot();
-  _interruptBusy = snap.cpuOutSignals.INTERRUPT_BUSY;
-  _intCause =
-    (snap.cpuInSignals.INT1_CAUSE0 |
-      (snap.cpuInSignals.INT1_CAUSE1 << 1) |
-      (snap.cpuInSignals.INT2_CAUSE << 1)) &
-    0x07;
-  syncTmsCruToBus();
+  const addr = bitAddr & 0xffff;
+  if (addr >= 0x0010 && addr <= 0x0027) {
+    _tmsCru.writeBit("cpu", addr, value);
+    const snap = _tmsCru.snapshot();
+    _interruptBusy = snap.cpuOutSignals.INTERRUPT_BUSY;
+    _intCause =
+      (snap.cpuInSignals.INT1_CAUSE | (snap.cpuInSignals.INT2_CAUSE << 1)) &
+      0x07;
+    syncTmsCruToBus();
+    return;
+  }
+  if (addr === 0x1ee0 || addr === 0x1ee1) {
+    notifyCruFlagWrite(addr, value);
+  }
 }
 
 /**
  * TMS9995 CPU コア用: CRU 1bit 読み出し。
  * モードが TMS9995 以外なら 0 を返す。
+ * @param bitAddr CRU ビットアドレス
+ * @returns 0/1
  */
 export function tms9995CpuReadCruBit(bitAddr: number): 0 | 1 {
   if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return 0;
-  const bit = _tmsCru.readBit("cpu", bitAddr);
-  syncTmsCruToBus();
-  return bit;
+  const addr = bitAddr & 0xffff;
+  if (addr >= 0x0010 && addr <= 0x0027) {
+    const bit = _tmsCru.readBit("cpu", addr);
+    syncTmsCruToBus();
+    return bit;
+  }
+  if (addr === 0x1ee1) {
+    return readCruTimerFlagBit(addr);
+  }
+  return 0;
 }
 
 /**
- * アドレス比較一致時: INT1_CAUSE=0 を載せ、レベル1割り込みを上げる。
- * 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
+ * TMS9995: HSHK_OUT_DATA へ 8bit（LDCR #8 相当）。
+ * @param value 0..255
+ */
+export function tms9995CpuWriteCruDataByte(value: number): void {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return;
+  _tmsCru.cpuWriteOutDataByte(value & 0xff);
+  syncTmsCruToBus();
+}
+
+/**
+ * TMS9995: HSHK_IN_DATA を 8bit 読む（STCR #8 相当）。
+ * @returns 0..255。非 TMS モードは 0
+ */
+export function tms9995CpuReadCruDataByte(): number {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return 0;
+  const v = _tmsCru.cpuReadInDataByte();
+  syncTmsCruToBus();
+  return v;
+}
+
+/**
+ * TMS9995: FE80–FEFF メモリマップド IO のリード。
+ * @param addr バイトアドレス
+ * @returns 下位 8bit。領域外または非 TMS は null
+ */
+export function tms9995MemReadIoByte(addr: number): number | null {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return null;
+  return tms9995IoMmap.readByte(addr);
+}
+
+/**
+ * TMS9995: FE80–FEFF メモリマップド IO のライト。
+ * @param addr バイトアドレス
+ * @param value バイト値
+ * @returns 処理したら true
+ */
+export function tms9995MemWriteIoByte(addr: number, value: number): boolean {
+  if (_cpuPortMode !== CPU_PORT_MODE.TMS9995) return false;
+  return tms9995IoMmap.writeByte(addr, value);
+}
+
+/**
+ * アドレス比較一致時の IRQ。
+ * MN1613: INT1・CAUSE=0。TMS9995: INT2・CAUSE=0。
+ * @param _slot ヒットしたスロット
  */
 function raiseAddrBreakIrq(_slot: number): void {
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    _tmsCru.ioSetInt2Cause(0);
+    syncTmsCruToBus();
+    triggerInterrupt(2);
+    return;
+  }
   setIntCause(INT_CAUSE_CODE.ADDR_BREAK);
   triggerInterrupt(1);
 }
 
 /**
- * ステップワンショット: INT1_CAUSE=1 を載せ、レベル1割り込みを上げる。
- * 根拠: breakpoint.mdc
+ * ステップワンショットの IRQ。
+ * MN1613: INT1・CAUSE=1。TMS9995: INT2・CAUSE=1。
  */
 function raiseStepBreakIrq(): void {
+  if (_cpuPortMode === CPU_PORT_MODE.TMS9995) {
+    _tmsCru.ioSetInt2Cause(1);
+    syncTmsCruToBus();
+    triggerInterrupt(2);
+    return;
+  }
   setIntCause(INT_CAUSE_CODE.STEP);
   triggerInterrupt(1);
 }
 
 /**
  * CPU の RD/WT コールバックを IO ボードポートに接続する。
- * 既存のハンドシェイク bridge があれば 0x20〜0x25 を委譲する。
- * 0030〜0034 は CPLD 比較器。一致時は INT1・INT1_CAUSE=0。
- * 0036〜0037 はステップ。ヒット時は INT1・INT1_CAUSE=1。
+ * MN1613: 0030〜0037。TMS9995 比較器/ステップは FE80 メモリ API 側。
  */
 export function attachIoBoardPorts(): void {
   addrComparators.setOnHit(raiseAddrBreakIrq);
   stepBreak.setOnHit(raiseStepBreakIrq);
+  tms9995IoMmap.setOnHit(raiseAddrBreakIrq, raiseStepBreakIrq);
 
   setIoReadCallback((port) => {
     const p = port & 0xffff;
@@ -334,4 +415,6 @@ export function resetAddrComparators(): void {
   addrComparators.setOnHit(raiseAddrBreakIrq);
   stepBreak.reset();
   stepBreak.setOnHit(raiseStepBreakIrq);
+  tms9995IoMmap.reset();
+  tms9995IoMmap.setOnHit(raiseAddrBreakIrq, raiseStepBreakIrq);
 }

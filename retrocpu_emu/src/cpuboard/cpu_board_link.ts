@@ -15,17 +15,10 @@ import {
   type CpuToIoFrameRequest,
   type CpuToIoFrameResponse,
 } from "../shared/board_link";
-import type { DmaWriteTarget } from "./cpu_dma";
+import { CPU_TYPE } from "../ioboard/setting_area";
 import type { CpuHandshakeAgent } from "./cpu_hshk_agent";
-import {
-  getExecStatus,
-  requestHalt,
-  setPins,
-  setState,
-  startRun,
-  triggerInterrupt,
-} from "./mn1613/mn1613";
 import { pulseCpuReset } from "./boot";
+import { getCpuCore } from "./cpu_core";
 import {
   getInterruptBusy,
   isHandshakeActive,
@@ -34,6 +27,29 @@ import {
   setIntCause,
 } from "./io_ports";
 import { IO_PORT_STEP_DELAY, stepBreak } from "./mn1613/step_break";
+
+let _linkCpuType = 1;
+
+/** ボードリンクが使う CPU 種別を設定する */
+export function setBoardLinkCpuType(cpuType: number): void {
+  _linkCpuType = cpuType;
+}
+
+function core() {
+  return getCpuCore(_linkCpuType);
+}
+
+/**
+ * パネル／リンク上のアドレスをハンドシェイク 13h/14h 用バイトアドレスへ変換する。
+ * MN1613 はワードアドレス、TMS9995 はバイトアドレス（HandShake.mdc）。
+ * @param panelAddr リンク `wordAddr` フィールドの値
+ */
+function panelAddrToByteAddr(panelAddr: number): number {
+  if (_linkCpuType === CPU_TYPE.TMS9995) {
+    return panelAddr >>> 0;
+  }
+  return (panelAddr >>> 0) * 2;
+}
 
 /** 割り込み処理中で配送できないときの再試行間隔 (ms) */
 const IRQ_RETRY_MS = 1;
@@ -171,12 +187,12 @@ async function handle(
     if (type === "cpu:setHalt") {
       const m = msg as Extract<BoardLinkRequest, { type: "cpu:setHalt" }>;
       if (m.halt) {
-        setPins({ HLT: true });
-        requestHalt();
+        core().setPins({ HLT: true });
+        core().requestHalt();
       } else {
-        setPins({ HLT: false });
-        if (getExecStatus() !== "running") {
-          startRun();
+        core().setPins({ HLT: false });
+        if (core().getExecStatus() !== "running") {
+          core().startRun();
         }
       }
       reply(port, { type: "link:result", id, ok: true });
@@ -187,13 +203,14 @@ async function handle(
       if (typeof m.resetVectorWord === "number") {
         setResetVector(m.resetVectorWord & 0xffff);
       }
-      setPins({ HLT: false });
-      pulseCpuReset();
+      core().setPins({ HLT: false });
+      pulseCpuReset(_linkCpuType);
       reply(port, { type: "link:result", id, ok: true });
       return;
     }
     if (type === "cpu:setCpuType") {
       const m = msg as Extract<BoardLinkRequest, { type: "cpu:setCpuType" }>;
+      _linkCpuType = m.cpuType & 0xff;
       setCpuPortMode(m.cpuType);
       reply(port, { type: "link:result", id, ok: true });
       return;
@@ -251,21 +268,20 @@ function deliverInterrupt(level: 0 | 1 | 2, cause: number, attempt = 0): void {
   }
   setIntCause(cause);
   if (level === 0) {
-    setPins({ IRQ0: true });
-    triggerInterrupt(0);
-    setPins({ IRQ0: false });
+    core().setPins({ IRQ0: true });
+    core().triggerInterrupt(0);
+    core().setPins({ IRQ0: false });
     return;
   }
   if (level === 1) {
-    // TMS9995 では INT1 が主経路。MN1613 と同じレベル線 API で運ぶ。
-    setPins({ IRQ1: true });
-    triggerInterrupt(1);
-    setPins({ IRQ1: false });
+    core().setPins({ IRQ1: true });
+    core().triggerInterrupt(1);
+    core().setPins({ IRQ1: false });
     return;
   }
-  setPins({ IRQ2: true });
-  triggerInterrupt(2);
-  setPins({ IRQ2: false });
+  core().setPins({ IRQ2: true });
+  core().triggerInterrupt(2);
+  core().setPins({ IRQ2: false });
 }
 
 /**
@@ -292,7 +308,7 @@ async function handleHshk(
       return;
     }
     const bytes = await _hshkAgent.memRead(
-      (msg.wordAddr >>> 0) * 2,
+      panelAddrToByteAddr(msg.wordAddr >>> 0),
       msg.byteCount >>> 0,
     );
     const copy = new Uint8Array(bytes.byteLength);
@@ -321,7 +337,7 @@ async function handleHshk(
       return;
     }
     await _hshkAgent.memWrite(
-      (msg.wordAddr >>> 0) * 2,
+      panelAddrToByteAddr(msg.wordAddr >>> 0),
       new Uint8Array(msg.data),
     );
     reply(port, { type: "link:result", id, ok: true });
@@ -329,9 +345,9 @@ async function handleHshk(
   }
 
   if (cmd === CMD_IO_TO_CPU.EXEC) {
-    setPins({ HLT: false });
-    setState({ IC: msg.wordAddr & 0xffff });
-    startRun();
+    core().setPins({ HLT: false });
+    core().setState({ IC: msg.wordAddr & 0xffff });
+    core().startRun();
     reply(port, { type: "link:result", id, ok: true });
     return;
   }

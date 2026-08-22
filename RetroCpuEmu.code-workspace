@@ -45,11 +45,7 @@
     "workbench.settings.useSplitJSON": true,
     "git.ignoreLimitWarning": true,
     "editor.inlineSuggest.enabled": true,
-    "cursor.cpp.disabledLanguages": [
-      "mn1613asm",
-      "asm",
-      "asm-intel-x86-generic",
-    ],
+    "cursor.cpp.disabledLanguages": ["mn1613asm", "asm"],
     "js/ts.validate.enabled": true,
     "js/ts.format.insertSpaceAfterOpeningAndBeforeClosingEmptyBraces": false,
     "js/ts.updateImportsOnFileMove.enabled": "always",

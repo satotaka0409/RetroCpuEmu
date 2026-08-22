@@ -12,10 +12,12 @@ interface SdldLinkCliOptions {
   outIhx: string;
   outCdb?: string;
   outMap?: string;
+  /** true なら MN1613 用に 16bit 即値を ÷2（TMS9995 は false） */
+  wordAddrFixup: boolean;
 }
 
 const USAGE =
-  "Usage: sdld-link <a.rel> [b.rel ...] -o out.ihx [--cdb out.cdb] [--map out.map]";
+  "Usage: sdld-link <a.rel> [b.rel ...] -o out.ihx [--cdb out.cdb] [--map out.map] [--byte-addr]";
 
 /**
  * CLI 引数を解析する。
@@ -27,8 +29,13 @@ export function parseSdldLinkArgs(argv: string[]): SdldLinkCliOptions {
   let outIhx = "";
   let outCdb: string | undefined;
   let outMap: string | undefined;
+  let wordAddrFixup = true;
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]!;
+    if (a === "--byte-addr") {
+      wordAddrFixup = false;
+      continue;
+    }
     if (a === "-o") {
       outIhx = argv[++i] ?? "";
       continue;
@@ -49,7 +56,7 @@ export function parseSdldLinkArgs(argv: string[]): SdldLinkCliOptions {
   if (rels.length === 0 || !outIhx) {
     throw new Error(USAGE);
   }
-  return { rels, outIhx, outCdb, outMap };
+  return { rels, outIhx, outCdb, outMap, wordAddrFixup };
 }
 
 /**
@@ -63,7 +70,9 @@ export function main(argv: string[] = process.argv.slice(2)): void {
       throw new Error(`Input file not found: ${rel}`);
     }
   }
-  const result = linkRelsWithSdld(opts.rels);
+  const result = linkRelsWithSdld(opts.rels, {
+    wordAddrFixup: opts.wordAddrFixup,
+  });
   const ihxPath = path.resolve(opts.outIhx);
   fs.mkdirSync(path.dirname(ihxPath), { recursive: true });
   fs.writeFileSync(ihxPath, result.hexText, "utf8");

@@ -181,6 +181,15 @@ export function intelHexToDmaPlan(hexText: string): IntelHexDmaPlan {
  * @param wordAddr - 開始ワードアドレス
  * @param words - 16bit ワード列
  */
+/**
+ * バイトアドレス起点で 16bit 語列から Intel HEX を生成（TMS9995 テスト用）。
+ * @param byteAddr 開始バイトアドレス（偶数）
+ * @param words 16bit 命令語列（ビッグエンディアン）
+ */
+export function bytesToIntelHex(byteAddr: number, words: number[]): string {
+  return wordsToIntelHex((byteAddr & 0xffff) >>> 1, words);
+}
+
 export function wordsToIntelHex(wordAddr: number, words: number[]): string {
   const byteAddr = (wordAddr & 0xffff) * 2;
   const payload: number[] = [];

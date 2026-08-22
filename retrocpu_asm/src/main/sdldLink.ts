@@ -383,6 +383,54 @@ function write16be(bytes: Map<number, number>, addr: number, val: number): void 
 }
 
 /**
+ * sdld が足したワードアドレスを TMS9995 リセットベクタ（_VECTOR）の PC 欄へ載せる（×2）。
+ * 命令オペランドの分岐オフセット等は sdld 出力のまま触らない。
+ * @param bytes IHX の疎マップ
+ * @param relPaths 入力 .rel
+ * @param defs sdld マップ
+ */
+function applyTms9995ByteAddrFixup(
+  bytes: Map<number, number>,
+  relPaths: string[],
+  defs: Map<string, number>,
+): void {
+  const parsedRels = relPaths.map((p) =>
+    parseRelChunks(fs.readFileSync(p, "utf8")),
+  );
+  const bases = moduleAreaBases(parsedRels, defs);
+  parsedRels.forEach((parsed, relIdx) => {
+    const thisBase = bases[relIdx]!;
+    for (const chunk of parsed.chunks) {
+      if (chunk.areaName !== "_VECTOR") continue;
+      const areaBase = thisBase.get(chunk.areaName) ?? 0;
+      for (const item of chunk.items) {
+        const fieldOff = chunk.tAddr + (item.rtp - 2);
+        const absAddr = (areaBase + fieldOff) >>> 0;
+        if ((item.mode & R3_BYTE) !== 0) {
+          if ((item.mode & R3_SYM) !== 0) {
+            const symName = parsed.symbols[item.index] ?? "";
+            const symVal = defLookup(defs, symName) ?? 0;
+            bytes.set(absAddr, symVal & 0xff);
+          } else {
+            const srcArea = parsed.areas[item.index] ?? chunk.areaName;
+            const srcBase =
+              thisBase.get(srcArea) ??
+              defLookup(defs, `s_${srcArea}`) ??
+              SDLD_AREA_BASES[srcArea] ??
+              0;
+            const orig = chunk.data[item.rtp - 2] ?? 0;
+            bytes.set(absAddr, (srcBase + orig) & 0xff);
+          }
+        } else {
+          const val = read16be(bytes, absAddr);
+          write16be(bytes, absAddr, (val << 1) & 0xffff);
+        }
+      }
+    }
+  });
+}
+
+/**
  * sdld が足したバイトアドレスを MN161x のワードアドレスへ直す。
  * R3_WORD は 16bit を ÷2。R3_BYTE（`*label`）はシンボル／領域のワード下位 8bit。
  * @param bytes IHX の疎マップ
@@ -435,7 +483,7 @@ function applyMn1613WordAddrFixup(
  * 置く `-b` と `_DATA` / `_WORK` は 1 本目の map を見て 2 本目の `.lnk` に書く
  * （sdld8051 が空の `_CODE` を先に作るため、1 本では `_BIOS` の後ろに付かない）。
  * @param relPaths 入力 .rel（MAIN を先頭にすること）
- * @param options wordAddrFixup=false なら TMS（÷2 しない）
+ * @param options wordAddrFixup=false なら TMS9995（16bit 即値を ×2）
  * @returns リンク結果
  */
 export function linkRelsWithSdld(
@@ -517,6 +565,8 @@ export function linkRelsWithSdld(
   const bytes = parseIntelHex(fs.readFileSync(rawIhxPath, "utf8"));
   if (wordAddrFixup) {
     applyMn1613WordAddrFixup(bytes, absRels, defs);
+  } else {
+    applyTms9995ByteAddrFixup(bytes, absRels, defs);
   }
   const hexText = bytesToIntelHex(bytes);
   const cdbText = defsToCdbFromSdld(defs);

@@ -7,8 +7,10 @@
 
 import { wordToSegDigits, wordToSegDigitsPadded } from "../seven_led/seg_font";
 import {
+  CPU_TYPE,
   OFFSETS,
   alignAddrToStep,
+  defaultSettingsForCpu,
   normalizeAddrStep,
 } from "../setting_area";
 import { applyLedDisplayCommand } from "../seven_led/io_led";
@@ -78,8 +80,8 @@ export class IoConsole {
   private halted = true;
   /** モニター時のアドレス増加数（設定 05h。設定エリア編集中は常に 1） */
   private addrStep = 1;
-  /** モニター時の ADDR 7セグ桁数（設定 0Ah、最大 8） */
-  private addrDigits = 5;
+  /** モニター時の ADDR 7セグ桁数（設定 0Ah、最大 8。未同期時は MN1613 既定 5） */
+  private addrDigits = defaultSettingsForCpu(CPU_TYPE.MN1613).sevenSegAddrDigits;
   /** モニター時の DATA 7セグ桁数（設定 0Bh、最大 4） */
   private dataDigits = 4;
 
@@ -109,7 +111,8 @@ export class IoConsole {
    * 1階 RST 後のパネル表示（ioboard.mdc）。
    * ADDR 入力・ADDR/DATA=0・UNDEF 消灯。ブートモニタは H 待ちなので HALT。
    */
-  notifyCpuReset(): void {
+  async notifyCpuReset(): Promise<void> {
+    await this.syncMonitorSettings();
     this.wordAddr = 0;
     this.dataWord = 0;
     this.focus = "addr";
@@ -121,11 +124,16 @@ export class IoConsole {
 
   /** ADS 長押しで設定エリア編集モードへ入退する。 */
   onAdsLongPress(): void {
+    const leavingSetting = this.mode === "setting_area";
     this.mode = this.mode === "monitor" ? "setting_area" : "monitor";
     this.focus = "addr";
     this.wordAddr = 0;
     this.dataWord = 0;
     log.info("ADS 長押しでモード切替", { mode: this.mode });
+    if (leavingSetting) {
+      void this.syncMonitorSettings().then(() => this.refreshLeds());
+      return;
+    }
     this.refreshLeds();
   }
 
@@ -254,7 +262,7 @@ export class IoConsole {
         break;
       case "F7": // RST: HALT → ブートモニタ DMA → CPU RST（bridge がフルリセット）
         await this.cpu.pulseReset();
-        this.notifyCpuReset();
+        await this.notifyCpuReset();
         break;
       default:
         break;
@@ -262,9 +270,20 @@ export class IoConsole {
   }
 
   /**
+   * 設定エリアからモニター用の増加数・7セグ桁数を取り込み LED を更新する。
+   * 起動直後・CPU リセット後・設定エリア編集終了時に呼ぶ。
+   */
+  async syncMonitorSettings(): Promise<void> {
+    await this.syncFromSettings();
+    this.refreshLeds();
+  }
+
+  /**
    * 設定エリアからモニター用の増加数・7セグ桁数を取り込む。
    */
   private async syncFromSettings(): Promise<void> {
+    const cpuType = await this.cpu.readSettingByte(OFFSETS.CPU_TYPE);
+    const cpuDefaults = defaultSettingsForCpu(cpuType);
     this.addrStep = normalizeAddrStep(
       await this.cpu.readSettingByte(OFFSETS.ADDR_STEP),
     );
@@ -275,9 +294,13 @@ export class IoConsole {
       OFFSETS.SEVEN_SEG_DATA_DIGITS,
     );
     this.addrDigits =
-      addrDigits >= 1 && addrDigits <= 8 ? addrDigits : 5;
+      addrDigits >= 1 && addrDigits <= 8
+        ? addrDigits
+        : cpuDefaults.sevenSegAddrDigits;
     this.dataDigits =
-      dataDigits >= 1 && dataDigits <= 4 ? dataDigits : 4;
+      dataDigits >= 1 && dataDigits <= 4
+        ? dataDigits
+        : cpuDefaults.sevenSegDataDigits;
   }
 
   /**

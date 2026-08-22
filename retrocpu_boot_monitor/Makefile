@@ -301,7 +301,8 @@ $(TMS9995_OBJ_DIR)/%.rel: $(TMS9995_SRC_DIR)/%.asm | retrocpu-asm-build $(TMS999
 
 $(TMS9995_IHX): $(TMS9995_RELS) $(SDLD) | $(TMS9995_HEX_DIR)
 	@test -x "$(SDLD)"
-	node $(SDLD_LINK_CLI) $(TMS9995_RELS) -o $@ --cdb $(TMS9995_CDB) --map $(TMS9995_MAP)
+	node $(SDLD_LINK_CLI) $(TMS9995_RELS) -o $@ --cdb $(TMS9995_CDB) --map $(TMS9995_MAP) --byte-addr
+	cp -f $@ ../retrocpu_emu/
 
 ihx-tms9995: sdcc-setup retrocpu-asm-build $(TMS9995_IHX)
 	@echo "Wrote $(TMS9995_IHX)"

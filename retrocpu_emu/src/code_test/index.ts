@@ -5,13 +5,22 @@
 
 export { createMn1613CodeTest, Mn1613CodeTest, readWord, writeWord, readBytes, writeBytes } from "./mn1613_harness";
 export {
+  createTms9995CodeTest,
+  Tms9995CodeTest,
+  readWord as tmsReadWord,
+  writeWord as tmsWriteWord,
+} from "./tms9995_harness";
+export {
   loadIntelHex,
   wordsToIntelHex,
+  bytesToIntelHex,
   intelHexToDmaPlan,
 } from "./intel_hex";
 export {
   parseCdb,
+  parseTms9995Cdb,
   requireSymbol,
+  requireTms9995Symbol,
   checkpointIdsByWordAddr,
   emptyCdbTable,
   type CdbTable,
@@ -32,5 +41,6 @@ export type {
   CodeTestIoWriteLog,
   CodeTestSettings,
   Mn1613CodeTestOptions,
+  Tms9995CodeTestOptions,
   StackWorkExpect,
 } from "./types";

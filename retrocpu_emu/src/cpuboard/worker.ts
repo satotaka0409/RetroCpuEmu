@@ -18,13 +18,9 @@ import { attachCpuBoardLink, sendCpuToIoFrame } from "./cpu_board_link";
 import { CpuHandshakeAgent } from "./cpu_hshk_agent";
 import { attachHandshakeBus, setCpuPortMode } from "./io_ports";
 import { enterResetWait } from "./boot";
-import {
-  getClockCount,
-  getExecStatus,
-  getPins,
-  getState,
-  tickCpu,
-} from "./mn1613/mn1613";
+import { getCpuCore, isCpuCoreReady } from "./cpu_core";
+import { setBoardLinkCpuType } from "./cpu_board_link";
+import { CPU_TYPE } from "../ioboard/setting_area";
 import { getLogger, initLogging } from "../log/logger";
 import { cpuSlicePlan, handshakeBusyFromBus } from "./cpu_slice";
 
@@ -43,6 +39,17 @@ const log = getLogger("cpu");
 const board: SharedBoard = attachSharedBoard(init);
 const stepsPerSlice = init.stepsPerSlice ?? 32;
 const sliceMs = init.sliceMs ?? 4;
+const cpuType = init.cpuType ?? CPU_TYPE.MN1613;
+const cpuCoreReady = isCpuCoreReady(cpuType);
+const core = getCpuCore(cpuType);
+
+const {
+  getClockCount,
+  getExecStatus,
+  getPins,
+  getState,
+  tickCpu,
+} = core;
 
 /**
  * CPU→IO ハンドシェイクの線側。組み立てたフレームは IO ボード Worker へ転送する。
@@ -63,11 +70,13 @@ const hshkAgent = new CpuHandshakeAgent({
   },
 });
 attachHandshakeBus(hshkAgent.bus);
-setCpuPortMode(init.cpuType ?? 1);
-// 電源投入は idle。ブートモニタ DMA と RST は IO ボード（F7 / 電源投入）が行う。
-enterResetWait();
+setCpuPortMode(cpuType);
+setBoardLinkCpuType(cpuType);
+if (cpuCoreReady) {
+  enterResetWait(cpuType);
+}
 
-const dma = new CpuDmaTarget(5000, {
+const dma = new CpuDmaTarget(cpuType, 5000, {
   onBusy(busy) {
     Atomics.store(board.ctrl, CTRL.DMA_BUSY, busy ? 1 : 0);
   },
@@ -105,7 +114,7 @@ function publishStatus(): void {
   Atomics.store(s, STATUS.HLT, pins.HLT ? 1 : 0);
   Atomics.store(s, STATUS.RUN, pins.RUN ? 1 : 0);
   Atomics.store(s, STATUS.RST, pins.RST ? 1 : 0);
-  Atomics.store(s, STATUS.IRQ0, pins.IRQ0 ? 1 : 0);
+  Atomics.store(s, STATUS.IRQ0, "IRQ0" in pins && pins.IRQ0 ? 1 : 0);
   Atomics.store(s, STATUS.IRQ1, pins.IRQ1 ? 1 : 0);
   Atomics.store(s, STATUS.IRQ2, pins.IRQ2 ? 1 : 0);
   Atomics.store(s, STATUS.STR, regs.STR & 0xffff);
@@ -145,7 +154,7 @@ function slice(): void {
   const turbo = handshakeBusyFromBus(hshkAgent.bus);
   const plan = cpuSlicePlan(turbo, stepsPerSlice, sliceMs);
 
-  if (Atomics.load(board.ctrl, CTRL.DMA_BUSY) === 0) {
+  if (Atomics.load(board.ctrl, CTRL.DMA_BUSY) === 0 && cpuCoreReady) {
     for (let i = 0; i < plan.steps; i++) {
       tickCpu();
     }
@@ -163,7 +172,7 @@ function start(): void {
   hshkAgent.start();
   publishStatus();
   timer = setTimeout(slice, sliceMs);
-  log.info("CPU Worker 開始", { stepsPerSlice, sliceMs });
+  log.info("CPU Worker 開始", { stepsPerSlice, sliceMs, cpuType, cpuCoreReady });
   parentPort?.postMessage({ type: "cpu:started" });
 }
 
@@ -187,11 +196,10 @@ parentPort?.on("message", (msg: { type: string; port?: MessagePort }) => {
     (msg?.type === "link:port" || msg?.type === "dma:port") &&
     msg.port
   ) {
-    // dma:port は旧名（互換）
     attachCpuBoardLink(msg.port, dma, hshkAgent);
     hshkAgent.start();
   }
 });
 
-log.info("CPU Worker 準備完了");
+log.info("CPU Worker 準備完了", { cpuType, cpuCoreReady });
 parentPort?.postMessage({ type: "cpu:ready" });

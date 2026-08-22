@@ -16,6 +16,22 @@
         "ELECTRON_ENABLE_LOGGING": "1",
         "ELECTRON_RUN_AS_NODE": ""
       }
+    },
+    {
+      "name": "レトロマイコンエミュ:TMS9995",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:retrocpu_emu}",
+      "runtimeExecutable": "${workspaceFolder:retrocpu_emu}/node_modules/.bin/electron",
+      "runtimeArgs": [".", "tms9995.jsonc"],
+      "preLaunchTask": "emu: build",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:retrocpu_emu}/dist/**/*.js"],
+      "env": {
+        "ELECTRON_ENABLE_LOGGING": "1",
+        "ELECTRON_RUN_AS_NODE": ""
+      }
     }
   ]
 }

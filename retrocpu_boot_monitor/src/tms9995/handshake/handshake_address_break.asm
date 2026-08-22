@@ -1,11 +1,10 @@
-; handshake_address_break.asm
 ; 比較器ブレイク設定・解除（IO→CPU 10h / 11h）
-; 根拠: HandShake.mdc / TMS9995_CPUボードメモリ_IOマップ.mdc（CRU 0040–005F）
+; 根拠: HandShake.mdc / TMS9995_CPUボードメモリ_IOマップ.mdc（FE80–FE83）
 ;
 ; コマンド 1B は IRQ ディスパッチ済み。
 ; 10h 残り 9B: slot, flags, count, addr32 BE, data16 BE → 送信 1B status
 ; 11h 残り 1B: slot → 送信 1B status
-; スロット 0–3。表は GL_HSHK_ADDR_BREAK（6 語×4）。CRU へもプログラムする。
+; スロット 0–3。表は GL_HSHK_ADDR_BREAK（6 語×4）。FE80 メモリ IO へもプログラムする。
 ; 呼び出し: BL / B (R11)。ステータスは R2。ネスト時は R11 を退避。
 ; 注意: g_hshk_recv/send は R0–R3 を壊すので、表ポインタは R7・slot は R6（入口で退避）。
 
@@ -142,10 +141,14 @@ l_ab_clr_z:
 	AI	R1, #-1
 	JNE	l_ab_clr_z
 
-	LI	R12, #IO_BREAK_NUM_OUT
-	LDCR	R6, #3
-	LI	R12, #0
-	SBZ	#IO_BREAK_ENA
+	LI	R1, #IO_BREAK_SLOT
+	SWPB	R6
+	MOVB	R6, (R1)
+	SWPB	R6
+	LI	R0, #0
+	SWPB	R0
+	LI	R1, #IO_BREAK_CTRL
+	MOVB	R0, (R1)			; ENA=0（他ビットも 0）
 
 	LI	R2, #HSHK_OK
 	BL	g_hshk_send_byte
@@ -201,33 +204,41 @@ l_ab_rw_fail:
 	B	(R9)
 
 ; -------------------------------------------------------
-; CRU へ比較器を書く（表 R7・slot R6 から読む）
+; FE80–FE83 へ比較器を書く（表 R7・slot R6 から読む）
 ; -------------------------------------------------------
 l_ab_cru_program:
 	MOV	R11, R9
-	LI	R12, #IO_BREAK_NUM_OUT
-	LDCR	R6, #3
 
-	LI	R12, #0
-	SBO	#IO_BREAK_ENA
+	; FE80: slot
+	LI	R1, #IO_BREAK_SLOT
+	MOV	R6, R0
+	SWPB	R0
+	MOVB	R0, (R1)
 
-	MOV	2(R7), R0		; flags
-	MOV	R0, R1
-	ANDI	R1, #HSHK_AB_F_IO
-	JEQ	l_ab_cru_mem
-	SBO	#IO_BREAK_MEMIO
-	JMP	l_ab_cru_rdwr
-l_ab_cru_mem:
-	SBZ	#IO_BREAK_MEMIO
-l_ab_cru_rdwr:
-	SRL	R0, #1
-	ANDI	R0, #0x0003
-	LI	R12, #IO_BREAK_RDWR
-	LDCR	R0, #2
+	; FE81: ENA | MEM/IO | RD/WR（Bit3–6）
+	LI	R0, #IO_BREAK_CTRL_ENA
+	MOV	2(R7), R1		; flags
+	MOV	R1, R2
+	ANDI	R2, #HSHK_AB_F_IO
+	JEQ	l_ab_mm_rdwr
+	ORI	R0, #IO_BREAK_CTRL_IO
+l_ab_mm_rdwr:
+	SRL	R1, #1
+	ANDI	R1, #0x0003
+	SLA	R1, #5
+	SOC	R1, R0
+	SWPB	R0
+	LI	R1, #IO_BREAK_CTRL
+	MOVB	R0, (R1)
 
+	; FE82–FE83: addr16 BE
 	MOV	8(R7), R0		; addr_lo
-	LI	R12, #IO_BREAK_ADDR
-	LDCR	R0, #0			; 16bit
+	SWPB	R0
+	LI	R1, #IO_BREAK_ADDR_HI
+	MOVB	R0, (R1)			; 上位
+	SWPB	R0
+	LI	R1, #IO_BREAK_ADDR_LO
+	MOVB	R0, (R1)			; 下位 → コミット
 	B	(R9)
 
 	.area	_WORK		(REL,NOLOAD)

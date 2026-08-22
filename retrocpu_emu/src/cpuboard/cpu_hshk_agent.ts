@@ -13,14 +13,14 @@ import {
   HSHK_CPU_TYPE,
   makeCpuToIoRemainingSize,
 } from "../ioboard/handshake/command_cpu_to_io";
-import { wireHshkReq1ToIrq2 } from "../ioboard/handshake/io_board_mock";
+import { wireHshkInReqToCpuIrq } from "./cpu_hshk_wire";
 import { IoControlHandshake } from "../shared/handshake/handshake_ioboard";
 import {
   createHandshakeBus,
   DEFAULT_TIMEOUT_MS,
 } from "../shared/handshake/handshake_type";
 import type { CpuIoSignals } from "./mn1613/mn1613ioport";
-import { tickCpu } from "./mn1613/mn1613";
+import { getCpuCore } from "./cpu_core";
 
 /**
  * REQ_0 待ちのポーリング間隔 (ms)。
@@ -68,15 +68,18 @@ export class CpuHandshakeAgent {
   /** CPU→IO 受信ループと IO→CPU（13h/14h）を直列化する */
   private busLock: Promise<void> = Promise.resolve();
 
+  private readonly cpuType: number;
+  private unwireIrq: (() => void) | null = null;
+
   /**
    * @param options フレーム転送関数、タイムアウト、通知コールバック
    */
   constructor(options: CpuHandshakeAgentOptions) {
     this.options = options;
-    const cpuType = options.cpuType ?? HSHK_CPU_TYPE.MN1613;
+    this.cpuType = options.cpuType ?? HSHK_CPU_TYPE.MN1613;
     this.remainingFromSoFar = makeCpuToIoRemainingSize(
-      breakHistoryEntrySizeForCpu(cpuType),
-      cpuType,
+      breakHistoryEntrySizeForCpu(this.cpuType),
+      this.cpuType,
     );
     this.bus = createHandshakeBus();
     /**
@@ -87,7 +90,7 @@ export class CpuHandshakeAgent {
       options.wireIrq2 === false
         ? undefined
         : (): void => {
-            tickCpu();
+            getCpuCore(this.cpuType).tickCpu();
           };
     this.io = new IoControlHandshake(
       this.bus,
@@ -95,7 +98,7 @@ export class CpuHandshakeAgent {
       pumpCpu,
     );
     if (options.wireIrq2 !== false) {
-      wireHshkReq1ToIrq2(this.bus);
+      this.unwireIrq = wireHshkInReqToCpuIrq(this.bus, this.cpuType);
     }
   }
 
@@ -123,6 +126,8 @@ export class CpuHandshakeAgent {
     if (!this.serving) return;
     this.abortServe = true;
     await this.servePromise?.catch(() => undefined);
+    this.unwireIrq?.();
+    this.unwireIrq = null;
   }
 
   /**

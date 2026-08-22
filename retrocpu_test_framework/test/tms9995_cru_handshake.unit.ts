@@ -36,17 +36,17 @@ test("IO→CPU の信号とデータをモック越しに読み取れる", () =>
 test("strictRoles=true では役割外アクセスを拒否する", () => {
   const cru = new Tms9995CruHandshakeMock();
 
-  expect(() => cru.writeBit("cpu", 0x0028, 1)).toThrow(/cannot write/);
-  expect(() => cru.writeBit("io", 0x0024, 1)).toThrow(/cannot write/);
-  expect(() => cru.readBit("cpu", 0x0024)).toThrow(/cannot read/);
-  expect(() => cru.readBit("io", 0x0028)).toThrow(/cannot read/);
+  expect(() => cru.writeBit("cpu", 0x0024, 1)).toThrow(/cannot write/);
+  expect(() => cru.writeBit("io", 0x0020, 1)).toThrow(/cannot write/);
+  expect(() => cru.readBit("cpu", 0x0020)).toThrow(/cannot read/);
+  expect(() => cru.readBit("io", 0x0024)).toThrow(/cannot read/);
 });
 
 test("strictRoles=false ならハンドシェイク領域内の読み書きを許可する", () => {
   const cru = new Tms9995CruHandshakeMock({ strictRoles: false });
 
-  cru.writeBit("cpu", 0x0028, 1);
-  expect(cru.readBit("io", 0x0028)).toBe(1);
+  cru.writeBit("cpu", 0x0024, 1);
+  expect(cru.readBit("io", 0x0024)).toBe(1);
 });
 
 test("snapshot は信号・データ・領域範囲を一貫して返す", () => {
@@ -61,16 +61,16 @@ test("snapshot は信号・データ・領域範囲を一貫して返す", () =>
   expect(snap.cpuInSignals.HSHK_OUT_DACK).toBe(1);
   expect(snap.outDataByte).toBe(0x81);
   expect(snap.inDataByte).toBe(0x42);
-  expect(snap.bits["0x0030"]).toBe(1);
-  expect(snap.bits["0x003F"]).toBe(0);
+  expect(snap.bits["0x0023"]).toBe(1);
+  expect(snap.bits["0x0027"]).toBe(0);
 
-  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMin).toBe(0x0020);
-  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMax).toBe(0x003f);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_REQ).toBe(0x0024);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DACK).toBe(0x0026);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_DACK).toBe(0x002a);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INTERRUPT_BUSY).toBe(0x0020);
-  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT2_CAUSE).toBe(0x0023);
+  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMin).toBe(0x0010);
+  expect(TMS9995_CRU_HANDSHAKE_REGION.bitAddrMax).toBe(0x0027);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_REQ).toBe(0x0020);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_IN_DACK).toBe(0x0022);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.HSHK_OUT_DACK).toBe(0x0026);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INTERRUPT_BUSY).toBe(0x0010);
+  expect(TMS9995_CRU_HANDSHAKE_SIGNALS.INT2_CAUSE).toBe(0x0012);
 });
 
 test("INT1/INT2 要因を IO がセットし CPU が読める", () => {

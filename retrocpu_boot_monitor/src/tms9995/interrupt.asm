@@ -59,18 +59,16 @@ g_int0_handler:
 	RTWP
 
 ; -------------------------------------------------------
-; INT1: CAUSE 01=ハンドシェイク（タイマーは INT3）
+; INT1: CAUSE 1=ハンドシェイク（タイマーは INT3）
 ; -------------------------------------------------------
 g_int1_handler:
 	LI	R10, #INT_STACK_INIT - 0x40
 	LI	R12, #0
 	SBO	#INTERRUPT_BUSY_BIT
 
-	LI	R12, #INT1_CAUSE_BASE
-	STCR	R0, #2
-	ANDI	R0, #INT1_CAUSE_MASK
-	CI	R0, #INT1_CAUSE_HSHK
-	JNE	l_int1_done
+	LI	R12, #0
+	TB	#INT1_CAUSE_BIT
+	JNE	l_int1_done		; bit=0 ならハンドシェイク以外
 	BL	g_handshake_interrupt_handler
 
 l_int1_done:

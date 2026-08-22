@@ -8,6 +8,8 @@
     "build": "node scripts/build.mjs",
     "postinstall": "node node_modules/electron/install.js",
     "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
+    "start:mn1613": "npm run build && env -u ELECTRON_RUN_AS_NODE electron . mn1613.jsonc",
+    "start:tms9995": "npm run build && env -u ELECTRON_RUN_AS_NODE electron . tms9995.jsonc",
     "dev": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "vitest run",
     "test:watch": "vitest",

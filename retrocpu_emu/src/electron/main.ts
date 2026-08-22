@@ -9,6 +9,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { EmuHost } from "./emu_host";
 import { resolveBootMonitorHexPath } from "../ioboard/io_reset";
+import { isCpuCoreReady } from "../cpuboard/cpu_core";
 import type { EmuSnapshot } from "../shared/emu_types";
 import type { BeepWire } from "../shared/emu_api";
 import { playHostBeep, stopHostBeep } from "./host_beep";
@@ -223,6 +224,20 @@ if (gotLock) {
       bootMonitorHex: startup.bootMonitorHex,
       settingAreaPath,
     });
+
+    // CPU Worker は MN1613 / TMS9995 をサポート
+    if (!isCpuCoreReady(startup.settings.cpuType)) {
+      const name = `cpuType=${startup.settings.cpuType}`;
+      const detail =
+        `${name} の命令コアは未実装です。\n` +
+        `mn1613.jsonc（cpu: \"1\"）または tms9995.jsonc（cpu: \"2\"）で起動してください。`;
+      log.error("未対応 CPU のため起動を中止", {
+        cpuType: startup.settings.cpuType,
+      });
+      await dialog.showErrorBox("未対応の CPU", detail);
+      app.quit();
+      return;
+    }
 
     let bootMonitorHex: string | undefined;
     try {

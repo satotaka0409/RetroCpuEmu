@@ -1,8 +1,7 @@
-; breakpoint.asm
 ; CPLD 比較器ヒット（INT2 / INT2_CAUSE=0）
-; 根拠: HandShake.mdc 1Ah / TMS9995_CPUボードメモリ_IOマップ.mdc（CRU 0043h）
+; 根拠: HandShake.mdc 1Ah / TMS9995_CPUボードメモリ_IOマップ.mdc（FE84h）
 ;
-; ヒットスロットを STCR で読み、表を参照。Bit7 なら g_bp_hist_append。
+; ヒットスロットを FE84 から読み、表を参照。Bit7 なら g_bp_hist_append。
 ; 回数 0 または減算後 0 なら 1Ah（ヘッダ＋履歴エントリ）を送り R2=1（HALT）。
 ; 無効は R2=0 で継続。handshake は R2–R3 を壊すので slot=R6・表=R7。
 ; 呼び出し: BL / B (R11)。停止フラグは R2。
@@ -34,8 +33,10 @@ g_breakpoint_interrupt_handler:
 	DECT	R10
 	MOV	R11, (R10)
 
-	LI	R12, #IO_BREAK_HIT_IN
-	STCR	R6, #3
+	LI	R1, #IO_BREAK_HIT
+	CLR	R6
+	MOVB	(R1), R6
+	SWPB	R6
 	ANDI	R6, #0x0003		; スロット 0–3
 
 	MOV	R6, R0
