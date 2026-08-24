@@ -47,7 +47,7 @@ g_set_int_adr:
 ; INT0: 未定義／登録スロット
 ; -------------------------------------------------------
 g_int0_handler:
-	LI	R10, #INT_STACK_INIT
+  L   R10, 20(R13)					; SP引き継ぎ
 	LI	R12, #0
 	SBO	#INTERRUPT_BUSY_BIT
 	LI	R2, #1
@@ -62,7 +62,7 @@ g_int0_handler:
 ; INT1: CAUSE 1=ハンドシェイク（タイマーは INT3）
 ; -------------------------------------------------------
 g_int1_handler:
-	LI	R10, #INT_STACK_INIT - 0x40
+  L   R10, 20(R13)
 	LI	R12, #0
 	SBO	#INTERRUPT_BUSY_BIT
 
@@ -82,7 +82,7 @@ l_int1_done:
 ; 停止時 R2≠0 → g_main_loop（モニタ HALT）
 ; -------------------------------------------------------
 g_int2_handler:
-	LI	R10, #INT_STACK_INIT - 0x80
+  L   R10, 20(R13)					; SP引き継ぎ
 	LI	R12, #0
 	SBO	#INTERRUPT_BUSY_BIT
 
@@ -110,7 +110,7 @@ l_int2_cont:
 ; INT3: 内蔵デクリメンタ（1ms ティック → 周期満了で登録スロット）
 ; -------------------------------------------------------
 g_int3_handler:
-	LI	R10, #INT_STACK_INIT - 0xc0
+  L   R10, 14(R13)					; SP引き継ぎ
 	LI	R12, #0
 	SBO	#INTERRUPT_BUSY_BIT
 	BL	g_timer_on_tick
