@@ -298,6 +298,21 @@ export class BoardLinkClient {
   }
 
   /**
+   * CPU ボードのクロック分周比を設定する。
+   * @param clockDiv 0:1/1, 1:1/2, 2:1/4, 3:1/8
+   */
+  async setClockDiv(clockDiv: number): Promise<void> {
+    const port = this.requirePort();
+    const id = this.nextId++;
+    const req: BoardLinkRequest = {
+      type: "cpu:setClockDiv",
+      id,
+      clockDiv: clockDiv & 0x03,
+    };
+    await this.send(port, req);
+  }
+
+  /**
    * リクエストを送り、同じ id の応答が返るまで待つ。
    * @param port 送信先ポート
    * @param req リクエスト（id は呼び出し側で採番済み）

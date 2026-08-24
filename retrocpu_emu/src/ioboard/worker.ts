@@ -253,6 +253,10 @@ async function writeSettingByte(
     log.info("設定エリア CPU 種類再設定を適用");
   }
 
+  if (addr === OFFSETS.CLOCK_DIV || addr === OFFSETS.CPU_TYPE_RESET) {
+    await link.setClockDiv(decodeSettingArea(settingRaw).clockDiv & 0x03);
+  }
+
   await settingStorage.write(settingRaw);
 }
 
@@ -319,6 +323,9 @@ async function runIoBoardReset(reason: string): Promise<void> {
     const stepDelay = settingRaw
       ? decodeSettingArea(settingRaw).stepDelay & 0xff
       : 1;
+    const clockDiv = settingRaw
+      ? decodeSettingArea(settingRaw).clockDiv & 0x03
+      : 0;
     const hexPath = resolveBootMonitorHexPath(init.bootMonitorHex);
     log.info("IO ボードリセット開始", {
       reason,
@@ -326,9 +333,11 @@ async function runIoBoardReset(reason: string): Promise<void> {
       resetVectorWord,
       cpuType,
       stepDelay,
+      clockDiv,
     });
     await link.setCpuType(cpuType);
     await link.setStepDelay(stepDelay);
+    await link.setClockDiv(clockDiv);
     const result = await performIoBoardReset(link, hexPath, resetVectorWord);
     await consolePanel.notifyCpuReset();
     log.info("IO ボードリセット完了", {

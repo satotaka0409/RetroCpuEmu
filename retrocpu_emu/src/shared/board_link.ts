@@ -84,6 +84,12 @@ export type BoardLinkRequest =
       stepDelay: number;
     }
   | {
+      /** CPU ボードのクロック分周比（0:1/1, 1:1/2, 2:1/4, 3:1/8）を設定する */
+      type: "cpu:setClockDiv";
+      id: number;
+      clockDiv: number;
+    }
+  | {
       /** IO ボードから CPU への割り込み要求（タイマー等）。実機は IRQ 線 + 要因線 */
       type: "cpu:irq";
       id: number;

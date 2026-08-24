@@ -14,7 +14,11 @@ import {
   type SharedBoard,
 } from "../shared/shared_board";
 import { CpuDmaTarget } from "./cpu_dma";
-import { attachCpuBoardLink, sendCpuToIoFrame } from "./cpu_board_link";
+import {
+  attachCpuBoardLink,
+  getBoardLinkClockDiv,
+  sendCpuToIoFrame,
+} from "./cpu_board_link";
 import { CpuHandshakeAgent } from "./cpu_hshk_agent";
 import { attachHandshakeBus, setCpuPortMode } from "./io_ports";
 import { enterResetWait } from "./boot";
@@ -43,13 +47,7 @@ const cpuType = init.cpuType ?? CPU_TYPE.MN1613;
 const cpuCoreReady = isCpuCoreReady(cpuType);
 const core = getCpuCore(cpuType);
 
-const {
-  getClockCount,
-  getExecStatus,
-  getPins,
-  getState,
-  tickCpu,
-} = core;
+const { getClockCount, getExecStatus, getPins, getState, tickCpu } = core;
 
 /**
  * CPU→IO ハンドシェイクの線側。組み立てたフレームは IO ボード Worker へ転送する。
@@ -153,9 +151,14 @@ function slice(): void {
 
   const turbo = handshakeBusyFromBus(hshkAgent.bus);
   const plan = cpuSlicePlan(turbo, stepsPerSlice, sliceMs);
+  const clockDiv = getBoardLinkClockDiv();
+  const divisor = 1 << (clockDiv & 0x03);
+  const effectiveSteps = turbo
+    ? plan.steps
+    : Math.max(1, Math.floor(plan.steps / divisor));
 
   if (Atomics.load(board.ctrl, CTRL.DMA_BUSY) === 0 && cpuCoreReady) {
-    for (let i = 0; i < plan.steps; i++) {
+    for (let i = 0; i < effectiveSteps; i++) {
       tickCpu();
     }
   }
@@ -172,7 +175,12 @@ function start(): void {
   hshkAgent.start();
   publishStatus();
   timer = setTimeout(slice, sliceMs);
-  log.info("CPU Worker 開始", { stepsPerSlice, sliceMs, cpuType, cpuCoreReady });
+  log.info("CPU Worker 開始", {
+    stepsPerSlice,
+    sliceMs,
+    cpuType,
+    cpuCoreReady,
+  });
   parentPort?.postMessage({ type: "cpu:started" });
 }
 

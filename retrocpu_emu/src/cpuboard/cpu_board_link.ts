@@ -29,10 +29,16 @@ import {
 import { IO_PORT_STEP_DELAY, stepBreak } from "./mn1613/step_break";
 
 let _linkCpuType = 1;
+let _clockDiv = 0;
 
 /** ボードリンクが使う CPU 種別を設定する */
 export function setBoardLinkCpuType(cpuType: number): void {
   _linkCpuType = cpuType;
+}
+
+/** ボードリンクから設定されたクロック分周比を返す（0:1/1, 1:1/2, 2:1/4, 3:1/8）。 */
+export function getBoardLinkClockDiv(): number {
+  return _clockDiv & 0x03;
 }
 
 function core() {
@@ -61,6 +67,11 @@ const IRQ_RETRY_MAX = 200;
 type FramePending = {
   resolve: (response: Uint8Array) => void;
   reject: (err: Error) => void;
+};
+
+type DmaWriteTarget = {
+  writeBytes(byteAddr: number, data: Uint8Array): Promise<void>;
+  writeWords(wordAddr: number, words: number[]): Promise<void>;
 };
 
 let _linkPort: MessagePort | null = null;
@@ -218,6 +229,12 @@ async function handle(
     if (type === "cpu:setStepDelay") {
       const m = msg as Extract<BoardLinkRequest, { type: "cpu:setStepDelay" }>;
       stepBreak.writePort(IO_PORT_STEP_DELAY, m.stepDelay & 0xff);
+      reply(port, { type: "link:result", id, ok: true });
+      return;
+    }
+    if (type === "cpu:setClockDiv") {
+      const m = msg as Extract<BoardLinkRequest, { type: "cpu:setClockDiv" }>;
+      _clockDiv = m.clockDiv & 0x03;
       reply(port, { type: "link:result", id, ok: true });
       return;
     }
