@@ -74,8 +74,8 @@ tscheck-all:
 	echo "TypeScript static analysis completed for all projects."
 
 tscheck-retrocpu-emu:
-	@echo "==> retrocpu_emu: npm run typecheck"
-	@cd $(REPO_DIR)/retrocpu_emu && npm run typecheck
+	@echo "==> retrocpu_emu_ts: npm run typecheck"
+	@cd $(REPO_DIR)/retrocpu_emu_ts && npm run typecheck
 
 tscheck-retrocpu-test-framework:
 	@echo "==> retrocpu_test_framework: npm run typecheck"
@@ -145,8 +145,8 @@ tstest-retrocpu-boot-monitor:
 		npm test
 
 tstest-retrocpu-emu:
-	@echo "==> retrocpu_emu: npm test"
-	@cd $(REPO_DIR)/retrocpu_emu && npm test
+	@echo "==> retrocpu_emu_ts: npm test"
+	@cd $(REPO_DIR)/retrocpu_emu_ts && npm test
 
 tstest-debug-expand:
 	@echo "==> cursor_expand/debug_expand: npm test"
@@ -155,3 +155,12 @@ tstest-debug-expand:
 tstest-asm-editor:
 	@echo "==> cursor_expand/retrocpu_asm_editor: npm test"
 	@cd $(REPO_DIR)/cursor_expand/retrocpu_asm_editor && npm test
+
+rust:
+	@echo "==> Installing Rust toolchain"
+	@sudo apt update && \
+	sudo apt install -y curl build-essential && \
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+	. "$$HOME/.cargo/env" && \
+	rustup update stable && \
+	rustup default stable

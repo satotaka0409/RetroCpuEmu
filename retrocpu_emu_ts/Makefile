@@ -44,3 +44,14 @@ typescript_uninstall:
 	sudo rm -rf ~/.npm
 	sudo rm -rf /usr/local/bin/npm
 	sudo rm -rf /usr/local/bin/npx
+
+rust:
+	sudo apt update && \
+	sudo apt install -y curl build-essential && \
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+	source $HOME/.cargo/env && \
+	rustup update stable && \
+	rustup default stable
+
+rust_uninstall:
+	sudo rm -rf ~/.cargo ~/.rustup

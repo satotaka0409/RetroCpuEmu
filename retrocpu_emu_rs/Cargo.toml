@@ -1,0 +1,14 @@
+[package]
+name = "retrocpu_emu_rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "retrocpu_emu_rs"
+path = "src/lib.rs"
+
+[[test]]
+name = "integration"
+path = "test/mod.rs"
+
+[dependencies]

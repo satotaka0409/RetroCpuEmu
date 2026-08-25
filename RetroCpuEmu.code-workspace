@@ -17,8 +17,12 @@
       "path": "./retrocpu_test_framework",
     },
     {
-      "name": "retrocpu_emu",
-      "path": "./retrocpu_emu",
+      "name": "retrocpu_emu_rs",
+      "path": "./retrocpu_emu_rs",
+    },
+    {
+      "name": "retrocpu_emu_ts",
+      "path": "./retrocpu_emu_ts",
     },
     {
       "name": "retrocpu_asm",
@@ -113,16 +117,6 @@
       "editor.wordBasedSuggestions": "off",
       "editor.snippetSuggestions": "none",
     },
-    "[asm-intel-x86-generic]": {
-      "editor.formatOnSave": false,
-      "editor.formatOnPaste": false,
-      "editor.defaultFormatter": null,
-      "editor.tabSize": 8,
-      "editor.insertSpaces": false,
-      "editor.detectIndentation": false,
-      "editor.indentSize": "tabSize",
-      "files.trimTrailingWhitespace": false,
-    },
     "[typescript]": {
       "editor.formatOnSave": true,
       "editor.defaultFormatter": "esbenp.prettier-vscode",
@@ -151,6 +145,10 @@
       "editor.formatOnSave": true,
       "editor.defaultFormatter": "esbenp.prettier-vscode",
     },
+    "[rust]": {
+      "editor.defaultFormatter": "rust-lang.rust-analyzer",
+      "editor.formatOnSave": true,
+    },
     "prettier.documentSelectors": ["**/*.md", "**/*.mdc", "**/*.markdown"],
   },
   "extensions": {
@@ -168,6 +166,10 @@
       "dbaeumer.vscode-eslint",
       "alefragnani.Bookmarks",
       "tomoki1207.pdf",
+      "rust-lang.rust-analyzer",
+      "vadimcn.vscode-lldb",
+      "christian-kohler.npm-intellisense",
+      "dbaeumer.vscode-eslint",
     ],
     "unwantedRecommendations": [
       "13xforever.language-x86-64-assembly",

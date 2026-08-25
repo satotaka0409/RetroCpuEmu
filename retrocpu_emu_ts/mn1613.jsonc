@@ -1,0 +1,11 @@
+{
+  "clock": "0", // 0:1/1 1:1/2 2:1/4 3:1/8
+  "cpu": "1", // 1:MN1613 2:TMS9995 3:Z8002 4:MC68332
+  "address_addcount": "1", // 1:1ずつ増減 2:2ずつ増減
+  "reset_vector": "0x0108", // リセットベクター
+  "sevenseg_adddress_digit": "5", // MN1613:0x05 TMS9995:0x04 Z8002:0x04 MC68332:0x06
+  "sevenseg_data_digit": "4", // MN1613:0x04 TMS9995:0x04 Z8002:0x04 MC68332:0x04
+  "emulate_port": "29000", // エミュレータのIOボード 受付ポート番号
+  "step_delay": "60", // ステップ実行時、次の割り込みまでのディレイカウント数
+  "boot": "mn1613_mon.ihx", // ブート用のモニタプログラム
+}
