@@ -11,4 +11,21 @@ path = "src/lib.rs"
 name = "integration"
 path = "test/mod.rs"
 
+[[example]]
+name = "seven_segment_led"
+path = "examples/seven_segment_led.rs"
+
+[[example]]
+name = "bullet_led"
+path = "examples/bullet_led.rs"
+
 [dependencies]
+egui = "0.36"
+
+[dev-dependencies]
+# WSL では wgpu+Wayland が Broken pipe になりやすいので OpenGL(glow)+X11 を使う。
+eframe = { version = "0.36", default-features = false, features = [
+	"glow",
+	"default_fonts",
+	"x11",
+] }
