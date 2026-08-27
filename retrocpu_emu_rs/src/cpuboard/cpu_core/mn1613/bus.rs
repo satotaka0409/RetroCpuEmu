@@ -1,43 +1,142 @@
-pub trait Mn1613Bus {
-	fn read_word(&self, addr: u16) -> u16;
-	fn write_word(&mut self, addr: u16, value: u16);
+//! MN1613 物理メモリ（256K ワード / 18bit）。
+
+/// フル物理空間のワード数（256K）。
+pub const MEM_WORDS: usize = 0x40000;
+
+/// 物理ワードアドレスのマスク（18bit）。
+pub const PHYS_MASK: u32 = 0x3ffff;
+
+/// 論理アドレスとセグメントから 18bit 物理ワードアドレスを求める。
+///
+/// `phys = ((seg & 0xF) << 14) + log`（桁上がり無視）。
+///
+/// * `log` — 論理ワードアドレス（16bit）
+/// * `seg` — セグメントレジスタ値（下位 4bit）
+#[inline]
+pub fn phys(log: u16, seg: u8) -> u32 {
+	((((seg as u32) & 0xf) << 14).wrapping_add(log as u32)) & PHYS_MASK
 }
 
-#[derive(Debug, Clone)]
+/// MN1613 物理 RAM（ワード配列。論理上はビッグエンディアン語）。
+#[derive(Clone)]
 pub struct Mn1613Ram {
 	words: Vec<u16>,
 }
 
+impl std::fmt::Debug for Mn1613Ram {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Mn1613Ram")
+			.field("words", &self.words.len())
+			.finish()
+	}
+}
+
+impl Default for Mn1613Ram {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl Mn1613Ram {
-	pub fn new(size_words: usize) -> Self {
+	/// 256K ワードのゼロ初期化 RAM を作る。
+	pub fn new() -> Self {
 		Self {
-			words: vec![0; size_words],
+			words: vec![0; MEM_WORDS],
 		}
 	}
 
-	pub fn load_words(&mut self, start_addr: u16, data: &[u16]) {
-		let start = usize::from(start_addr);
+	/// 指定ワード数で作る（テスト用。通常は [`Self::new`]）。
+	pub fn with_size(size_words: usize) -> Self {
+		Self {
+			words: vec![0; size_words.max(1)],
+		}
+	}
+
+	/// 物理ワードを読む（範囲外は `0xFFFF`）。
+	///
+	/// * `phys_addr` — 物理ワードアドレス（下位 18bit）
+	#[inline]
+	pub fn read_phys(&self, phys_addr: u32) -> u16 {
+		let p = (phys_addr & PHYS_MASK) as usize;
+		self.words.get(p).copied().unwrap_or(0xffff)
+	}
+
+	/// 物理ワードを書く（範囲外は無視）。
+	///
+	/// * `phys_addr` — 物理ワードアドレス（下位 18bit）
+	/// * `val` — 16bit 値
+	#[inline]
+	pub fn write_phys(&mut self, phys_addr: u32, val: u16) {
+		let p = (phys_addr & PHYS_MASK) as usize;
+		if let Some(slot) = self.words.get_mut(p) {
+			*slot = val;
+		}
+	}
+
+	/// 論理アドレス（CSBR=0）から読む（リセット peek 用。クロックなし）。
+	pub fn peek_word(&self, log_addr: u16) -> u16 {
+		self.read_phys(phys(log_addr, 0))
+	}
+
+	/// 連続ワードを物理先頭から書き込む。
+	pub fn load_words(&mut self, start_phys: u32, data: &[u16]) {
 		for (i, w) in data.iter().enumerate() {
-			let idx = start + i;
-			if idx < self.words.len() {
-				self.words[idx] = *w;
+			self.write_phys(start_phys.wrapping_add(i as u32), *w);
+		}
+	}
+
+	/// ワード数を返す。
+	pub fn len_words(&self) -> usize {
+		self.words.len()
+	}
+
+	/// 生スライスへの参照。
+	pub fn as_slice(&self) -> &[u16] {
+		&self.words
+	}
+
+	/// 生スライスへの可変参照。
+	pub fn as_mut_slice(&mut self) -> &mut [u16] {
+		&mut self.words
+	}
+
+	/// バイト列をビッグエンディアン語として物理バイトアドレスへ DMA 書き込みする。
+	///
+	/// 奇数先頭／奇数長は既存ワードの片方ニブルを保持する。
+	///
+	/// * `byte_addr` — 物理バイトアドレス（ワード×2）
+	/// * `data` — 書き込むバイト列
+	pub fn dma_write_bytes(&mut self, byte_addr: u32, data: &[u8]) {
+		let mut ba = byte_addr;
+		let mut i = 0usize;
+		while i < data.len() {
+			let word_idx = (ba / 2) & PHYS_MASK;
+			if ba % 2 == 0 {
+				if i + 1 < data.len() {
+					let w = ((data[i] as u16) << 8) | (data[i + 1] as u16);
+					self.write_phys(word_idx, w);
+					i += 2;
+					ba = ba.wrapping_add(2);
+				} else {
+					let old = self.read_phys(word_idx);
+					self.write_phys(word_idx, ((data[i] as u16) << 8) | (old & 0x00ff));
+					i += 1;
+					ba = ba.wrapping_add(1);
+				}
+			} else {
+				let old = self.read_phys(word_idx);
+				self.write_phys(word_idx, (old & 0xff00) | (data[i] as u16));
+				i += 1;
+				ba = ba.wrapping_add(1);
 			}
 		}
 	}
 
-	pub fn len_words(&self) -> usize {
-		self.words.len()
-	}
-}
-
-impl Mn1613Bus for Mn1613Ram {
-	fn read_word(&self, addr: u16) -> u16 {
-		self.words.get(usize::from(addr)).copied().unwrap_or(0)
-	}
-
-	fn write_word(&mut self, addr: u16, value: u16) {
-		if let Some(slot) = self.words.get_mut(usize::from(addr)) {
-			*slot = value;
-		}
+	/// 物理ワードアドレスからバイト列をビッグエンディアンで DMA 書き込みする。
+	///
+	/// * `word_addr` — 物理ワードアドレス
+	/// * `data` — バイト列（BE で語に詰める）
+	pub fn dma_write_bytes_at_word(&mut self, word_addr: u32, data: &[u8]) {
+		self.dma_write_bytes((word_addr & PHYS_MASK) * 2, data);
 	}
 }
