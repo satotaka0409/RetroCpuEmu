@@ -3,14 +3,14 @@
  * 根拠: test_framework.mdc / emulater_code_test.mdc §7
  */
 
-import { CodeTestIoMock } from "../../retrocpu_emu/src/code_test/io_mock.js";
-import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/code_test/types.js";
-import type { IoBoardHandshakeMock } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
-import type { IoBoardMockOptions } from "../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
+import { CodeTestIoMock } from "../../retrocpu_emu_ts/src/code_test/io_mock.js";
+import type { CodeTestIoMockEntry } from "../../retrocpu_emu_ts/src/code_test/types.js";
+import type { IoBoardHandshakeMock } from "../../retrocpu_emu_ts/src/ioboard/handshake/io_board_mock.js";
+import type { IoBoardMockOptions } from "../../retrocpu_emu_ts/src/ioboard/handshake/io_board_mock.js";
 import type {
   IoTimerHandle,
   IoTimerScheduler,
-} from "../../retrocpu_emu/src/ioboard/timer/io_timer.js";
+} from "../../retrocpu_emu_ts/src/ioboard/timer/io_timer.js";
 
 type LegacyReqBus = {
   HSHK_IN_REQ: 0 | 1;

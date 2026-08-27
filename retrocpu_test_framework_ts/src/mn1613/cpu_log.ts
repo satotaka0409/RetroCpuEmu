@@ -8,9 +8,9 @@ import path from "node:path";
 import {
   getClockCount,
   type CPURegister,
-} from "../../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
-import { parseCdb } from "../../../retrocpu_emu/src/code_test/cdb.js";
-import { Mn1613Disassembler } from "../../../retrocpu_emu/src/dis_assembler/mn1613/index.js";
+} from "../../../retrocpu_emu_ts/src/cpuboard/mn1613/mn1613.js";
+import { parseCdb } from "../../../retrocpu_emu_ts/src/code_test/cdb.js";
+import { Mn1613Disassembler } from "../../../retrocpu_emu_ts/src/dis_assembler/mn1613/index.js";
 import {
   setActiveCpuLogMarker,
   takePendingCpuLogTestName,

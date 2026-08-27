@@ -4,8 +4,8 @@
  * レコード形式は SDCC CDB（L:）と同じ。
  */
 
-import type { CdbCheckpoint, CdbSymbol } from "../../../retrocpu_emu/src/code_test/types.js";
-import type { CdbTable } from "../../../retrocpu_emu/src/code_test/cdb.js";
+import type { CdbCheckpoint, CdbSymbol } from "../../../retrocpu_emu_ts/src/code_test/types.js";
+import type { CdbTable } from "../../../retrocpu_emu_ts/src/code_test/cdb.js";
 
 /** `L:__CP$uart_initialized$0001` の `$` 区切り本体 */
 const CP_LEFT = /^__CP\$([A-Za-z_][A-Za-z0-9_]*)\$([0-9]{4})$/;

@@ -2,7 +2,7 @@
  * `; @cp` 注入と CDB `__CP$` 出力
  * 根拠: asm_editor.mdc / asm_test_framework.mdc
  */
-import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
+import { parseCdb } from "../../retrocpu_emu_ts/src/code_test/cdb.js";
 import { assembleAndLink } from "../src/assemble_link.js";
 import {
   checkpointId,

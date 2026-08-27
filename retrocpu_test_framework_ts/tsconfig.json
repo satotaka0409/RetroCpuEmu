@@ -13,7 +13,7 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node"],
     "paths": {
-      "@emu/*": ["../retrocpu_emu/src/*"],
+      "@emu/*": ["../retrocpu_emu_ts/src/*"],
       "@asm/*": ["../retrocpu_asm/src/main/*"]
     }
   },

@@ -9,19 +9,19 @@ import {
   setOnBeforeExecute,
   setPins,
   setState,
-} from "../../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
-import { loadIntelHex } from "../../../retrocpu_emu/src/code_test/intel_hex.js";
+} from "../../../retrocpu_emu_ts/src/cpuboard/mn1613/mn1613.js";
+import { loadIntelHex } from "../../../retrocpu_emu_ts/src/code_test/intel_hex.js";
 import {
   parseCdb,
   type CdbTable,
-} from "../../../retrocpu_emu/src/code_test/cdb.js";
-import type { CdbSymbol } from "../../../retrocpu_emu/src/code_test/types.js";
-import type { CodeTestIoMockEntry } from "../../../retrocpu_emu/src/code_test/types.js";
+} from "../../../retrocpu_emu_ts/src/code_test/cdb.js";
+import type { CdbSymbol } from "../../../retrocpu_emu_ts/src/code_test/types.js";
+import type { CodeTestIoMockEntry } from "../../../retrocpu_emu_ts/src/code_test/types.js";
 import {
   CodeTestIoMock,
   resetDefaultIoCallbacks,
-} from "../../../retrocpu_emu/src/code_test/io_mock.js";
-import type { IoBoardHandshakeMock } from "../../../retrocpu_emu/src/ioboard/handshake/io_board_mock.js";
+} from "../../../retrocpu_emu_ts/src/code_test/io_mock.js";
+import type { IoBoardHandshakeMock } from "../../../retrocpu_emu_ts/src/ioboard/handshake/io_board_mock.js";
 import { defaultHexCdbPaths } from "../assemble_link.js";
 import { CpuExecutionLog } from "./cpu_log.js";
 import { clearCpuLogTestMark, setActiveCpuLogMarker } from "../cpu_log_mark.js";

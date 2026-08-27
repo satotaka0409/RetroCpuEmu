@@ -48,8 +48,8 @@ test("成果物セッションは HEX/CDB をロードしシンボルとメモ�
     const w0 = session.readWordBe(addr);
     expect(w0 !== 0).toBe(true);
     const plan = session.planCall({ args: [0x11, 0x22] });
-    expect(plan.registers[1]).toBe(0x11);
-    expect(plan.registers[2]).toBe(0x22);
+    expect(plan.registers[2]).toBe(0x11);
+    expect(plan.registers[3]).toBe(0x22);
     expect(plan.spAfterPush).toBe(session.defaultStackInit());
     expect(() => session.call("g_foo")).toThrow(/CPU emu/);
   } finally {

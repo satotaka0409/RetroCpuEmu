@@ -1,8 +1,8 @@
 /**
  * Intel HEX / CDB 生成ユニットテスト
  */
-import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
-import { loadIntelHex } from "../../retrocpu_emu/src/code_test/intel_hex.js";
+import { parseCdb } from "../../retrocpu_emu_ts/src/code_test/cdb.js";
+import { loadIntelHex } from "../../retrocpu_emu_ts/src/code_test/intel_hex.js";
 import { defsToCdb, imageToIntelHex } from "../src/hex_cdb.js";
 import { expect, test } from "../src/unit.js";
 

@@ -5,16 +5,15 @@
  */
 
 import fs from "node:fs";
-import { loadIntelHex } from "../../../retrocpu_emu/src/code_test/intel_hex.js";
-import type { CdbTable } from "../../../retrocpu_emu/src/code_test/cdb.js";
-import type { CdbSymbol } from "../../../retrocpu_emu/src/code_test/types.js";
+import { loadIntelHex } from "../../../retrocpu_emu_ts/src/code_test/intel_hex.js";
+import type { CdbTable } from "../../../retrocpu_emu_ts/src/code_test/cdb.js";
+import type { CdbSymbol } from "../../../retrocpu_emu_ts/src/code_test/types.js";
 import { parseTms9995Cdb, requireTms9995Symbol } from "./cdb.js";
 import {
   planTms9995Call,
   TMS9995_DEFAULT_ARG_REGISTERS,
   TMS9995_DEFAULT_STACK_INIT,
   TMS9995_DEFAULT_WORKSPACE,
-  TMS9995_MONITOR_ARG_REGISTERS,
 } from "./calling_convention.js";
 import type { Tms9995CallPlan, Tms9995CallPlanOptions } from "./types.js";
 import { Tms9995CruHandshakeMock } from "./cru_handshake.js";
@@ -161,8 +160,9 @@ export class Tms9995ArtifactSession {
       useAsmRulesArgs?: boolean;
     },
   ): Tms9995CallPlan {
-    const argRegisters =
-      options.argRegisters ?? [...TMS9995_DEFAULT_ARG_REGISTERS];
+    const argRegisters = options.argRegisters ?? [
+      ...TMS9995_DEFAULT_ARG_REGISTERS,
+    ];
     return planTms9995Call({
       args: options.args,
       returnAddr: options.returnAddr,

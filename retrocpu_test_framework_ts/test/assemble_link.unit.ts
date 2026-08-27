@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCdb } from "../../retrocpu_emu/src/code_test/cdb.js";
+import { parseCdb } from "../../retrocpu_emu_ts/src/code_test/cdb.js";
 import {
   assembleAndLink,
   assembleToHexCdb,

@@ -3,7 +3,7 @@
  * 根拠: asm_test_framework.mdc / emulater_code_test.mdc §7
  */
 
-import type { CodeTestIoMockEntry } from "../../retrocpu_emu/src/code_test/types.js";
+import type { CodeTestIoMockEntry } from "../../retrocpu_emu_ts/src/code_test/types.js";
 import type { AsmCpuType, CpuLogMode } from "./types.js";
 
 /**

@@ -13,8 +13,12 @@
       "path": "./retrocpu_boot_monitor",
     },
     {
-      "name": "retrocpu_test_framework",
-      "path": "./retrocpu_test_framework",
+      "name": "retrocpu_test_framework_ts",
+      "path": "./retrocpu_test_framework_ts",
+    },
+    {
+      "name": "retrocpu_test_framework_rs",
+      "path": "./retrocpu_test_framework_rs",
     },
     {
       "name": "retrocpu_emu_rs",

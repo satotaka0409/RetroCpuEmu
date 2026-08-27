@@ -17,15 +17,8 @@ import {
 import type { TmsMemOps } from "./addressing";
 import { executeInstruction, type TmsExecuteCtx } from "./execute";
 import { tms9995IoMmap } from "./io_mmap";
-import {
-  tms9995MemReadIoByte,
-  tms9995MemWriteIoByte,
-} from "../io_ports";
-import {
-  getDecrementerEnabled,
-  resetCruTimerFlags,
-  setDecrementerEnabled,
-} from "./cru_timer";
+import { tms9995MemReadIoByte, tms9995MemWriteIoByte } from "../io_ports";
+import { getDecrementerEnabled, resetCruTimerFlags } from "./cru_timer";
 import type { TmsCpuPins, TmsExecStatus } from "./types";
 import { TMS_MEM_BYTES } from "./types";
 
@@ -170,7 +163,7 @@ function doBlwp(vectorByteAddr: number, r11?: number): void {
   if (r11 !== undefined) writeWord(newWp + 11 * 2, r11 & 0xffff);
   WP = newWp;
   PC = newPc;
-  ST = (ST & 0xfff0) | ((ST & 0x000f)); // マスクは serviceInterrupt 側で更新
+  ST = (ST & 0xfff0) | (ST & 0x000f); // マスクは serviceInterrupt 側で更新
   _idle = false;
 }
 
@@ -298,7 +291,11 @@ export function processInputPins(): void {
 }
 
 /** ピンスナップショット（Worker 互換で IRQ0=未使用） */
-export function getPins(): TmsCpuPins & { IRQ0: boolean; BSAV: boolean; STRT: boolean } {
+export function getPins(): TmsCpuPins & {
+  IRQ0: boolean;
+  BSAV: boolean;
+  STRT: boolean;
+} {
   return {
     HLT: _pinHLT[0],
     RUN: _execStatus === "running",
@@ -448,7 +445,9 @@ export function setIoReadCallback(_cb: (port: number) => number): void {
 }
 
 /** IO 書き込みコールバック（互換スタブ） */
-export function setIoWriteCallback(_cb: (port: number, value: number) => void): void {
+export function setIoWriteCallback(
+  _cb: (port: number, value: number) => void,
+): void {
   /* 未使用 */
 }
 

@@ -19,15 +19,7 @@ import {
   setLaeWord,
   setSubFlags,
 } from "./status";
-import {
-  ST_AGT,
-  ST_C,
-  ST_EQ,
-  ST_LGT,
-  ST_OP,
-  ST_OV,
-  ST_X,
-} from "./types";
+import { ST_AGT, ST_C, ST_EQ, ST_LGT, ST_OP, ST_OV, ST_X } from "./types";
 import {
   tms9995CpuReadCruBit,
   tms9995CpuWriteCruBit,
@@ -137,7 +129,7 @@ function format1(
         writeByteEa(ctx.mem, dst, r);
         break;
       case "SZC":
-        r = (d & ~s) & 0xff;
+        r = d & ~s & 0xff;
         ctx.ST = setLaeByte(ctx.ST, r);
         writeByteEa(ctx.mem, dst, r);
         break;
@@ -174,7 +166,7 @@ function format1(
       writeWordEa(ctx.mem, dst, r);
       break;
     case "SZC":
-      r = (d & ~s) & 0xffff;
+      r = d & ~s & 0xffff;
       ctx.ST = setLaeWord(ctx.ST, r);
       writeWordEa(ctx.mem, dst, r);
       break;
@@ -204,15 +196,15 @@ function format1(
  */
 function divsOverflow(w1: number, w2: number, divisor: number): boolean {
   const divs = (divisor << 16) >> 16;
-  const dividend = ((w1 << 16) | (w2 & 0xffff)) | 0;
+  const dividend = (w1 << 16) | (w2 & 0xffff) | 0;
   if (divs === 0) return true;
   if (dividend >= 0) {
     if (divs > 0) return dividend > (divs << 15) - 1;
-    return dividend > ((-divs << 15) + (-divs) - 1);
+    return dividend > (-divs << 15) + -divs - 1;
   }
   const nd = -dividend;
   if (divs > 0) return nd > (divs << 15) + divs - 1;
-  return nd > ((-divs << 15) - 1);
+  return nd > (-divs << 15) - 1;
 }
 
 /**
@@ -221,7 +213,7 @@ function divsOverflow(w1: number, w2: number, divisor: number): boolean {
  * @param lo R1
  * @param divisor 除数 16bit
  */
-function divOverflow(hi: number, lo: number, divisor: number): boolean {
+function divOverflow(hi: number, _lo: number, divisor: number): boolean {
   if ((divisor & 0xffff) === 0) return true;
   return (hi & 0xffff) >= (divisor & 0xffff);
 }
@@ -274,7 +266,7 @@ function shiftOp(ctx: TmsExecuteCtx, ir: number, kind: string): void {
  * @param disp8 命令内 8bit 変位（ビット単位）
  */
 function cruAddr(ctx: TmsExecuteCtx, disp8: number): number {
-  const d = disp8 << 24 >> 24;
+  const d = (disp8 << 24) >> 24;
   return (ctx.mem.readReg(12) + d) & 0xffff;
 }
 
@@ -526,10 +518,7 @@ export function executeInstruction(ctx: TmsExecuteCtx, ir: number): void {
     const ss = (ir >>> 4) & 3;
     const sReg = ir & 0x0f;
     const src = resolveEa(ctx.mem, ss, sReg, false);
-    const ea =
-      src.reg >= 0
-        ? ctx.WP + src.reg * 2
-        : src.addr & 0xffff;
+    const ea = src.reg >= 0 ? ctx.WP + src.reg * 2 : src.addr & 0xffff;
     const xop = (ir >>> 6) & 0x0f;
     ctx.ST |= ST_X;
     ctx.doBlwp(0x0040 + xop * 4, ea);
@@ -598,7 +587,7 @@ export function executeInstruction(ctx: TmsExecuteCtx, ir: number): void {
       ctx.ST |= ST_OV;
       return;
     }
-    const dividend = ((hi32 << 16) | lo32) | 0;
+    const dividend = (hi32 << 16) | lo32 | 0;
     const divs = (div << 16) >> 16;
     const q = Math.trunc(dividend / divs) & 0xffff;
     const rem = dividend % divs;
@@ -611,8 +600,8 @@ export function executeInstruction(ctx: TmsExecuteCtx, ir: number): void {
     const ss = (ir >>> 4) & 3;
     const sReg = ir & 0x0f;
     const ea = resolveEa(ctx.mem, ss, sReg, false);
-    const v = readWordEa(ctx.mem, ea) << 16 >> 16;
-    const r0 = ctx.mem.readReg(0) << 16 >> 16;
+    const v = (readWordEa(ctx.mem, ea) << 16) >> 16;
+    const r0 = (ctx.mem.readReg(0) << 16) >> 16;
     const prod = r0 * v;
     ctx.mem.writeReg(0, (prod >>> 16) & 0xffff);
     ctx.mem.writeReg(1, prod & 0xffff);
@@ -620,7 +609,11 @@ export function executeInstruction(ctx: TmsExecuteCtx, ir: number): void {
   }
 
   // Format 6（0400–07FF。MAME: ir & 0xFFC0 が命令部）
-  if ((ir & 0xc000) === 0x0000 && (ir & 0xfc00) >= 0x0400 && (ir & 0xfc00) < 0x0800) {
+  if (
+    (ir & 0xc000) === 0x0000 &&
+    (ir & 0xfc00) >= 0x0400 &&
+    (ir & 0xfc00) < 0x0800
+  ) {
     const ss = (ir >>> 4) & 3;
     const sReg = ir & 0x0f;
     const ea = resolveEa(ctx.mem, ss, sReg, false);

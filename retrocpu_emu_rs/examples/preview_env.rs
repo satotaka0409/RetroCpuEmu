@@ -50,3 +50,8 @@ fn warn_if_missing_xkbcommon_x11() {
 		"警告: libxkbcommon-x11 が見つかりません。WSL で X11 表示するには次を実行してください:\n  sudo apt install libxkbcommon-x11-0\n"
 	);
 }
+
+#[allow(dead_code)]
+fn main() {
+	prefer_x11_on_linux();
+}
