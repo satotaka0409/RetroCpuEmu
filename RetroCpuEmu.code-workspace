@@ -29,8 +29,12 @@
       "path": "./retrocpu_emu_ts",
     },
     {
-      "name": "retrocpu_asm",
-      "path": "./retrocpu_asm",
+      "name": "retrocpu_asm_ts",
+      "path": "./retrocpu_asm_ts",
+    },
+    {
+      "name": "retrocpu_asm_rs",
+      "path": "./retrocpu_asm_rs",
     },
     {
       "name": "tutorial",

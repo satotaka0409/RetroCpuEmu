@@ -1,0 +1,16 @@
+[package]
+name = "retrocpu_asm_rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port baseline of retrocpu_asm_ts"
+license = "UNLICENSED"
+
+[lib]
+name = "retrocpu_asm_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "retrocpu_asm"
+path = "src/bin/retrocpu_asm.rs"
+
+[dependencies]

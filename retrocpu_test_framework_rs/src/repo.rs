@@ -16,7 +16,7 @@ pub fn framework_build() -> PathBuf {
 }
 
 pub fn asm_dist() -> PathBuf {
-    repo_root().join("retrocpu_asm").join("dist").join("main")
+    repo_root().join("retrocpu_asm_ts").join("dist").join("main")
 }
 
 pub fn monitor_src() -> PathBuf {
