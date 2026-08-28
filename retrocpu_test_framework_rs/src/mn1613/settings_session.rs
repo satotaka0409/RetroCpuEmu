@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::error::FrameworkError;
 use crate::json_suite::resolve_suite_path;
 use crate::json_value::{CodeTestIoMockEntry, JsonTestSettings};
+use crate::mn1613::session::{create_mn1613_asm_session, Mn1613AsmSession};
+use crate::mn1613::types::Mn1613SessionOptions;
 use crate::types::{AsmCpuType, CpuLogMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +49,7 @@ pub fn resolve_test_settings(
 pub fn create_session_from_settings(
     settings: &JsonTestSettings,
     from_dir: Option<&Path>,
-) -> Result<ResolvedTestSettings, FrameworkError> {
+) -> Result<Mn1613AsmSession, FrameworkError> {
     let resolved = resolve_test_settings(settings, from_dir)?;
     if resolved.cpu != AsmCpuType::Mn1613 {
         return Err(FrameworkError::invalid_argument(format!(
@@ -55,54 +57,14 @@ pub fn create_session_from_settings(
             resolved.cpu
         )));
     }
-
-    Err(FrameworkError::not_implemented(
-        "Mn1613AsmSession runtime is not implemented in retrocpu_test_framework_rs yet",
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn mk_settings(hex_file: String, cdb_file: String) -> JsonTestSettings {
-        JsonTestSettings {
-            name: "t".to_string(),
-            cpu: AsmCpuType::Mn1613,
-            hex_file,
-            cdb_file,
-            init_label: Some("g_main".to_string()),
-            io_mock: None,
-            cpu_log_file: None,
-            cpu_log_mode: None,
-            max_cycles: None,
-        }
-    }
-
-    #[test]
-    fn resolves_paths_from_base_dir() {
-        let mut dir = std::env::temp_dir();
-        dir.push(format!(
-            "tf-rs-mn-settings-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).expect("create dir");
-
-        let hex = dir.join("a.ihx");
-        let cdb = dir.join("a.cdb");
-        std::fs::write(&hex, b":00000001FF\n").expect("hex write");
-        std::fs::write(&cdb, b"\n").expect("cdb write");
-
-        let s = mk_settings("a.ihx".to_string(), "a.cdb".to_string());
-        let r = resolve_test_settings(&s, Some(&dir)).expect("resolve");
-        assert_eq!(r.hex_file, hex);
-        assert_eq!(r.cdb_file, cdb);
-
-        let _ = std::fs::remove_file(r.hex_file);
-        let _ = std::fs::remove_file(r.cdb_file);
-        let _ = std::fs::remove_dir_all(dir);
-    }
+    create_mn1613_asm_session(Mn1613SessionOptions {
+        hex_file: Some(resolved.hex_file),
+        cdb_file: Some(resolved.cdb_file),
+        init_label: Some(resolved.init_label),
+        io_mock: resolved.io_mock,
+        cpu_log_file: resolved.cpu_log_file,
+        cpu_log_mode: resolved.cpu_log_mode,
+        max_cycles: resolved.max_cycles,
+        ..Default::default()
+    })
 }

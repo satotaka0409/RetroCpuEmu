@@ -100,7 +100,7 @@ pub struct MemAccessEvent {
 
 type MemHook = Box<dyn FnMut(MemAccessEvent)>;
 type OnStop = Box<dyn FnMut(ExecStatus, &CpuRegister)>;
-type OnTrace = Box<dyn FnMut(&CpuRegister)>;
+type OnTrace = Box<dyn FnMut(&CpuRegister, &Mn1613Ram)>;
 
 /// MN1613 CPU コア。
 pub struct Mn1613Core {
@@ -837,7 +837,7 @@ impl Mn1613Core {
 			self.handle_irq(ram);
 		}
 		if let Some(mut cb) = self.on_before.take() {
-			cb(&self.regs);
+			cb(&self.regs, ram);
 			self.on_before = Some(cb);
 		}
 
@@ -879,7 +879,7 @@ impl Mn1613Core {
 		}
 
 		if let Some(mut cb) = self.on_after.take() {
-			cb(&self.regs);
+			cb(&self.regs, ram);
 			self.on_after = Some(cb);
 		}
 	}
