@@ -5,6 +5,7 @@ description: MN1613 アセンブラテスト統合仕様（asm 結合テスト +
 
 # asm テストフレームワーク
 
+現在、Typescript から Rust へ移植中
 根拠: 本ファイル。実装は `retrocpu_test_framework/`（共通）と `retrocpu_test_framework/src/mn1613/`（MN1613 固有）と `retrocpu_test_framework/src/tms9995/`（TMS9995 固有）と `retrocpu_emu/src/code_test/`。
 呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。
 
@@ -16,12 +17,12 @@ MN1613 / TMS9995 の成果物を TypeScript テストから検証するための
 
 ## 対象範囲
 
-| 系統 | 入力（セッション） | 主用途 | 実装 |
-| :----- | :---- | :---- | :---- |
-| BIOS/モニタ結合 (MN1613) | `.ihx` + `.cdb` | 実行回帰 | `Mn1613AsmSession` + emu |
-| BIOS/モニタ結合 (TMS9995) | `.ihx` + `.cdb` | 成果物検証 | `Tms9995ArtifactSession`（実行は CPU コア待ち） |
-| code_test ハーネス | Intel HEX + CDB | 既リンク成果物・C 出力検証 | `retrocpu_emu/src/code_test/`（MN1613） |
-| フレームワーク単体 | 自前で `assembleToHexCdb` した一時 HEX/CDB | ハーネス自身の検証 | `retrocpu_test_framework/test/*.unit.ts` |
+| 系統                      | 入力（セッション）                         | 主用途                     | 実装                                            |
+| :------------------------ | :----------------------------------------- | :------------------------- | :---------------------------------------------- |
+| BIOS/モニタ結合 (MN1613)  | `.ihx` + `.cdb`                            | 実行回帰                   | `Mn1613AsmSession` + emu                        |
+| BIOS/モニタ結合 (TMS9995) | `.ihx` + `.cdb`                            | 成果物検証                 | `Tms9995ArtifactSession`（実行は CPU コア待ち） |
+| code_test ハーネス        | Intel HEX + CDB                            | 既リンク成果物・C 出力検証 | `retrocpu_emu/src/code_test/`（MN1613）         |
+| フレームワーク単体        | 自前で `assembleToHexCdb` した一時 HEX/CDB | ハーネス自身の検証         | `retrocpu_test_framework/test/*.unit.ts`        |
 
 ## TMS9995（成果物セッション）
 
@@ -76,10 +77,10 @@ TMS9995 は現状フロー末尾の実行部分を省略し、シンボル／メ
 
 ### 配置
 
-| プロジェクト | 置き場 | 内容 |
-| :--- | :---- | :----- |
-| `retrocpu_test_framework` | `test/*.unit.ts` | フレームワーク単体 |
-| `retrocpu_boot_monitor` | `mn1613/test/**/*_test.ts` | BIOS 結合（事前ビルド HEX/CDB） |
+| プロジェクト              | 置き場                     | 内容                            |
+| :------------------------ | :------------------------- | :------------------------------ |
+| `retrocpu_test_framework` | `test/*.unit.ts`           | フレームワーク単体              |
+| `retrocpu_boot_monitor`   | `mn1613/test/**/*_test.ts` | BIOS 結合（事前ビルド HEX/CDB） |
 
 ## HEX/CDB ハーネス（code_test）
 
@@ -150,6 +151,7 @@ CPU 実行ログはテスト実行時のみ有効化できる。セッション�
 8. **全体テスト実行の開始時**に、対象が `mn1613/test` 配下なら `mn1613/logs/*.log` を削除してから実行する（CLI）。
 9. 各 `test()` ケースの開始・終了で、タイトルを `START` / `END` としてログに書く（例: `g_rnd_init は非零の種をそのまま書く START`）。
 10. 実行中に `session.setCpuLogMode(...)` で本文モードを切り替えられる（同一ログファイル）。
+
 ### ログレコード形式
 
 TAB 区切り 1 行。フィールド順:
@@ -195,28 +197,28 @@ L:__CP$uart_initialized$0001:812A
 
 ### 主要 API
 
-| API                                                  | 内容                                                       |
-| :--------------------------------------------------- | :--------------------------------------------------------- |
+| API                                                  | 内容                                                                |
+| :--------------------------------------------------- | :------------------------------------------------------------------ |
 | `session.reload()`                                   | 現在時刻の種で M系列埋め + HEX 再ロード + CPU reset + ioMock 再適用 |
-| `session.runInit()`                                  | `initLabel`（既定 `g_main`）を HALT まで実行              |
-| `session.call(label, opts)`                          | `.global` ラベルを `callMode` 指定で実行（既定 `bal`=`BALD`） |
-| `session.expectRegisters()`                          | レジスタ検証                                               |
-| `session.expectMemoryWords()` / `expectLabelWords()` | メモリ検証                                                 |
-| `session.expectStackWork()`                          | `preCallSp` 基準のスタック検証                             |
-| `session.requireHandshakeMock()`                     | handshake モック取得                                       |
-| `session.detachIoMock()`                             | RD/WT を既定に戻す                                         |
-| `cpuLogFile`（設定）                                 | テスト専用 CPU ログパス。未指定なら出力しない              |
-| `cpuLogMode`（設定）                                 | 省略=START/END のみ / `checkpoint` / `instruction`         |
-| `session.setCpuLogMode(mode?)`                       | 実行中に本文モードを切替（省略/`null` でタイトルのみ）     |
+| `session.runInit()`                                  | `initLabel`（既定 `g_main`）を HALT まで実行                        |
+| `session.call(label, opts)`                          | `.global` ラベルを `callMode` 指定で実行（既定 `bal`=`BALD`）       |
+| `session.expectRegisters()`                          | レジスタ検証                                                        |
+| `session.expectMemoryWords()` / `expectLabelWords()` | メモリ検証                                                          |
+| `session.expectStackWork()`                          | `preCallSp` 基準のスタック検証                                      |
+| `session.requireHandshakeMock()`                     | handshake モック取得                                                |
+| `session.detachIoMock()`                             | RD/WT を既定に戻す                                                  |
+| `cpuLogFile`（設定）                                 | テスト専用 CPU ログパス。未指定なら出力しない                       |
+| `cpuLogMode`（設定）                                 | 省略=START/END のみ / `checkpoint` / `instruction`                  |
+| `session.setCpuLogMode(mode?)`                       | 実行中に本文モードを切替（省略/`null` でタイトルのみ）              |
 
 ## `call` オプション
 
-| オプション  | 意味                                                         |
-| :---------- | :----------------------------------------------------------- |
-| `registers` | R0-R4, STR, CSBR, SSBR, SP など部分指定                      |
-| `stack`     | 呼び出し前に PUSH するワード列                               |
+| オプション  | 意味                                                                    |
+| :---------- | :---------------------------------------------------------------------- |
+| `registers` | R0-R4, STR, CSBR, SSBR, SP など部分指定                                 |
+| `stack`     | 呼び出し前に PUSH するワード列                                          |
 | `callMode`  | `"bal"`（既定=`BALD`）または `"balr"`。BIOS 呼び出しは原則省略／`"bal"` |
-| `resetCpu`  | `true` でレジスタのみ reset（メモリ/IO 維持）                |
+| `resetCpu`  | `true` でレジスタのみ reset（メモリ/IO 維持）                           |
 
 注記:
 
@@ -225,12 +227,12 @@ L:__CP$uart_initialized$0001:812A
 
 ## よくある失敗
 
-| 症状                          | 原因の目安                                  |
-| :---------------------------- | :------------------------------------------ |
-| `CDB symbol not found`        | `.global` でない / リンク対象漏れ           |
-| `did not return to stub`      | `RET`/`RETL` と `callMode` の不一致         |
-| `handshake ENA0 check failed` | IO->CPU で `IN_REQ===1` 前に `call`          |
-| `timeout`                     | `ioMock` 未設定、またはフレーム長不一致     |
+| 症状                          | 原因の目安                                    |
+| :---------------------------- | :-------------------------------------------- |
+| `CDB symbol not found`        | `.global` でない / リンク対象漏れ             |
+| `did not return to stub`      | `RET`/`RETL` と `callMode` の不一致           |
+| `handshake ENA0 check failed` | IO->CPU で `IN_REQ===1` 前に `call`           |
+| `timeout`                     | `ioMock` 未設定、またはフレーム長不一致       |
 | `Intel HEX がありません`      | `hexFile` 未ビルド／パスミス（先に Makefile） |
 
 ## 実行

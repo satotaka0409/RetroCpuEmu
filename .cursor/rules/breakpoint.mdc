@@ -41,9 +41,9 @@ struct Breakpoint {
 
 struct BreakpointHeader {
     uint8_t  enable;      // 00: 0=無効, 1=有効
-    uint8_t  count;       // 01: ブレイクカウント（0でブレイク発動）
+    uint8_t  count;       // 01: ブレイクカウント（0でブレイク発動）実働カウンタ
     uint8_t  flags;       // 02: 各種フラグ (下記ビット割当参照)
-    uint8_t  n_stop;      // 03: ブレイクまでのカウント数（0=シングル, 1–255=回数指定）
+    uint8_t  n_stop;      // 03: ブレイクまでのカウント数（0=シングル, 1–255=回数指定）初期値
     uint8_t  addr_24_31;  // 04: 監視アドレス (上位バイト)
     uint8_t  addr_16_23;  // 05: 監視アドレス
     uint8_t  addr_8_15;   // 06: 監視アドレス
