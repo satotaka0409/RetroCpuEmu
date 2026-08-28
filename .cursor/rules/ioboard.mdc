@@ -166,7 +166,7 @@ Cursor とは拡張機能を使って TCP/IP Socket で通信する<br>
 4. 書き込み（これらの手順はPIOのシーケンスで実装する）<br>
    4-1. アドレス 24–31 をDATAに出力 AC_ENABLE:H CLK:H<br>
    4-2. CLK:L<br>
-   4-3. アドレス 16–23 をDATAに出力 CLK:H<br>
+   4-3. アドレス 16–23 をDATAに出力 CLK:H<br> ※アドレス空間が32Bitなくても、32Bit分指定する
    4-4. CLK:L<br>
    4-5. アドレス 8–15 をDATAに出力 CLK:H<br>
    4-6. CLK:L<br>
@@ -177,7 +177,7 @@ Cursor とは拡張機能を使って TCP/IP Socket で通信する<br>
    4-11. ループ数 0–7 をDATAに出力 CLK:H<br>
    4-12. AC_ENABLE:L CLK:L<br>
    4-13. 以下をループ数分繰り返し<br>
-   4-14. データ 8–15 をDATAに出力 D_ENABLE:H CLK:H<br>
+   4-14. データ 8–15 をDATAに出力 D_ENABLE:H CLK:H<br> ※16Bitデータバス時のみ有効、8Bitデータバスでは省略
    4-15. CLK:L<br>
    4-16. データ 0–7 をDATAに出力 CLK:H<br>
    4-17. D_ENABLE:L CLK:L<br>
@@ -189,13 +189,14 @@ Cursor とは拡張機能を使って TCP/IP Socket で通信する<br>
 
 > 1階(IO)から2階(CPU)の CPLD にリセットベクタをセットする<br>
 > DMAのピンを使って、CPLDの内部ラッチに書き込む
+> AC_ENABLE:H D_ENABLE:H 同時に"H"にすることによってリセットベクタと認識する
 
 1. 初期化
    1-1. AC_ENABLE:L<br>
    1-2. D_ENABLE:L<br>
    1-3. DMA_ENA:H<br>
 2. 書き込み（これらの手順はPIOのシーケンスで実装する）<br>
-   2-1. アドレス 24–31 をDATAに出力 AC_ENABLE:H D_ENABLE:H CLK:H<br>
+   2-1. アドレス 24–31 をDATAに出力 AC_ENABLE:H D_ENABLE:H CLK:H<br> ※アドレス空間が32Bitなくても、32Bit分指定する
    2-2. CLK:L<br>
    2-3. アドレス 16–23 をDATAに出力 CLK:H<br>
    2-4. CLK:L<br>
@@ -205,8 +206,6 @@ Cursor とは拡張機能を使って TCP/IP Socket で通信する<br>
    2-8. AC_ENABLE:L D_ENABLE:L CLK:L<br>
 3. 完了処理<br>
    3-1. DMA_ENA:L<br>
-
-※AC_ENABLE:H D_ENABLE:H 同時に"H"にすることによってリセットベクタと認識する
 
 ### タイマー割り込み
 
