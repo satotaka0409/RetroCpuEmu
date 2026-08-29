@@ -1,12 +1,22 @@
+//! RetroCpu 用アセンブラ（MN1613 / TMS9995）。
+//!
+//! sdas 互換のソースをパースし、シンボル解決・命令エンコード後に
+//! REL / LST 形式へ出力する。`.cpu` または CLI `--cpu` で CPU を選ぶ。
+//!
+//! MN1613 はワードアドレス（LST）。REL 出力時のみバイトに換算。TMS9995 はバイト。
+
+pub mod area_order;
 pub mod assembler;
 pub mod cpu_type;
 pub mod error;
 pub mod expression;
 pub mod include;
 pub mod lst_writer;
-pub mod mn1613_encoder;
+pub mod mn1613;
 pub mod parser;
+pub mod reloc;
 pub mod rel_writer;
+pub mod tms9995;
 pub mod types;
 
 pub use assembler::assemble;

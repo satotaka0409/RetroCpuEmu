@@ -1,9 +1,16 @@
+pub mod cpu_log;
 pub mod cpu_log_clear;
+pub mod disasm;
 pub mod heap;
 pub mod m_sequence;
 pub mod main_stub;
+pub mod session;
 pub mod settings_session;
+pub mod types;
 
+pub use cpu_log::{
+    checkpoints_by_word_addr, format_cpu_log_regs, format_cpu_log_stack, CpuExecutionLog,
+};
 pub use cpu_log_clear::{
     clear_cpu_log_dir, clear_cpu_logs_before_run, mn1613_logs_dir_from_test_file,
     tms9995_logs_dir_from_test_file, CpuLogClearResult,
@@ -17,6 +24,11 @@ pub use m_sequence::{
     MSequenceMemory, MEM_MSEQ_TAP,
 };
 pub use main_stub::{mn1613_default_code_org_word, mn1613_main_stub};
+pub use session::{create_mn1613_asm_session, Mn1613AsmSession};
 pub use settings_session::{
     create_session_from_settings, resolve_test_settings, ResolvedTestSettings,
+};
+pub use types::{
+    CallMode, CallOptions, CallRegisters, CallResult, CallResultRegisters, Mn1613SessionOptions,
+    PortMockState, RegisterExpect, StackWorkExpect,
 };

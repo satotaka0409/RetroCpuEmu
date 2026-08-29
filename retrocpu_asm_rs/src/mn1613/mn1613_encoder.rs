@@ -1,3 +1,8 @@
+//! MN1613 命令エンコード（16bit 語、最大 2 語／行）。
+//!
+//! sdas 互換のオペランド表記（`#` 即値、間接 `(Rn)`、スキップ条件等）を
+//! 機械語へ変換する。根拠: `.cursor/rules` の MN1610/MN1613 命令仕様。
+
 use std::collections::HashMap;
 
 use crate::error::AsmError;
@@ -132,6 +137,7 @@ fn s8(v: i32, what: &str) -> Result<u16, AsmError> {
     Ok((v & 0xff) as u16)
 }
 
+/// 式評価結果を 16bit 即値へクリップ（範囲外はエラー）。
 pub fn u16(v: i32, what: &str) -> Result<u16, AsmError> {
     if !(-0x8000..=0xffff).contains(&v) {
         return Err(AsmError::new(format!("{what} out of 16-bit range: {v}")));
@@ -139,6 +145,7 @@ pub fn u16(v: i32, what: &str) -> Result<u16, AsmError> {
     Ok((v & 0xffff) as u16)
 }
 
+/// 第 2 語に 16bit 即値／アドレスを取る命令か（PC 加算・サイズ計算用）。
 pub fn is_two_word_op(op: &str) -> bool {
     matches!(
         op.to_ascii_uppercase().as_str(),
@@ -224,6 +231,9 @@ fn parse_imm4(
     )
 }
 
+/// `AI` / `SI` で `#imm` が 4bit を超えるとき、複数語へ分割した語列を返す。
+///
+/// 対象外（別オペランド形式）なら `Ok(None)`。
 pub fn split_ai_si_imm4_chunks(
     line: &ParsedLine,
     symbols: &HashMap<String, u16>,
@@ -335,11 +345,13 @@ fn parse_addr_with_bb(arg: &str) -> Option<(u16, String)> {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// メモリ／即値アドレッシング（mmm + 8bit 変位）。
 struct EaMode {
     mmm: u16,
     d8: u16,
 }
 
+/// LD/STD 等の第 2 オペランド EA を mmm + d8 へ変換する。
 fn parse_ea(
     arg: &str,
     pc_word: u16,
@@ -461,12 +473,14 @@ fn expect_args(line: &ParsedLine, n_min: usize, n_max: usize) -> Result<(), AsmE
     Ok(())
 }
 
+/// 間接レジスタオペランドのエンコード部（ii=レジスタ番号, mm=モード）。
 #[derive(Debug, Clone, Copy)]
 struct IndirectReg {
     ii: u16,
     mm: u16,
 }
 
+/// `(R1)` / `(R1)+` / `-(R1)` / `@(R1)` を ii/mm へ分解する。
 fn parse_indirect(arg: &str) -> Result<IndirectReg, AsmError> {
     let t = arg.trim();
     let up = t.to_ascii_uppercase();
@@ -585,6 +599,10 @@ fn parse_carry_skip(args: &[String], start_idx: usize) -> Result<(u16, u16), Asm
     Ok((c, skip))
 }
 
+/// 1 行を MN1613 機械語列へエンコードする。
+///
+/// * `pc_word` — 当該行先頭のワード PC（相対分岐の計算に使用）。
+/// * `allow_undefined` — 第 1 パスでは未定義シンボルを 0 扱い可。
 pub fn encode_instruction(
     line: &ParsedLine,
     pc_word: u16,

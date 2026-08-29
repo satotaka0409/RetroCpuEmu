@@ -2,12 +2,24 @@
 name = "retrocpu_test_framework_rs"
 version = "0.1.0"
 edition = "2021"
-description = "Rust port baseline of retrocpu_test_framework_ts"
+description = "Rust port of retrocpu_test_framework_ts (MN1613/TMS9995 asm test harness)"
 license = "UNLICENSED"
 
 [lib]
 name = "retrocpu_test_framework_rs"
 path = "src/lib.rs"
 
-[dependencies]
+[[bin]]
+name = "retrocpu_test_framework"
+path = "src/bin/cli.rs"
 
+[dependencies]
+retrocpu_asm_rs = { path = "../retrocpu_asm_rs" }
+retrocpu_emu_rs = { path = "../retrocpu_emu_rs" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+tempfile = "3"
+
+[dev-dependencies]
+serde_json = "1"

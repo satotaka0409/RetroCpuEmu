@@ -1,5 +1,6 @@
 pub mod calling_convention;
 pub mod cdb;
+pub mod cru_handshake;
 mod intel_hex;
 pub mod session;
 pub mod settings_session;
@@ -11,6 +12,12 @@ pub use calling_convention::{
     TMS9995_MONITOR_ARG_REGISTERS,
 };
 pub use cdb::{empty_tms9995_cdb_table, parse_tms9995_cdb, require_tms9995_symbol};
+pub use cru_handshake::{
+    Tms9995CruActor, Tms9995CruCpuInSignals, Tms9995CruCpuOutSignals,
+    Tms9995CruHandshakeMock, Tms9995CruHandshakeOptions, Tms9995CruHandshakeRegion,
+    Tms9995CruHandshakeSignals, Tms9995CruHandshakeSnapshot, TMS9995_CRU_HANDSHAKE_REGION,
+    TMS9995_CRU_HANDSHAKE_SIGNALS,
+};
 pub use session::{create_tms9995_artifact_session, Tms9995ArtifactSession, Tms9995SessionOptions};
 pub use settings_session::create_tms9995_session_from_settings;
 pub use types::{
