@@ -1,3 +1,4 @@
+pub mod cdb;
 pub mod cpu_log;
 pub mod cpu_log_clear;
 pub mod disasm;
@@ -7,6 +8,8 @@ pub mod main_stub;
 pub mod session;
 pub mod settings_session;
 pub mod types;
+
+pub use cdb::{empty_cdb_table, parse_cdb, require_symbol, CdbSymbol, CdbTable};
 
 pub use cpu_log::{
     checkpoints_by_word_addr, format_cpu_log_regs, format_cpu_log_stack, CpuExecutionLog,
@@ -31,4 +34,8 @@ pub use settings_session::{
 pub use types::{
     CallMode, CallOptions, CallRegisters, CallResult, CallResultRegisters, Mn1613SessionOptions,
     PortMockState, RegisterExpect, StackWorkExpect,
+};
+pub use disasm::{
+    decode_mn1613, format_decoded, hex16, hex8, Mn1613Disassembler, Mn1613DisassemblerOptions,
+    Mn1613LabelPair, Mn1613LabelTable,
 };

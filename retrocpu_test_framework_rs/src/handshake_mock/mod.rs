@@ -21,7 +21,7 @@ pub use types::{CMD_MODE_SET, MODE_FREE, MODE_MONITOR, RESPONSE_OK};
 
 use crate::error::FrameworkError;
 use crate::json_value::CodeTestIoMockEntry;
-use crate::mn1613::types::PortMockState;
+use crate::framework::mn1613::types::PortMockState;
 
 use cpu_to_io::{cpu_to_io_remaining_size, dispatch_cpu_to_io};
 use io_control_sync::IoControlSync;

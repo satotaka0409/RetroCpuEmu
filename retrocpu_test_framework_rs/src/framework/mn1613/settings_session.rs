@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use crate::error::FrameworkError;
 use crate::json_suite::resolve_suite_path;
 use crate::json_value::{CodeTestIoMockEntry, JsonTestSettings};
-use crate::mn1613::session::{create_mn1613_asm_session, Mn1613AsmSession};
-use crate::mn1613::types::Mn1613SessionOptions;
 use crate::types::{AsmCpuType, CpuLogMode};
+
+use super::session::{create_mn1613_asm_session, Mn1613AsmSession};
+use super::types::Mn1613SessionOptions;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedTestSettings {

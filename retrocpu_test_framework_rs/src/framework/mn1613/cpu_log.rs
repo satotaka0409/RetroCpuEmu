@@ -11,12 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::CpuRegister;
 
-use crate::cdb::parse_cdb;
+use crate::framework::mn1613::cdb::parse_cdb;
 use crate::cpu_log_mark::{
     set_active_cpu_log_marker, take_pending_cpu_log_test_name, CpuLogMarker, CpuLogTestPhase,
 };
 use crate::error::FrameworkError;
-use crate::mn1613::disasm::Mn1613Disassembler;
+use crate::framework::mn1613::disasm::Mn1613Disassembler;
 use crate::types::CpuLogMode;
 
 const STACK_WORDS: usize = 16;

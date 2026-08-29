@@ -12,20 +12,21 @@ use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::{
 use retrocpu_emu_rs::ioboard::dma_load_intel_hex;
 
 use crate::assemble_link::default_hex_cdb_paths;
-use crate::cdb::{parse_cdb, require_symbol, CdbTable};
 use crate::cpu_log_mark::{clear_cpu_log_test_mark, set_active_cpu_log_marker};
 use crate::error::FrameworkError;
 use crate::handshake_mock::{
     with_framework_io_mock_defaults, CodeTestIoMock, IoBoardHandshakeMock, TestIoCallbacks,
 };
 use crate::json_value::CodeTestIoMockEntry;
-use crate::mn1613::cpu_log::CpuExecutionLog;
-use crate::mn1613::m_sequence::create_m_sequence_memory;
-use crate::mn1613::types::{
+use crate::types::{CdbCheckpointInfo, CdbSymbolInfo, CpuLogMode};
+
+use super::cdb::{parse_cdb, require_symbol, CdbTable};
+use super::cpu_log::CpuExecutionLog;
+use super::m_sequence::create_m_sequence_memory;
+use super::types::{
     CallMode, CallOptions, CallResult, CallResultRegisters, CallRegisters, Mn1613SessionOptions,
     RegisterExpect, StackWorkExpect,
 };
-use crate::types::{CdbCheckpointInfo, CdbSymbolInfo, CpuLogMode};
 
 const H_OPCODE: u16 = 0x2000;
 const DEFAULT_STACK_INIT: u16 = 0xffff;

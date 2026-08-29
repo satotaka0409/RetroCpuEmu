@@ -11,6 +11,18 @@ MN1613 / TMS9995 向け **Intel HEX + CDB** テスト補助ライブラリ（Vit
 
 仕様: `.cursor/rules/asm_test_framework.mdc`
 
+## Layout
+
+```
+src/
+  framework/
+    mn1613/     # 実行セッション・CPU ログ・CDB・逆アセンブラ
+    tms9995/    # 成果物セッション・CRU モック・CDB・逆アセンブラ
+  assemble_link.rs, handshake_mock/, checkpoint.rs, …  # CPU 共通
+```
+
+公開 API は従来どおり `retrocpu_test_framework_rs::mn1613` / `::tms9995` / `::disasm` からも利用可能（`framework` への re-export）。
+
 ## Features
 
 - **Utilities**: `assert`, `expand_includes`, `checkpoint`, `hex_cdb`, `json_suite`, `unit` test registry

@@ -16,7 +16,7 @@ use crate::checkpoint::{
 use crate::error::FrameworkError;
 use crate::expand_includes;
 use crate::hex_cdb::{defs_to_cdb, image_to_intel_hex};
-use crate::mn1613::main_stub::{mn1613_default_code_org_word, mn1613_main_stub};
+use crate::framework::mn1613::main_stub::{mn1613_default_code_org_word, mn1613_main_stub};
 use crate::repo::framework_build;
 use crate::sdld_link::link_rels_with_sdld;
 use crate::types::{

@@ -1,6 +1,7 @@
 pub mod calling_convention;
 pub mod cdb;
 pub mod cru_handshake;
+pub mod disasm;
 mod intel_hex;
 pub mod session;
 pub mod settings_session;
@@ -23,4 +24,8 @@ pub use settings_session::create_tms9995_session_from_settings;
 pub use types::{
     CdbCheckpoint, CdbSymbol, CdbTable, Tms9995ArgLocation, Tms9995CallDiagnostics,
     Tms9995CallPlan, Tms9995CallPlanOptions, Tms9995StackWord,
+};
+pub use disasm::{
+    decode_tms9995, format_decoded, Tms9995Disassembler, Tms9995DisassemblerOptions,
+    Tms9995LabelPair, Tms9995LabelTable,
 };
