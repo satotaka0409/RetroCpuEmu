@@ -38,8 +38,10 @@ impl std::error::Error for DmaError {}
 /// 書き込み専用メモリアダプタ（読み込み API を持たない）
 pub trait DmaWriteMemory {
 	/// 1 ワード書く（ビッグエンディアン語）。
-	/// @param word_addr 物理ワードアドレス
-	/// @param value 16bit
+	///
+	/// # Arguments
+	/// - `word_addr`: 物理ワードアドレス
+	/// - `value`: 16bit 値
 	fn write_word(&mut self, word_addr: u32, value: u16) -> Result<(), DmaError>;
 }
 
@@ -51,7 +53,12 @@ pub struct SharedRam {
 
 impl SharedRam {
 	/// 指定ワード数で 0 埋め RAM を確保する。
-	/// @param size_words ワード数（MN1613 は通常 [`MN1613_PHYS_WORDS`]）
+	///
+	/// # Arguments
+	/// - `size_words`: ワード数（MN1613 は通常 `MN1613_PHYS_WORDS`）
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new(size_words: usize) -> Self {
 		Self {
 			words: vec![0; size_words],
@@ -59,17 +66,28 @@ impl SharedRam {
 	}
 
 	/// MN1613 物理空間（256K ワード）を確保する。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn mn1613() -> Self {
 		Self::new(MN1613_PHYS_WORDS)
 	}
 
 	/// ワード数。
+	///
+	/// # Returns
+	/// - 件数または長さを返します。
 	pub fn len_words(&self) -> usize {
 		self.words.len()
 	}
 
 	/// ワードを読む（DMA 面には出さない。CPU コア／テスト用）。
-	/// @param word_addr 物理ワードアドレス
+	///
+	/// # Arguments
+	/// - `word_addr`: 物理ワードアドレス
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn read_word(&self, word_addr: u32) -> u16 {
 		self.words
 			.get(word_addr as usize)
@@ -78,8 +96,13 @@ impl SharedRam {
 	}
 
 	/// バイト列を読む（ビッグエンディアン語の分解。ハンドシェイク `83h` 用）。
-	/// @param byte_addr 開始バイトアドレス
-	/// @param len バイト数
+	///
+	/// # Arguments
+	/// - `byte_addr`: 開始バイトアドレス
+	/// - `len`: バイト数
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn read_bytes(&self, byte_addr: u32, len: u32) -> Result<Vec<u8>, DmaError> {
 		let mut out = Vec::with_capacity(len as usize);
 		for i in 0..len {
@@ -99,8 +122,13 @@ impl SharedRam {
 	}
 
 	/// バイト列を直接書く（ハンドシェイク `84h`。DMA 可否は見ない）。
-	/// @param byte_addr 開始バイトアドレス
-	/// @param data 書き込むバイト列
+	///
+	/// # Arguments
+	/// - `byte_addr`: 開始バイトアドレス
+	/// - `data`: 書き込むバイト列
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn write_bytes_direct(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), DmaError> {
 		for (i, &b) in data.iter().enumerate() {
 			let a = byte_addr.wrapping_add(i as u32);
@@ -119,6 +147,9 @@ impl SharedRam {
 	}
 
 	/// 内部スライス（テスト用）。
+	///
+	/// # Returns
+	/// - 内部ワード配列への読み取り専用参照を返します。
 	pub fn as_slice(&self) -> &[u16] {
 		&self.words
 	}
@@ -146,6 +177,9 @@ pub struct CpuDma {
 
 impl CpuDma {
 	/// 書き込み可能状態で作る（コア未接続の既定）。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			busy: false,
@@ -154,25 +188,35 @@ impl CpuDma {
 	}
 
 	/// DMA セッション中か。
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_busy(&self) -> bool {
 		self.busy
 	}
 
 	/// HALT/RESET 相当かどうかをコア側から反映する。
-	/// @param writable true なら DMA 書き込み可
+	///
+	/// # Arguments
+	/// - `writable`: `true` なら DMA 書き込み可
 	pub fn set_writable(&mut self, writable: bool) {
 		self.writable = writable;
 	}
 
 	/// DMA 書き込み可能か（HALT/RESET 相当）。
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_writable(&self) -> bool {
 		self.writable
 	}
 
 	/// バイト列を BE 語メモリへ書く（奇数末尾は下位 0）。
-	/// @param mem 書き込み先
-	/// @param byte_addr バイトアドレス（wordAddr×2）
-	/// @param data 書き込むバイト列
+	///
+	/// # Arguments
+	/// - `mem`: 書き込み先
+	/// - `byte_addr`: バイトアドレス（wordAddr×2）
+	/// - `data`: 書き込むバイト列
 	pub fn write_bytes(
 		&mut self,
 		mem: &mut impl DmaWriteMemory,
@@ -206,9 +250,11 @@ impl CpuDma {
 	}
 
 	/// ワード列を書く。
-	/// @param mem 書き込み先
-	/// @param word_addr 開始ワードアドレス
-	/// @param words 16bit 列
+	///
+	/// # Arguments
+	/// - `mem`: 書き込み先
+	/// - `word_addr`: 開始ワードアドレス
+	/// - `words`: 16bit 値列
 	pub fn write_words(
 		&mut self,
 		mem: &mut impl DmaWriteMemory,

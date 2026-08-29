@@ -1,0 +1,70 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Rust: Debug example bullet_led",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "cargo": {
+        "args": [
+          "build",
+          "--example",
+          "bullet_led",
+          "--package",
+          "retrocpu_emu_rs"
+        ],
+        "filter": {
+          "name": "bullet_led",
+          "kind": "example"
+        }
+      },
+      "env": {
+        "WINIT_UNIX_BACKEND": "x11"
+      }
+    },
+    {
+      "name": "Rust: Debug example seven_segment_led",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "cargo": {
+        "args": [
+          "build",
+          "--example",
+          "seven_segment_led",
+          "--package",
+          "retrocpu_emu_rs"
+        ],
+        "filter": {
+          "name": "seven_segment_led",
+          "kind": "example"
+        }
+      },
+      "env": {
+        "WINIT_UNIX_BACKEND": "x11"
+      }
+    },
+    {
+      "name": "Rust: Debug integration test",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "cargo": {
+        "args": [
+          "test",
+          "--test",
+          "integration",
+          "--package",
+          "retrocpu_emu_rs",
+          "--no-run"
+        ],
+        "filter": {
+          "name": "integration",
+          "kind": "test"
+        }
+      },
+      "args": ["--nocapture"]
+    }
+  ]
+}

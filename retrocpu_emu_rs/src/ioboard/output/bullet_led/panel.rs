@@ -31,6 +31,9 @@ pub enum FocusLed {
 
 impl FocusLed {
 	/// 対応する砲弾番号（14 または 15）。
+	///
+	/// # Returns
+	/// - 件数または長さを返します。
 	pub fn index(self) -> usize {
 		match self {
 			Self::Addr => LED_ADDR,
@@ -57,6 +60,9 @@ impl Default for BulletLed {
 
 impl BulletLed {
 	/// 全消灯のパネルを作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			bits: 0,
@@ -65,27 +71,45 @@ impl BulletLed {
 	}
 
 	/// 見た目を差し替える。
+	///
+	/// # Arguments
+	/// - `style`: 関数に渡す値
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn with_style(mut self, style: BulletLedStyle) -> Self {
 		self.style = style;
 		self
 	}
 
 	/// 現在のスタイル。
+	///
+	/// # Returns
+	/// - `BulletLedStyle` を返します。
 	pub fn style(&self) -> BulletLedStyle {
 		self.style
 	}
 
 	/// スタイルを書き換える。
+	///
+	/// # Arguments
+	/// - `style`: 関数に渡す値
 	pub fn set_style(&mut self, style: BulletLedStyle) {
 		self.style = style;
 	}
 
 	/// 16 本分のビット（bit0=LED0 … bit15=LEDF）。
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn bits(&self) -> u16 {
 		self.bits
 	}
 
 	/// 16 本分のビットを一括で載せる。
+	///
+	/// # Arguments
+	/// - `bits`: 関数に渡す値
 	pub fn set_bits(&mut self, bits: u16) {
 		self.bits = bits;
 	}
@@ -93,16 +117,27 @@ impl BulletLed {
 	/// ハンドシェイク `16h` の砲弾 2 バイトを載せる。
 	///
 	/// `lo` は砲弾 0–7（Bit0=LED0）。`hi` は砲弾 8–F（Bit0=LED8）。
+	///
+	/// # Arguments
+	/// - `lo`: 関数に渡す値
+	/// - `hi`: 関数に渡す値
 	pub fn set_bytes(&mut self, lo: u8, hi: u8) {
 		self.bits = u16::from(lo) | (u16::from(hi) << 8);
 	}
 
 	/// `16h` と同じ 2 バイト（0–7, 8–F）を返す。
+	///
+	/// # Returns
+	/// - `(u8, u8)` を返します。
 	pub fn bytes(&self) -> (u8, u8) {
 		((self.bits & 0xff) as u8, (self.bits >> 8) as u8)
 	}
 
 	/// 1 本の点灯を書く。`index` が 0–15 以外なら無視する。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	/// - `on`: 点灯フラグ
 	pub fn set(&mut self, index: usize, on: bool) {
 		if index >= BULLET_COUNT {
 			return;
@@ -116,6 +151,12 @@ impl BulletLed {
 	}
 
 	/// 1 本が点灯しているか。範囲外は false。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_on(&self, index: usize) -> bool {
 		if index >= BULLET_COUNT {
 			return false;
@@ -124,11 +165,23 @@ impl BulletLed {
 	}
 
 	/// 番号に対するパネル既定色。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	///
+	/// # Returns
+	/// - `LedColor` を返します。
 	pub fn color_of(index: usize) -> LedColor {
 		default_color_for_index(index)
 	}
 
 	/// 0–A の汎用行、RUN/HALT/UNDEF、ADDR/DATA フォーカスを並べて描く。
+	///
+	/// # Arguments
+	/// - `ui`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `egui::Response` を返します。
 	pub fn show(&self, ui: &mut Ui) -> egui::Response {
 		let inner = ui.horizontal(|ui| {
 			ui.vertical(|ui| {
@@ -162,6 +215,12 @@ impl BulletLed {
 	}
 
 	/// 砲弾 0–A（ラベル付き）を 1 行で描く。
+	///
+	/// # Arguments
+	/// - `ui`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `egui::Response` を返します。
 	pub fn show_user_row(&self, ui: &mut Ui) -> egui::Response {
 		Frame::new()
 			.fill(self.style.bank_bg)
@@ -180,6 +239,12 @@ impl BulletLed {
 	}
 
 	/// RUN / HALT / UNDEF を縦に並べる（DATA 右のステータス列）。
+	///
+	/// # Arguments
+	/// - `ui`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `egui::Response` を返します。
 	pub fn show_status_col(&self, ui: &mut Ui) -> egui::Response {
 		ui.vertical(|ui| {
 			ui.spacing_mut().item_spacing.y = 8.0;
@@ -191,6 +256,13 @@ impl BulletLed {
 	}
 
 	/// ADDR または DATA 直下のフォーカス砲弾（ラベル無し）。
+	///
+	/// # Arguments
+	/// - `ui`: 関数に渡す値
+	/// - `which`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `egui::Response` を返します。
 	pub fn show_focus(&self, ui: &mut Ui, which: FocusLed) -> egui::Response {
 		let i = which.index();
 		paint_bullet_allocated(ui, self.style.diameter, self.is_on(i), Self::color_of(i))

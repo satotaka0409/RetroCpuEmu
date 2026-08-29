@@ -7,9 +7,8 @@ use crate::cpuboard::handshake::wires::{
 	encode_int1_cause, HandshakeWires, INT1_CAUSE_ADDR_BREAK, INT1_CAUSE_STEP,
 };
 use crate::cpuboard::mn1613::{
-	AddrBusAccess, AddrComparatorBank, StepBreakUnit, IO_PORT_BREAK_ADDR_HI,
-	IO_PORT_BREAK_ADDR_LO, IO_PORT_BREAK_CTRL, IO_PORT_BREAK_HIT,
-	IO_PORT_BREAK_PREV, IO_PORT_STEP_DELAY, IO_PORT_STEP_ENA,
+	AddrBusAccess, AddrComparatorBank, StepBreakUnit, IO_PORT_BREAK_ADDR_HI, IO_PORT_BREAK_ADDR_LO,
+	IO_PORT_BREAK_CTRL, IO_PORT_BREAK_HIT, IO_PORT_BREAK_PREV, IO_PORT_STEP_DELAY, IO_PORT_STEP_ENA,
 };
 
 /// IO:0000 — リセットベクタ（ワードアドレス）
@@ -49,6 +48,9 @@ impl Default for IoPorts {
 
 impl IoPorts {
 	/// モニター既定リセットベクタで初期化する。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			reset_vector: MONITOR_ENTRY_WORD,
@@ -74,75 +76,116 @@ impl IoPorts {
 	}
 
 	/// IO:0 が返すリセットベクタ表先頭（ワードアドレス下位 16bit）。
+	///
+	/// # Returns
+	/// - 32bit 値を返します。
 	pub fn reset_vector(&self) -> u32 {
 		self.reset_vector
 	}
 
 	/// IO ボード側が RESET_VECTOR レジスタに書く。
-	/// @param word_addr ワードアドレス（下位 16bit を保持）
+	///
+	/// # Arguments
+	/// - `word_addr`: ワードアドレス（下位 16bit を保持）
 	pub fn set_reset_vector(&mut self, word_addr: u32) {
 		self.reset_vector = word_addr & 0xffff;
 	}
 
 	/// ハンドシェイク線への参照。
+	///
+	/// # Returns
+	/// - ハンドシェイク信号線への参照を返します。
 	pub fn wires(&self) -> &HandshakeWires {
 		&self.wires
 	}
 
 	/// ハンドシェイク線への可変参照。
+	///
+	/// # Returns
+	/// - ハンドシェイク信号線への可変参照を返します。
 	pub fn wires_mut(&mut self) -> &mut HandshakeWires {
 		&mut self.wires
 	}
 
 	/// アドレス比較器バンク。
+	///
+	/// # Returns
+	/// - アドレス比較器バンクへの参照を返します。
 	pub fn comparators(&self) -> &AddrComparatorBank {
 		&self.comparators
 	}
 
 	/// アドレス比較器バンク（可変）。
+	///
+	/// # Returns
+	/// - アドレス比較器バンクへの可変参照を返します。
 	pub fn comparators_mut(&mut self) -> &mut AddrComparatorBank {
 		&mut self.comparators
 	}
 
 	/// ステップ・ワンショット。
+	///
+	/// # Returns
+	/// - ステップ実行ユニットへの参照を返します。
 	pub fn step_break(&self) -> &StepBreakUnit {
 		&self.step_break
 	}
 
 	/// ステップ・ワンショット（可変）。
+	///
+	/// # Returns
+	/// - ステップ実行ユニットへの可変参照を返します。
 	pub fn step_break_mut(&mut self) -> &mut StepBreakUnit {
 		&mut self.step_break
 	}
 
 	/// 割り込み処理中フラグ（IO:0020 Bit0）。
+	///
+	/// # Returns
+	/// - 8bit 値を返します。
 	pub fn interrupt_busy(&self) -> u8 {
 		self.wires.interrupt_busy & 1
 	}
 
 	/// 割り込み要因パック（IO:0021 下位 3bit）。
+	///
+	/// # Returns
+	/// - 8bit 値を返します。
 	pub fn int_cause(&self) -> u8 {
 		self.wires.int_cause & 0x07
 	}
 
 	/// IO ボード側から割り込み要因を設定する。
-	/// @param cause ポート値（下位 3bit）
+	///
+	/// # Arguments
+	/// - `cause`: ポート値（下位 3bit）
 	pub fn set_int_cause(&mut self, cause: u8) {
 		self.wires.int_cause = cause & 0x07;
 	}
 
 	/// 保留 IRQ を取り出しクリアする。無ければ None。
+	///
+	/// # Returns
+	/// - 保留中 IRQ があれば `Some`、なければ `None` を返します。
 	pub fn take_pending_irq(&mut self) -> Option<PendingIrq> {
 		self.pending_irq.take()
 	}
 
 	/// 保留 IRQ を覗く（クリアしない）。
+	///
+	/// # Returns
+	/// - 保留中 IRQ があれば `Some`、なければ `None` を返します。
 	pub fn peek_pending_irq(&self) -> Option<PendingIrq> {
 		self.pending_irq
 	}
 
 	/// バスアクセスを比較器に渡し、ヒットなら INT1・CAUSE=0 を上げる。
-	/// @param access MEM/IO・RD/WR
-	/// @returns ヒットしたスロット
+	///
+	/// # Arguments
+	/// - `access`: MEM/IO・RD/WR
+	///
+	/// # Returns
+	/// - ヒットしたスロット番号。ヒットなしなら `None`。
 	pub fn probe_addr(&mut self, access: &AddrBusAccess) -> Option<usize> {
 		let hit = self.comparators.probe(access)?;
 		self.raise_addr_break_irq();
@@ -150,8 +193,12 @@ impl IoPorts {
 	}
 
 	/// 命令フェッチをステップユニットへ渡し、ヒットなら INT1・CAUSE=1。
-	/// @param word 命令語
-	/// @returns ヒットしたら true
+	///
+	/// # Arguments
+	/// - `word`: 命令語
+	///
+	/// # Returns
+	/// - ステップ条件ヒット時は `true`。
 	pub fn on_instruction_fetch(&mut self, word: u16) -> bool {
 		if self.step_break.on_instruction_fetch(word) {
 			self.raise_step_break_irq();
@@ -178,7 +225,12 @@ impl IoPorts {
 	}
 
 	/// CPU の IO リード。未マップは 0。
-	/// @param port ポート番号
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn read(&mut self, port: u16) -> u16 {
 		let p = port & 0xffff;
 		if p == IO_PORT_RESET_VECTOR {
@@ -197,8 +249,10 @@ impl IoPorts {
 	}
 
 	/// CPU の IO ライト。
-	/// @param port ポート番号
-	/// @param val 16bit
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	/// - `val`: 16bit 値
 	pub fn write(&mut self, port: u16, val: u16) {
 		let p = port & 0xffff;
 		if p == IO_PORT_RESET_VECTOR {
@@ -226,9 +280,7 @@ impl IoPorts {
 mod tests {
 	use super::*;
 	use crate::cpuboard::handshake::IO_PORT_INT_CAUSE;
-	use crate::cpuboard::mn1613::{
-		encode_break_ctrl, AddrComparatorSlot, BREAK_RDWR_RD,
-	};
+	use crate::cpuboard::mn1613::{encode_break_ctrl, AddrComparatorSlot, BREAK_RDWR_RD};
 
 	#[test]
 	fn reset_vector_port() {

@@ -14,12 +14,18 @@ pub const IO_PORT_HSHK_IN_CTRL: u16 = 0x0024;
 /// IO:0025 — HSHK_IN_DATA（IO→CPU）
 pub const IO_PORT_HSHK_IN_DATA: u16 = 0x0025;
 
+/// IO:0022 Bit0 - CPU→IO データ要求（OUT_REQ）。
 pub const HSHK_CTRL_OUT_REQ: u16 = 0x01;
+/// IO:0022 Bit1 - CPU→IO データ有効（OUT_DENA）。
 pub const HSHK_CTRL_OUT_DENA: u16 = 0x02;
+/// IO:0022 Bit2 - IO→CPU データ受理確認（IN_DACK）。
 pub const HSHK_CTRL_IN_DACK: u16 = 0x04;
 
+/// IO:0024 Bit0 - IO→CPU データ要求（IN_REQ）。
 pub const HSHK_IN_CTRL_IN_REQ: u16 = 0x01;
+/// IO:0024 Bit1 - IO→CPU データ有効（IN_DENA）。
 pub const HSHK_IN_CTRL_IN_DENA: u16 = 0x02;
+/// IO:0024 Bit2 - CPU→IO データ受理確認（OUT_DACK）。
 pub const HSHK_IN_CTRL_OUT_DACK: u16 = 0x04;
 
 /// INT1 要因: 比較器ヒット
@@ -32,13 +38,23 @@ pub const INT2_CAUSE_TIMER: u8 = 0x00;
 pub const INT2_CAUSE_HANDSHAKE: u8 = 0x02;
 
 /// INT1 要因を IO:0021 Bit0 用にマスクする。
-/// @param cause ADDR_BREAK / STEP
+///
+/// # Arguments
+/// - `cause`: ADDR_BREAK / STEP
+///
+/// # Returns
+/// - 8bit 値を返します。
 pub fn encode_int1_cause(cause: u8) -> u8 {
 	cause & 0x01
 }
 
 /// INT2 要因を IO:0021 Bit1–2 用にマスクする。
-/// @param cause TIMER / HANDSHAKE（パック済み値）
+///
+/// # Arguments
+/// - `cause`: TIMER / HANDSHAKE（パック済み値）
+///
+/// # Returns
+/// - 8bit 値を返します。
 pub fn encode_int2_cause(cause: u8) -> u8 {
 	cause & 0x06
 }
@@ -67,6 +83,9 @@ impl Default for HandshakeWires {
 
 impl HandshakeWires {
 	/// 全線を 0 で初期化する。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			interrupt_busy: 0,
@@ -88,6 +107,9 @@ impl HandshakeWires {
 	}
 
 	/// REQ/DENA/DACK のいずれかが 1 なら転送中。
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_active(&self) -> bool {
 		self.hshk_out_req != 0
 			|| self.hshk_out_dena != 0
@@ -98,7 +120,12 @@ impl HandshakeWires {
 	}
 
 	/// IO ポート読み取り（0020–0025）。対象外は None。
-	/// @param port ポート番号
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	///
+	/// # Returns
+	/// - 値が存在すれば `Some(value)`、なければ `None` を返します。
 	pub fn read_port(&self, port: u16) -> Option<u16> {
 		match port & 0xffff {
 			IO_PORT_INTERRUPT_BUSY => Some(u16::from(self.interrupt_busy & 1)),
@@ -140,8 +167,13 @@ impl HandshakeWires {
 	}
 
 	/// IO ポート書き込み（0020–0025）。対象外は false。
-	/// @param port ポート番号
-	/// @param val 16bit
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	/// - `val`: 16bit 値
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn write_port(&mut self, port: u16, val: u16) -> bool {
 		let v = val & 0xffff;
 		match port & 0xffff {

@@ -54,8 +54,13 @@ pub struct AddrBusAccess {
 
 impl AddrBusAccess {
 	/// MEM/IO リードアクセスを作る。
-	/// @param addr 18bit 物理ワードまたは IO ポート
-	/// @param io true=IO
+	///
+	/// # Arguments
+	/// - `addr`: 18bit 物理ワードまたは IO ポート
+	/// - `io`: `true` なら IO 空間
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn read(addr: u32, io: bool) -> Self {
 		Self {
 			addr,
@@ -67,10 +72,15 @@ impl AddrBusAccess {
 	}
 
 	/// MEM/IO ライトアクセスを作る。
-	/// @param addr 18bit 物理ワードまたは IO ポート
-	/// @param io true=IO
-	/// @param after 書込後値
-	/// @param before 書込前値
+	///
+	/// # Arguments
+	/// - `addr`: 18bit 物理ワードまたは IO ポート
+	/// - `io`: `true` なら IO 空間
+	/// - `after`: 書込後値
+	/// - `before`: 書込前値
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn write(addr: u32, io: bool, after: u16, before: u16) -> Self {
 		Self {
 			addr,
@@ -83,7 +93,12 @@ impl AddrBusAccess {
 }
 
 /// 制御ワード（IO:0030）からスロット設定を取り出す。
-/// @param ctrl 16bit 制御値
+///
+/// # Arguments
+/// - `ctrl`: 16bit 制御値
+///
+/// # Returns
+/// - `(u8, bool, bool, u8)` を返します。
 pub fn decode_break_ctrl(ctrl: u16) -> (u8, bool, bool, u8) {
 	let slot = (ctrl & 0x07) as u8;
 	let enabled = ((ctrl >> 3) & 1) == 1;
@@ -93,10 +108,15 @@ pub fn decode_break_ctrl(ctrl: u16) -> (u8, bool, bool, u8) {
 }
 
 /// スロット設定を IO:0030 用の制御ワードにする。
-/// @param slot 比較器番号 0–3
-/// @param enabled ENABLE
-/// @param io true=IO
-/// @param rdwr 01/10/11
+///
+/// # Arguments
+/// - `slot`: 比較器番号 0-3
+/// - `enabled`: ENABLE
+/// - `io`: `true` なら IO
+/// - `rdwr`: 01/10/11
+///
+/// # Returns
+/// - 16bit 値を返します。
 pub fn encode_break_ctrl(slot: u8, enabled: bool, io: bool, rdwr: u8) -> u16 {
 	(u16::from(slot) & 0x07)
 		| (u16::from(enabled) << 3)
@@ -105,8 +125,13 @@ pub fn encode_break_ctrl(slot: u8, enabled: bool, io: bool, rdwr: u8) -> u16 {
 }
 
 /// アクセスがスロット設定に一致するか。
-/// @param slot スロット
-/// @param access バスアクセス
+///
+/// # Arguments
+/// - `slot`: スロット設定
+/// - `access`: バスアクセス
+///
+/// # Returns
+/// - 条件成立時は `true`、それ以外は `false` を返します。
 pub fn slot_matches(slot: &AddrComparatorSlot, access: &AddrBusAccess) -> bool {
 	if !slot.enabled {
 		return false;
@@ -153,6 +178,9 @@ impl Default for AddrComparatorBank {
 
 impl AddrComparatorBank {
 	/// 4 スロットを無効で初期化する。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			slots: [AddrComparatorSlot::default(); CPLD_COMPARATOR_COUNT],
@@ -179,14 +207,21 @@ impl AddrComparatorBank {
 	}
 
 	/// スロット内容を返す（コピー）。範囲外は None。
-	/// @param slot 0–3
+	///
+	/// # Arguments
+	/// - `slot`: 0-3
+	///
+	/// # Returns
+	/// - 範囲内なら `Some(slot)`、範囲外なら `None` を返します。
 	pub fn get_slot(&self, slot: usize) -> Option<AddrComparatorSlot> {
 		self.slots.get(slot).copied()
 	}
 
 	/// スロットを直接設定する（テスト／内部用）。
-	/// @param slot 0–3
-	/// @param cfg 設定
+	///
+	/// # Arguments
+	/// - `slot`: 0-3
+	/// - `cfg`: 設定
 	pub fn set_slot(&mut self, slot: usize, cfg: AddrComparatorSlot) {
 		if let Some(s) = self.slots.get_mut(slot) {
 			*s = AddrComparatorSlot {
@@ -199,13 +234,20 @@ impl AddrComparatorBank {
 	}
 
 	/// 直近に一致した比較器番号を返す。未ヒットは 0xFFFF。
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn last_hit(&self) -> u16 {
 		self.last_hit
 	}
 
 	/// バスアクセスを全スロットと照合する。最初に一致したスロットでヒットする。
-	/// @param access MEM/IO・RD/WR
-	/// @returns ヒットしたスロット。無しは None
+	///
+	/// # Arguments
+	/// - `access`: MEM/IO・RD/WR
+	///
+	/// # Returns
+	/// - ヒットしたスロット番号。ヒットなしなら `None`。
 	pub fn probe(&mut self, access: &AddrBusAccess) -> Option<usize> {
 		for i in 0..CPLD_COMPARATOR_COUNT {
 			if slot_matches(&self.slots[i], access) {
@@ -224,7 +266,12 @@ impl AddrComparatorBank {
 	}
 
 	/// IO リード（0030–0034）。対象外は None。
-	/// @param port ポート番号
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	///
+	/// # Returns
+	/// - 値が存在すれば `Some(value)`、なければ `None` を返します。
 	pub fn read_port(&mut self, port: u16) -> Option<u16> {
 		match port & 0xffff {
 			IO_PORT_BREAK_CTRL => Some(self.ctrl_from_selected()),
@@ -246,9 +293,13 @@ impl AddrComparatorBank {
 	}
 
 	/// IO ライト（0030–0032）。0030 書込でスロットへ適用する。
-	/// @param port ポート番号
-	/// @param val 16bit
-	/// @returns 処理したら true
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	/// - `val`: 16bit 値
+	///
+	/// # Returns
+	/// - 対応ポートを処理した場合は `true`。
 	pub fn write_port(&mut self, port: u16, val: u16) -> bool {
 		let p = port & 0xffff;
 		let v = val & 0xffff;

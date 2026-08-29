@@ -77,6 +77,12 @@ impl Default for IoBoardSettings {
 }
 
 /// CPU 種類ごとの既定値。
+///
+/// # Arguments
+/// - `cpu`: CPU エージェント
+///
+/// # Returns
+/// - `IoBoardSettings` を返します。
 pub fn default_settings_for_cpu(cpu: u8) -> IoBoardSettings {
 	match cpu {
 		cpu_type::TMS9995 => IoBoardSettings {
@@ -105,6 +111,12 @@ pub fn default_settings_for_cpu(cpu: u8) -> IoBoardSettings {
 }
 
 /// アドレス増加数を 1 または 2 に正規化する。
+///
+/// # Arguments
+/// - `value`: 設定する値
+///
+/// # Returns
+/// - 8bit 値を返します。
 pub fn normalize_addr_step(value: u8) -> u8 {
 	if value == 2 {
 		2
@@ -114,6 +126,13 @@ pub fn normalize_addr_step(value: u8) -> u8 {
 }
 
 /// 増加数が 2 のとき奇数アドレスを 1 減算する。
+///
+/// # Arguments
+/// - `addr`: アドレス値
+/// - `step`: 関数に渡す値
+///
+/// # Returns
+/// - 32bit 値を返します。
 pub fn align_addr_to_step(addr: u32, step: u8) -> u32 {
 	if normalize_addr_step(step) == 2 && (addr & 1) == 1 {
 		addr.wrapping_sub(1)
@@ -123,6 +142,12 @@ pub fn align_addr_to_step(addr: u32, step: u8) -> u32 {
 }
 
 /// `//` 行コメントを除去し、末尾カンマも落とす（文字列内の簡易対応付き）。
+///
+/// # Arguments
+/// - `text`: 関数に渡す値
+///
+/// # Returns
+/// - `String` を返します。
 pub fn strip_jsonc_comments(text: &str) -> String {
 	let mut out = String::with_capacity(text.len());
 	for (i, line) in text.lines().enumerate() {
@@ -200,6 +225,12 @@ fn strip_line_comment(line: &str) -> String {
 }
 
 /// `"0x0108"` / `"29000"` / 数値を u32 にする。
+///
+/// # Arguments
+/// - `s`: 関数に渡す値
+///
+/// # Errors
+/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn parse_u32_flexible(s: &str) -> Result<u32, String> {
 	let t = s.trim();
 	if let Some(hex) = t
@@ -236,6 +267,12 @@ struct JsoncSettingsRaw {
 }
 
 /// JSONC テキストから設定を読む。
+///
+/// # Arguments
+/// - `text`: 関数に渡す値
+///
+/// # Errors
+/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn parse_settings_jsonc(text: &str) -> Result<IoBoardSettings, String> {
 	let cleaned = strip_jsonc_comments(text);
 	let raw: JsoncSettingsRaw =
@@ -279,12 +316,24 @@ pub fn parse_settings_jsonc(text: &str) -> Result<IoBoardSettings, String> {
 }
 
 /// ファイルから JSONC 設定を読む。
+///
+/// # Arguments
+/// - `path`: ファイルパス
+///
+/// # Errors
+/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn load_settings_jsonc(path: impl AsRef<Path>) -> Result<IoBoardSettings, String> {
 	let text = std::fs::read_to_string(path.as_ref()).map_err(|e| e.to_string())?;
 	parse_settings_jsonc(&text)
 }
 
 /// 設定値を 256 バイト生データへ書く。
+///
+/// # Arguments
+/// - `settings`: 設定値
+///
+/// # Returns
+/// - `[u8; SETTING_AREA_SIZE]` を返します。
 pub fn encode_setting_area(settings: &IoBoardSettings) -> [u8; SETTING_AREA_SIZE] {
 	let mut raw = [0xffu8; SETTING_AREA_SIZE];
 	raw[offsets::MARK_HI] = ((SETTING_MARK >> 8) & 0xff) as u8;
@@ -307,6 +356,12 @@ pub fn encode_setting_area(settings: &IoBoardSettings) -> [u8; SETTING_AREA_SIZE
 }
 
 /// 生データから設定を読む（マーク不正でもフィールドは読む）。
+///
+/// # Arguments
+/// - `raw`: 関数に渡す値
+///
+/// # Returns
+/// - `IoBoardSettings` を返します。
 pub fn decode_setting_area(raw: &[u8]) -> IoBoardSettings {
 	let mut buf = [0xffu8; SETTING_AREA_SIZE];
 	let n = raw.len().min(SETTING_AREA_SIZE);

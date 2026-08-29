@@ -48,6 +48,9 @@ impl Default for Mn1613CpuAgent {
 
 impl Mn1613CpuAgent {
 	/// 空 RAM・既定 IO・電源投入 idle で作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		let ports = Rc::new(RefCell::new(IoPorts::new()));
 		let mut core = Mn1613Core::new();
@@ -79,11 +82,17 @@ impl Mn1613CpuAgent {
 	}
 
 	/// IO ポート参照。
+	///
+	/// # Returns
+	/// - I/O ポート共有参照を返します。
 	pub fn ports(&self) -> &Rc<RefCell<IoPorts>> {
 		&self.ports
 	}
 
 	/// リセットベクタ（ワード）を設定する。
+	///
+	/// # Arguments
+	/// - `word_addr`: ワードアドレス
 	pub fn set_reset_vector(&mut self, word_addr: u32) {
 		self.ports.borrow_mut().set_reset_vector(word_addr);
 	}
@@ -91,6 +100,12 @@ impl Mn1613CpuAgent {
 	/// 最大 `max_inst` 命令まで進める（外部 HALT 中は 0）。
 	///
 	/// * `max_inst` — 実行上限（0=何もしない）
+	///
+	/// # Arguments
+	/// - `max_inst`: 実行する最大命令数（0 で無制限）
+	///
+	/// # Returns
+	/// - 現在の実行状態を返します。
 	pub fn run_slice(&mut self, max_inst: u32) -> ExecStatus {
 		if self.ext_halt {
 			return ExecStatus::Halted;
@@ -107,6 +122,12 @@ impl Mn1613CpuAgent {
 	/// HALT するまで（または上限まで）回す。
 	///
 	/// * `max_inst` — 安全上限
+	///
+	/// # Arguments
+	/// - `max_inst`: 実行する最大命令数（0 で無制限）
+	///
+	/// # Returns
+	/// - 現在の実行状態を返します。
 	pub fn run_until_halt(&mut self, max_inst: u32) -> ExecStatus {
 		self.ext_halt = false;
 		if self.core.get_exec_status() == ExecStatus::Idle
@@ -134,6 +155,12 @@ impl Mn1613CpuAgent {
 	}
 
 	/// 物理ワードを読む（テスト用）。
+	///
+	/// # Arguments
+	/// - `word_addr`: ワードアドレス
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn read_word(&self, word_addr: u32) -> u16 {
 		self.ram.read_phys(word_addr & PHYS_MASK)
 	}

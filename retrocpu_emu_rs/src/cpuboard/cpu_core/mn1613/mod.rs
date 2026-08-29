@@ -1,3 +1,5 @@
+//! MN1613 CPU コア関連の公開 API をまとめるモジュール。
+
 mod bus;
 mod core;
 mod error;

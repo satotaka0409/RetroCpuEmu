@@ -127,6 +127,12 @@ where
 }
 
 /// Intel HEX を DMA 用の連続チャンクにする（レコード間の穴は 0 埋めしない）。
+///
+/// # Arguments
+/// - `hex_text`: 関数に渡す値
+///
+/// # Errors
+/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn intel_hex_to_dma_plan(hex_text: &str) -> Result<IntelHexDmaPlan, IntelHexError> {
 	let mut raw: Vec<(u32, Vec<u8>)> = Vec::new();
 	walk_intel_hex_data(hex_text, |abs, data| {

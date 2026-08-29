@@ -53,6 +53,13 @@ const HEX_FONT: [u8; 16] = [
 /// 指定ビットが点灯しているか。
 ///
 /// `mask` は `SEG_A` などの 1 ビット。`pattern` は 8bit（bit0=a … bit7=dp）。
+///
+/// # Arguments
+/// - `pattern`: 7セグ状態を表すビット列
+/// - `mask`: 判定したいセグメントのビットマスク
+///
+/// # Returns
+/// - 指定セグメントが点灯していれば `true`
 #[inline]
 pub fn segment_on(pattern: u8, mask: u8) -> bool {
 	(pattern & mask) != 0
@@ -61,6 +68,12 @@ pub fn segment_on(pattern: u8, mask: u8) -> bool {
 /// 16 進ニブル（0〜15）を 7セグパターンへ変換する。
 ///
 /// `nibble` は下位 4bit のみ使う。戻りは a..g（dp は 0）。
+///
+/// # Arguments
+/// - `nibble`: 16進ニブル値（下位 4bit を使用）
+///
+/// # Returns
+/// - 7セグメント表示パターン
 #[inline]
 pub fn hex_nibble_to_seg(nibble: u8) -> u8 {
 	HEX_FONT[(nibble & 0x0f) as usize]
@@ -69,6 +82,12 @@ pub fn hex_nibble_to_seg(nibble: u8) -> u8 {
 /// 16 進 1 文字を 7セグパターンへ変換する。
 ///
 /// `'0'`〜`'9'` / `'A'`〜`'F'`（小文字可）。未知の文字は 0（消灯）。
+///
+/// # Arguments
+/// - `ch`: 関数に渡す値
+///
+/// # Returns
+/// - 8bit 値を返します。
 pub fn hex_digit_to_seg(ch: char) -> u8 {
 	match ch {
 		'0'..='9' => HEX_FONT[(ch as u8 - b'0') as usize],
@@ -81,6 +100,13 @@ pub fn hex_digit_to_seg(ch: char) -> u8 {
 /// 16 進ニブルに小数点ビットを載せる。
 ///
 /// `nibble` は 0〜15。`dp` が真なら bit7 を立てる。
+///
+/// # Arguments
+/// - `nibble`: 16進ニブル値
+/// - `dp`: 小数点を点灯するなら `true`
+///
+/// # Returns
+/// - dp ビット反映後の 7セグメント表示パターン
 #[inline]
 pub fn hex_nibble_to_seg_with_dp(nibble: u8, dp: bool) -> u8 {
 	let mut pat = hex_nibble_to_seg(nibble);
@@ -94,6 +120,13 @@ pub fn hex_nibble_to_seg_with_dp(nibble: u8, dp: bool) -> u8 {
 ///
 /// 足りない上位は `'0'` で埋める。`width` を超える分は下位を採用する。
 /// `width` が 0 なら空。各桁の dp は 0。
+///
+/// # Arguments
+/// - `value`: 設定する値
+/// - `width`: 桁数
+///
+/// # Returns
+/// - `Vec<u8>` を返します。
 pub fn word_to_seg_digits(value: u32, width: usize) -> Vec<u8> {
 	if width == 0 {
 		return Vec::new();
@@ -116,6 +149,14 @@ pub fn word_to_seg_digits(value: u32, width: usize) -> Vec<u8> {
 /// `used_digits` は点灯させる桁数（1〜`total_digits` にクランプ）。
 /// `total_digits` はフィールド全体（ADDR=8 / DATA=4）。
 /// 上位の未使用桁は 0（消灯）。使用桁は 16 進 0 埋め。
+///
+/// # Arguments
+/// - `value`: 設定する値
+/// - `used_digits`: 関数に渡す値
+/// - `total_digits`: 関数に渡す値
+///
+/// # Returns
+/// - `Vec<u8>` を返します。
 pub fn word_to_seg_digits_padded(value: u32, used_digits: usize, total_digits: usize) -> Vec<u8> {
 	let total = total_digits.max(1);
 	let used = used_digits.clamp(1, total);

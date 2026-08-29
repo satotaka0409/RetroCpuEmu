@@ -1,8 +1,13 @@
+//! TMS9995 コアで使うエラー型を定義するモジュール。
+
 use core::fmt;
 
+/// TMS9995 実行時エラー。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tms9995Error {
+	/// 未実装または不正な命令語に遭遇した。
 	IllegalInstruction { pc: u16, ir: u16 },
+	/// 停止条件に到達せず、許可した命令実行数を使い切った。
 	MaxCyclesReached { cycles: usize },
 }
 

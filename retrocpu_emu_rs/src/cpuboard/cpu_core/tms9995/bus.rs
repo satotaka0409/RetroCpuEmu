@@ -1,7 +1,13 @@
+//! TMS9995 が使うメモリバス抽象と RAM 実装。
+
+/// TMS9995 コアがメモリへアクセスするための最小バス I/F。
 pub trait Tms9995Bus {
+	/// 1 バイト読み取り。
 	fn read_byte(&self, addr: u16) -> u8;
+	/// 1 バイト書き込み。
 	fn write_byte(&mut self, addr: u16, value: u8);
 
+	/// 16bit 語をビッグエンディアン順で読み取る。
 	fn read_word(&self, addr: u16) -> u16 {
 		let a = addr & 0xfffe;
 		let hi = self.read_byte(a) as u16;
@@ -9,6 +15,7 @@ pub trait Tms9995Bus {
 		(hi << 8) | lo
 	}
 
+	/// 16bit 語をビッグエンディアン順で書き込む。
 	fn write_word(&mut self, addr: u16, value: u16) {
 		let a = addr & 0xfffe;
 		self.write_byte(a, (value >> 8) as u8);
@@ -16,22 +23,39 @@ pub trait Tms9995Bus {
 	}
 }
 
+/// 単純な RAM バッキングの `Tms9995Bus` 実装。
 #[derive(Debug, Clone)]
 pub struct Tms9995Ram {
 	bytes: Vec<u8>,
 }
 
 impl Tms9995Ram {
+	/// 指定バイト長の RAM を 0 初期化で生成する。
+	///
+	/// # Arguments
+	/// - `size_bytes`: 関数に渡す値
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new(size_bytes: usize) -> Self {
 		Self {
 			bytes: vec![0; size_bytes],
 		}
 	}
 
+	/// RAM の総バイト数。
+	///
+	/// # Returns
+	/// - 件数または長さを返します。
 	pub fn len_bytes(&self) -> usize {
 		self.bytes.len()
 	}
 
+	/// 生バイト列を指定アドレスへ順次ロードする。
+	///
+	/// # Arguments
+	/// - `start_addr`: 開始アドレス
+	/// - `data`: データ列
 	pub fn load_bytes(&mut self, start_addr: u16, data: &[u8]) {
 		let start = usize::from(start_addr);
 		for (i, b) in data.iter().enumerate() {
@@ -42,6 +66,11 @@ impl Tms9995Ram {
 		}
 	}
 
+	/// 16bit 語列をビッグエンディアンとして連続配置する。
+	///
+	/// # Arguments
+	/// - `start_addr`: 開始アドレス
+	/// - `data`: データ列
 	pub fn load_words_be(&mut self, start_addr: u16, data: &[u16]) {
 		let mut addr = start_addr & 0xfffe;
 		for w in data {

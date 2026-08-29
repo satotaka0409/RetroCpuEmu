@@ -127,6 +127,9 @@ impl Default for Mn1613Core {
 
 impl Mn1613Core {
 	/// 電源投入前の空コアを作る（`power_on_idle` 相当の初期値）。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			regs: CpuRegister::default(),
@@ -145,26 +148,41 @@ impl Mn1613Core {
 	}
 
 	/// IO コールバックを差し替える。
+	///
+	/// # Arguments
+	/// - `io`: ポートアクセス実装
 	pub fn set_io_callbacks(&mut self, io: Box<dyn IoCallbacks>) {
 		self.io = io;
 	}
 
 	/// メモリプローブフック（比較器用。未使用可）。
+	///
+	/// # Arguments
+	/// - `hook`: 読み書きイベント受信用フック（不要なら `None`）
 	pub fn set_mem_hook(&mut self, hook: Option<MemHook>) {
 		self.mem_hook = hook;
 	}
 
 	/// 停止コールバックを登録する。
+	///
+	/// # Arguments
+	/// - `cb`: 停止時に呼ぶコールバック（解除は `None`）
 	pub fn set_on_stop(&mut self, cb: Option<OnStop>) {
 		self.on_stop = cb;
 	}
 
 	/// 命令フェッチ直前トレース（テスト用）。
+	///
+	/// # Arguments
+	/// - `cb`: 命令実行前トレースコールバック（解除は `None`）
 	pub fn set_on_before_execute(&mut self, cb: Option<OnTrace>) {
 		self.on_before = cb;
 	}
 
 	/// 命令実行直後トレース（テスト用）。
+	///
+	/// # Arguments
+	/// - `cb`: 命令実行後トレースコールバック（解除は `None`）
 	pub fn set_on_after_execute(&mut self, cb: Option<OnTrace>) {
 		self.on_after = cb;
 	}
@@ -179,6 +197,9 @@ impl Mn1613Core {
 	}
 
 	/// CPU リセット（IO:0 → ベクタ表。mem[base+2]=STR、mem[base+3]=IC）。
+	///
+	/// # Arguments
+	/// - `ram`: リセットベクタ表を読むメモリ
 	pub fn reset(&mut self, ram: &Mn1613Ram) {
 		self.regs = CpuRegister::default();
 		self.step_mode = false;
@@ -191,11 +212,17 @@ impl Mn1613Core {
 	}
 
 	/// レジスタスナップショットを返す。
+	///
+	/// # Returns
+	/// - 現在のレジスタ状態のコピー
 	pub fn get_state(&self) -> CpuRegister {
 		self.regs.clone()
 	}
 
 	/// レジスタを部分更新する。
+	///
+	/// # Arguments
+	/// - `patch`: `Some` の項目だけ反映する更新パッチ
 	pub fn set_state(&mut self, patch: &CpuRegisterPatch) {
 		if let Some(r) = &patch.r {
 			for i in 0..5 {
@@ -247,26 +274,41 @@ impl Mn1613Core {
 	}
 
 	/// 実行状態を返す。
+	///
+	/// # Returns
+	/// - 現在の実行状態
 	pub fn get_exec_status(&self) -> ExecStatus {
 		self.exec_status
 	}
 
 	/// 実行状態を強制設定する（テスト用）。
+	///
+	/// # Arguments
+	/// - `s`: 設定する実行状態
 	pub fn set_exec_status(&mut self, s: ExecStatus) {
 		self.exec_status = s;
 	}
 
 	/// リセット以降の CPU クロック数（64bit ラップ）。
+	///
+	/// # Returns
+	/// - 加算済みクロック数
 	pub fn get_clock_count(&self) -> u64 {
 		self.clock_count
 	}
 
 	/// ソフトブレイクポイントを追加する。
+	///
+	/// # Arguments
+	/// - `addr`: 追加する命令アドレス
 	pub fn add_breakpoint(&mut self, addr: u16) {
 		self.breakpoints.insert(addr);
 	}
 
 	/// ソフトブレイクポイントを削除する。
+	///
+	/// # Arguments
+	/// - `addr`: 削除する命令アドレス
 	pub fn remove_breakpoint(&mut self, addr: u16) {
 		self.breakpoints.remove(&addr);
 	}
@@ -277,11 +319,17 @@ impl Mn1613Core {
 	}
 
 	/// 設定済みブレイクポイントを返す。
+	///
+	/// # Returns
+	/// - 現在登録されているブレイクポイント集合
 	pub fn get_breakpoints(&self) -> &HashSet<u16> {
 		&self.breakpoints
 	}
 
 	/// ステップモードを切り替える。
+	///
+	/// # Arguments
+	/// - `enable`: `true` でステップモードを有効化
 	pub fn set_step_mode(&mut self, enable: bool) {
 		self.step_mode = enable;
 		if enable && self.exec_status == ExecStatus::Running {
@@ -290,6 +338,9 @@ impl Mn1613Core {
 	}
 
 	/// 割り込み要求（level 0〜2）。
+	///
+	/// # Arguments
+	/// - `level`: 割り込みレベル（0〜2。範囲外は無視）
 	pub fn trigger_interrupt(&mut self, level: u8) {
 		if level <= 2 {
 			self.pending_irq |= 1 << level;
@@ -297,6 +348,9 @@ impl Mn1613Core {
 	}
 
 	/// ペンディング IRQ マスク（テスト用）。
+	///
+	/// # Returns
+	/// - 保留中 IRQ ビットマスク
 	pub fn get_pending_irq(&self) -> u8 {
 		self.pending_irq
 	}
@@ -307,13 +361,21 @@ impl Mn1613Core {
 	}
 
 	/// 1 命令実行して状態を返す（ステップ停止）。
+	///
+	/// # Arguments
+	/// - `ram`: 命令・データを読むメモリ
+	///
+	/// # Returns
+	/// - 実行後のレジスタ状態コピー
 	pub fn step(&mut self, ram: &mut Mn1613Ram) -> CpuRegister {
+		// HALT 中でも、受理可能な IRQ が来ていれば実行再開できる。
 		if self.exec_status == ExecStatus::Halted {
 			if !self.has_acceptable_irq() {
 				return self.get_state();
 			}
 			self.exec_status = ExecStatus::Running;
 		}
+		// step() は「1命令だけ進める」ため、常に step_mode をいったん解除してから実行する。
 		self.step_mode = false;
 		self.exec_status = ExecStatus::Running;
 		self.execute_one(ram);
@@ -325,10 +387,14 @@ impl Mn1613Core {
 	}
 
 	/// メインループ用: 実行中なら 1 命令。
+	///
+	/// # Arguments
+	/// - `ram`: 命令・データを読むメモリ
 	pub fn tick(&mut self, ram: &mut Mn1613Ram) {
 		if self.exec_status == ExecStatus::Idle {
 			return;
 		}
+		// HALT 中は通常停止のまま。IRQ が受理可能になったときだけ復帰する。
 		if self.exec_status == ExecStatus::Halted {
 			if !self.has_acceptable_irq() {
 				return;
@@ -347,12 +413,24 @@ impl Mn1613Core {
 	}
 
 	/// 最大 `max_inst` 命令まで連続実行する。
+	///
+	/// # Arguments
+	/// - `ram`: 命令・データを読むメモリ
+	/// - `start_addr`: `Some` の場合は実行開始前に `IC` へ設定
+	/// - `max_inst`: 実行上限命令数（`0` は上限なし）
+	///
+	/// # Returns
+	/// - 停止時の実行状態（`Break` / `Step` / `Halted`）
+	///
+	/// # Errors
+	/// - `Mn1613Error::MaxCyclesReached`: `max_inst` 上限に到達した場合
 	pub fn run_slice(
 		&mut self,
 		ram: &mut Mn1613Ram,
 		start_addr: Option<u16>,
 		max_inst: usize,
 	) -> Result<ExecStatus, Mn1613Error> {
+		// start_addr が Some のときだけ、実行開始アドレスを上書きする。
 		if let Some(a) = start_addr {
 			self.regs.ic = a;
 		}
@@ -375,6 +453,7 @@ impl Mn1613Core {
 				self.fire_stop();
 				return Ok(self.exec_status);
 			}
+			// max_inst == 0 は「上限なし」の意味。
 			if max_inst > 0 {
 				cycles += 1;
 				if cycles >= max_inst {
@@ -386,6 +465,9 @@ impl Mn1613Core {
 
 	fn fire_stop(&mut self) {
 		if let Some(mut cb) = self.on_stop.take() {
+			// Option::take() で一時的に所有権を取り出して呼び出し、
+			// 呼び出し後に戻す。これで &mut self とコールバック可変参照の
+			// 二重借用を避けられる。
 			cb(self.exec_status, &self.regs);
 			self.on_stop = Some(cb);
 		}
@@ -466,6 +548,7 @@ impl Mn1613Core {
 	}
 
 	fn fetch(&mut self, ram: &mut Mn1613Ram) -> u16 {
+		// メモリフックに「命令フェッチ中」のアクセスだと伝えるためのフラグ。
 		self.fetching = true;
 		let w = self.rd_c(ram, self.regs.ic);
 		self.fetching = false;
@@ -976,11 +1059,7 @@ impl Mn1613Core {
 			let mem = self.rd_c(ram, ad16);
 			let rs = self.gr(sss);
 			let test = mem & rs;
-			let res = if (lo & 8) != 0 {
-				mem | rs
-			} else {
-				mem & !rs
-			};
+			let res = if (lo & 8) != 0 { mem | rs } else { mem & !rs };
 			self.wr_c(ram, ad16, res);
 			if self.skip_cond(kkkk, test) {
 				self.skip_next(ram);
@@ -1097,10 +1176,7 @@ impl Mn1613Core {
 			} else {
 				0
 			};
-			let d = (self.regs.r[0] as i64) * 65536
-				+ (self.regs.r[1] as i64)
-				- (mh * 65536 + ml)
-				- e0;
+			let d = (self.regs.r[0] as i64) * 65536 + (self.regs.r[1] as i64) - (mh * 65536 + ml) - e0;
 			self.set_e(d < 0);
 			self.set_ovf(false);
 			let du = if d < 0 { d + 0x1_0000_0000 } else { d } as u64;
@@ -1132,10 +1208,7 @@ impl Mn1613Core {
 			} else {
 				0
 			};
-			let d = (self.regs.r[0] as u64) * 65536
-				+ (self.regs.r[1] as u64)
-				+ (mh * 65536 + ml)
-				+ e0;
+			let d = (self.regs.r[0] as u64) * 65536 + (self.regs.r[1] as u64) + (mh * 65536 + ml) + e0;
 			self.set_e(d > 0xffff_ffff);
 			self.set_ovf(false);
 			let du = d as u32;
@@ -1796,7 +1869,7 @@ mod tests {
 		ram.write_phys(4, 0x0100); // STR with M2
 		ram.write_phys(5, 0x0020); // IC
 		ram.write_phys(0x20, 0x2000); // H
-		// OSR[2] kept as CSBR
+																// OSR[2] kept as CSBR
 		ram.load_words(0, &[0x2006]); // LPSW 2
 
 		setup_running(&mut cpu, 0);

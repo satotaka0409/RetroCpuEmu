@@ -9,14 +9,18 @@ use std::collections::VecDeque;
 /// 実機線シミュレーション実装で置き換え可能。
 pub trait HandshakeTransport {
 	/// CPU→IO 方向にフレームを積む（奇数長は呼び出し側で 0 パッド可）。
-	/// @param frame コマンド先頭のバイト列
+	///
+	/// # Arguments
+	/// - `frame`: コマンド先頭のバイト列
 	fn push_cpu_to_io(&mut self, frame: &[u8]);
 
 	/// CPU→IO キュー先頭を取り出す。空なら None。
 	fn pop_cpu_to_io(&mut self) -> Option<Vec<u8>>;
 
 	/// IO→CPU 方向にフレームを積む。
-	/// @param frame 応答または IO 起点コマンド
+	///
+	/// # Arguments
+	/// - `frame`: 応答または IO 起点コマンド
 	fn push_io_to_cpu(&mut self, frame: &[u8]);
 
 	/// IO→CPU キュー先頭を取り出す。空なら None。
@@ -35,6 +39,9 @@ pub struct FrameLink {
 
 impl FrameLink {
 	/// 空のリンクを作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -46,11 +53,17 @@ impl FrameLink {
 	}
 
 	/// CPU→IO 待ちフレーム数。
+	///
+	/// # Returns
+	/// - 件数または長さを返します。
 	pub fn cpu_to_io_len(&self) -> usize {
 		self.cpu_to_io.len()
 	}
 
 	/// IO→CPU 待ちフレーム数。
+	///
+	/// # Returns
+	/// - 件数または長さを返します。
 	pub fn io_to_cpu_len(&self) -> usize {
 		self.io_to_cpu.len()
 	}

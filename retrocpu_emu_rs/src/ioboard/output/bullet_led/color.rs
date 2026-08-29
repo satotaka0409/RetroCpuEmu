@@ -27,6 +27,9 @@ pub struct LedTone {
 
 impl LedColor {
 	/// TypeScript `LED_TONES` と同じパレットを返す。
+	///
+	/// # Returns
+	/// - `LedTone` を返します。
 	pub fn tone(self) -> LedTone {
 		match self {
 			Self::Red => LedTone {
@@ -66,6 +69,12 @@ impl LedColor {
 /// 砲弾番号 0–15 のパネル既定色。
 ///
 /// 0–7 と B(UNDEF) は赤、8–A / E / F は橙、C=RUN 青、D=HALT 黄。
+///
+/// # Arguments
+/// - `index`: インデックス
+///
+/// # Returns
+/// - `LedColor` を返します。
 pub fn default_color_for_index(index: usize) -> LedColor {
 	match index {
 		0xC => LedColor::Blue,

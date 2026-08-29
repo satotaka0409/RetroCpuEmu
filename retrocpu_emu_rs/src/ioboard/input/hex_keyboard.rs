@@ -39,6 +39,12 @@ pub struct PanelKeyLoc {
 }
 
 /// パネルキー名を `14h` の列とビットマスクへ写す。
+///
+/// # Arguments
+/// - `key`: 関数に渡す値
+///
+/// # Returns
+/// - `Option<PanelKeyLoc>` を返します。
 pub fn panel_key_column_mask(key: &str) -> Option<PanelKeyLoc> {
 	let k = key.trim().to_ascii_uppercase();
 	for (col, names) in HEX_KEY_COL_BIT3_TO_0.iter().enumerate() {
@@ -67,6 +73,9 @@ impl Default for HexKeyboard {
 
 impl HexKeyboard {
 	/// 全キー離した状態。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			columns: [0; KEY_COLUMN_COUNT],
@@ -74,6 +83,9 @@ impl HexKeyboard {
 	}
 
 	/// キーを押す（`"0"`–`"F"` / `"F0"`–`"F7"`）。未知は無視。
+	///
+	/// # Arguments
+	/// - `key`: 関数に渡す値
 	pub fn press(&mut self, key: &str) {
 		if let Some(loc) = panel_key_column_mask(key) {
 			self.columns[loc.col] |= loc.mask;
@@ -81,6 +93,9 @@ impl HexKeyboard {
 	}
 
 	/// キーを離す。
+	///
+	/// # Arguments
+	/// - `key`: 関数に渡す値
 	pub fn release(&mut self, key: &str) {
 		if let Some(loc) = panel_key_column_mask(key) {
 			self.columns[loc.col] &= !loc.mask;
@@ -88,6 +103,10 @@ impl HexKeyboard {
 	}
 
 	/// 押下／離しをまとめて設定する。
+	///
+	/// # Arguments
+	/// - `key`: 関数に渡す値
+	/// - `pressed`: 押下状態フラグ
 	pub fn set_pressed(&mut self, key: &str, pressed: bool) {
 		if pressed {
 			self.press(key);
@@ -97,6 +116,12 @@ impl HexKeyboard {
 	}
 
 	/// 指定キーが押されているか。
+	///
+	/// # Arguments
+	/// - `key`: 関数に渡す値
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_pressed(&self, key: &str) -> bool {
 		match panel_key_column_mask(key) {
 			Some(loc) => (self.columns[loc.col] & loc.mask) != 0,
@@ -105,6 +130,9 @@ impl HexKeyboard {
 	}
 
 	/// 全列マスクを返す（ハンドシェイク `14h` 応答用。8 バイト）。
+	///
+	/// # Returns
+	/// - `[u8; KEY_COLUMN_COUNT]` を返します。
 	pub fn column_masks(&self) -> [u8; KEY_COLUMN_COUNT] {
 		let mut out = self.columns;
 		out[6] = 0;

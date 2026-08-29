@@ -102,41 +102,89 @@ pub struct AgentBridge<C: CpuBoardAgent> {
 
 impl<C: CpuBoardAgent> AgentBridge<C> {
 	/// CPU Agent を包む。
+	///
+	/// # Arguments
+	/// - `cpu`: CPU エージェント
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new(cpu: C) -> Self {
 		Self { cpu }
 	}
 
 	/// DMA 書き込み。
+	///
+	/// # Arguments
+	/// - `byte_addr`: バイトアドレス
+	/// - `data`: データ列
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn dma_write_bytes(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
 		self.cpu.dma_write_bytes(byte_addr, data)
 	}
 
 	/// `83h` メモリ読み。
+	///
+	/// # Arguments
+	/// - `byte_addr`: バイトアドレス
+	/// - `len`: 長さ
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn mem_read(&mut self, byte_addr: u32, len: u32) -> Result<Vec<u8>, BoardLinkError> {
 		self.cpu.hshk_mem_read(byte_addr, len)
 	}
 
 	/// `84h` メモリ書き。
+	///
+	/// # Arguments
+	/// - `byte_addr`: バイトアドレス
+	/// - `data`: データ列
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn mem_write(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
 		self.cpu.hshk_mem_write(byte_addr, data)
 	}
 
 	/// `82h` 実行。
+	///
+	/// # Arguments
+	/// - `byte_addr`: バイトアドレス
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn exec(&mut self, byte_addr: u32) -> Result<(), BoardLinkError> {
 		self.cpu.hshk_exec(byte_addr)
 	}
 
 	/// HALT 設定。
+	///
+	/// # Arguments
+	/// - `halt`: 関数に渡す値
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn set_halt(&mut self, halt: bool) -> Result<(), BoardLinkError> {
 		self.cpu.set_halt(halt)
 	}
 
 	/// RST パルス。
+	///
+	/// # Arguments
+	/// - `reset_vector_word`: 関数に渡す値
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 	pub fn pulse_reset(&mut self, reset_vector_word: Option<u32>) -> Result<(), BoardLinkError> {
 		self.cpu.pulse_reset(reset_vector_word)
 	}
 
 	/// HALT 状態。
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_halted(&self) -> bool {
 		self.cpu.is_halted()
 	}

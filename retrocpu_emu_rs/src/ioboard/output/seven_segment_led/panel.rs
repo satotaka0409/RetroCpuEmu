@@ -26,6 +26,9 @@ impl Default for SevenSegmentLed {
 
 impl SevenSegmentLed {
 	/// 全消灯のパネルを作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			patterns: [0; DIGIT_COUNT],
@@ -34,32 +37,53 @@ impl SevenSegmentLed {
 	}
 
 	/// 見た目を差し替える。
+	///
+	/// # Arguments
+	/// - `style`: 関数に渡す値
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn with_style(mut self, style: SevenSegmentStyle) -> Self {
 		self.style = style;
 		self
 	}
 
 	/// 現在のスタイル。
+	///
+	/// # Returns
+	/// - `SevenSegmentStyle` を返します。
 	pub fn style(&self) -> SevenSegmentStyle {
 		self.style
 	}
 
 	/// スタイルを書き換える。
+	///
+	/// # Arguments
+	/// - `style`: 関数に渡す値
 	pub fn set_style(&mut self, style: SevenSegmentStyle) {
 		self.style = style;
 	}
 
 	/// 12 桁すべての 8bit パターン（ADDR 8 + DATA 4）。
+	///
+	/// # Returns
+	/// - `&[u8; DIGIT_COUNT]` を返します。
 	pub fn patterns(&self) -> &[u8; DIGIT_COUNT] {
 		&self.patterns
 	}
 
 	/// ADDR 部 8 桁（左が上位）。
+	///
+	/// # Returns
+	/// - `&[u8]` を返します。
 	pub fn addr_patterns(&self) -> &[u8] {
 		&self.patterns[..ADDR_DIGIT_COUNT]
 	}
 
 	/// DATA 部 4 桁（左が上位）。
+	///
+	/// # Returns
+	/// - `&[u8]` を返します。
 	pub fn data_patterns(&self) -> &[u8] {
 		&self.patterns[ADDR_DIGIT_COUNT..]
 	}
@@ -67,6 +91,10 @@ impl SevenSegmentLed {
 	/// 1 桁の 8bit パターンを書く。
 	///
 	/// `index` は 0..11（0..7=ADDR、8..11=DATA）。範囲外は無視する。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	/// - `pattern`: 関数に渡す値
 	pub fn set_digit(&mut self, index: usize, pattern: u8) {
 		if let Some(slot) = self.patterns.get_mut(index) {
 			*slot = pattern;
@@ -76,6 +104,9 @@ impl SevenSegmentLed {
 	/// ハンドシェイク `16h` と同じ 12 バイトを一括で載せる。
 	///
 	/// `bytes` が 12 未満なら残りは消灯。12 を超える分は捨てる。
+	///
+	/// # Arguments
+	/// - `bytes`: バイト列
 	pub fn set_patterns(&mut self, bytes: &[u8]) {
 		self.patterns.fill(0);
 		let n = bytes.len().min(DIGIT_COUNT);
@@ -85,17 +116,28 @@ impl SevenSegmentLed {
 	/// 1 桁を 16 進ニブルで点灯する。
 	///
 	/// `nibble` は下位 4bit。`dp` が真なら小数点も点灯。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	/// - `nibble`: 関数に渡す値
+	/// - `dp`: 関数に渡す値
 	pub fn set_digit_hex(&mut self, index: usize, nibble: u8, dp: bool) {
 		self.set_digit(index, hex_nibble_to_seg_with_dp(nibble, dp));
 	}
 
 	/// ADDR 8 桁を 32bit 値の 16 進表示にする（上位 0 埋め。dp は消灯）。
+	///
+	/// # Arguments
+	/// - `value`: 設定する値
 	pub fn set_addr_hex(&mut self, value: u32) {
 		let digits = word_to_seg_digits(value, ADDR_DIGIT_COUNT);
 		self.patterns[..ADDR_DIGIT_COUNT].copy_from_slice(&digits);
 	}
 
 	/// DATA 4 桁を 16bit 値の 16 進表示にする（上位 0 埋め。dp は消灯）。
+	///
+	/// # Arguments
+	/// - `value`: 設定する値
 	pub fn set_data_hex(&mut self, value: u16) {
 		let digits = word_to_seg_digits(value as u32, DATA_DIGIT_COUNT);
 		self.patterns[ADDR_DIGIT_COUNT..].copy_from_slice(&digits);
@@ -104,6 +146,10 @@ impl SevenSegmentLed {
 	/// ADDR を設定桁数だけ点灯する（未使用の上位桁は消灯）。
 	///
 	/// `used_digits` は 1〜8。IO ボード設定エリアの ADDR 桁数に相当。
+	///
+	/// # Arguments
+	/// - `value`: 設定する値
+	/// - `used_digits`: 関数に渡す値
 	pub fn set_addr_hex_padded(&mut self, value: u32, used_digits: usize) {
 		let digits = word_to_seg_digits_padded(value, used_digits, ADDR_DIGIT_COUNT);
 		self.patterns[..ADDR_DIGIT_COUNT].copy_from_slice(&digits);
@@ -112,6 +158,10 @@ impl SevenSegmentLed {
 	/// DATA を設定桁数だけ点灯する（未使用の上位桁は消灯）。
 	///
 	/// `used_digits` は 1〜4。IO ボード設定エリアの DATA 桁数に相当。
+	///
+	/// # Arguments
+	/// - `value`: 設定する値
+	/// - `used_digits`: 関数に渡す値
 	pub fn set_data_hex_padded(&mut self, value: u16, used_digits: usize) {
 		let digits = word_to_seg_digits_padded(value as u32, used_digits, DATA_DIGIT_COUNT);
 		self.patterns[ADDR_DIGIT_COUNT..].copy_from_slice(&digits);
@@ -120,6 +170,10 @@ impl SevenSegmentLed {
 	/// 指定桁の小数点だけ立てる／下ろす。a..g は変えない。
 	///
 	/// `index` が範囲外なら何もしない。
+	///
+	/// # Arguments
+	/// - `index`: インデックス
+	/// - `on`: 点灯フラグ
 	pub fn set_dp(&mut self, index: usize, on: bool) {
 		if let Some(slot) = self.patterns.get_mut(index) {
 			if on {
@@ -131,6 +185,12 @@ impl SevenSegmentLed {
 	}
 
 	/// ADDR + DATA を egui 上に描く。
+	///
+	/// # Arguments
+	/// - `ui`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `egui::Response` を返します。
 	pub fn show(&self, ui: &mut Ui) -> egui::Response {
 		let inner = ui.horizontal(|ui| {
 			self.paint_bank(ui, "ADDRESS", self.addr_patterns());

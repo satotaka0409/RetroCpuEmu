@@ -28,6 +28,9 @@ impl Default for StepBreakUnit {
 
 impl StepBreakUnit {
 	/// ENA=0・ディレイ初期値で作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			ena: 0,
@@ -46,23 +49,36 @@ impl StepBreakUnit {
 	}
 
 	/// ENABLE ラッチ（Bit0）。
+	///
+	/// # Returns
+	/// - 8bit 値を返します。
 	pub fn enable(&self) -> u8 {
 		self.ena
 	}
 
 	/// ラッチされたディレイ値（8bit）。
+	///
+	/// # Returns
+	/// - 8bit 値を返します。
 	pub fn delay_count(&self) -> u8 {
 		self.delay
 	}
 
 	/// 現在の残りカウント（テスト用）。
+	///
+	/// # Returns
+	/// - 8bit 値を返します。
 	pub fn remaining_count(&self) -> u8 {
 		self.remaining
 	}
 
 	/// 1 命令の先頭語フェッチ。2 語目やオペランド READ では呼ばない。
-	/// @param _word フェッチした命令語（16bit。現状未使用）
-	/// @returns ヒットしたら true（ENA は内部で落とす）
+	///
+	/// # Arguments
+	/// - `_word`: フェッチした命令語（16bit。現状未使用）
+	///
+	/// # Returns
+	/// - ヒットしたら `true`（ENA は内部で 0 へ戻る）。
 	pub fn on_instruction_fetch(&mut self, _word: u16) -> bool {
 		if self.ena == 0 {
 			return false;
@@ -86,7 +102,12 @@ impl StepBreakUnit {
 	}
 
 	/// IO リード（0036/0037）。対象外は None。
-	/// @param port ポート番号
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	///
+	/// # Returns
+	/// - 値が存在すれば `Some(value)`、なければ `None` を返します。
 	pub fn read_port(&self, port: u16) -> Option<u16> {
 		match port & 0xffff {
 			IO_PORT_STEP_ENA => Some(u16::from(self.ena)),
@@ -97,9 +118,13 @@ impl StepBreakUnit {
 
 	/// IO ライト（0036/0037）。
 	/// ENA=1 で現在の delay 値を再ロードしてカウント開始する。
-	/// @param port ポート番号
-	/// @param val 16bit
-	/// @returns 処理したら true
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	/// - `val`: 16bit 値
+	///
+	/// # Returns
+	/// - 対応ポートを処理した場合は `true`。
 	pub fn write_port(&mut self, port: u16, val: u16) -> bool {
 		let p = port & 0xffff;
 		let v = val & 0xffff;

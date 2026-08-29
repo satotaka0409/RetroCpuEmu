@@ -56,6 +56,12 @@ pub enum ConsoleFnKey {
 
 impl ConsoleFnKey {
 	/// `"F0"`–`"F7"` から変換。
+	///
+	/// # Arguments
+	/// - `name`: 関数に渡す値
+	///
+	/// # Returns
+	/// - `Option<Self>` を返します。
 	pub fn from_name(name: &str) -> Option<Self> {
 		match name.trim().to_ascii_uppercase().as_str() {
 			"F0" => Some(Self::F0),
@@ -71,6 +77,9 @@ impl ConsoleFnKey {
 	}
 
 	/// 表示ラベル。
+	///
+	/// # Returns
+	/// - `&'static str` を返します。
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::F0 => "ADS",
@@ -124,6 +133,12 @@ impl Default for IoConsole {
 
 impl IoConsole {
 	/// 設定から桁数・増加数を初期化する。
+	///
+	/// # Arguments
+	/// - `settings`: 設定値
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new(settings: &IoBoardSettings) -> Self {
 		Self {
 			word_addr: 0,
@@ -139,6 +154,9 @@ impl IoConsole {
 	}
 
 	/// 現在状態。
+	///
+	/// # Returns
+	/// - `IoConsoleState` を返します。
 	pub fn state(&self) -> IoConsoleState {
 		IoConsoleState {
 			word_addr: self.word_addr,
@@ -326,6 +344,9 @@ impl IoConsole {
 	}
 
 	/// 設定から増加数・桁数を取り込む。
+	///
+	/// # Arguments
+	/// - `host`: 関数に渡す値
 	pub fn sync_from_settings<H: PanelHost>(&mut self, host: &H) {
 		let cpu = host.read_setting_byte(offsets::CPU_TYPE as u8);
 		let defaults = default_settings_for_cpu(cpu);
@@ -381,6 +402,10 @@ impl IoConsole {
 	}
 
 	/// ADDR/DATA + ADS(E/F) + HALT(D)/RUN(C) + UNDEF(B) を LED に載せる。
+	///
+	/// # Arguments
+	/// - `seven`: 関数に渡す値
+	/// - `bullet`: 関数に渡す値
 	pub fn refresh_leds(&self, seven: &mut SevenSegmentLed, bullet: &mut BulletLed) {
 		let mut patterns = [0u8; DIGIT_COUNT];
 		if self.mode == ConsoleMode::SettingArea {

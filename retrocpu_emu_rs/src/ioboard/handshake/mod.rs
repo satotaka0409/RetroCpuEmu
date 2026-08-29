@@ -14,6 +14,12 @@ pub const EXEC_WIRE_LEN: usize = 6;
 pub const MEM_RW_WIRE_HEADER_LEN: usize = 10;
 
 /// u32 をビッグエンディアン 4 バイトにする。
+///
+/// # Arguments
+/// - `v`: 関数に渡す値
+///
+/// # Returns
+/// - `[u8; 4]` を返します。
 pub fn u32_be(v: u32) -> [u8; 4] {
 	[
 		((v >> 24) & 0xff) as u8,
@@ -24,6 +30,12 @@ pub fn u32_be(v: u32) -> [u8; 4] {
 }
 
 /// ビッグエンディアン 4 バイトを u32 にする。
+///
+/// # Arguments
+/// - `buf`: 関数に渡す値
+///
+/// # Returns
+/// - 32bit 値を返します。
 pub fn read_u32_be(buf: &[u8]) -> u32 {
 	((buf[0] as u32) << 24)
 		| ((buf[1] as u32) << 16)
@@ -32,6 +44,12 @@ pub fn read_u32_be(buf: &[u8]) -> u32 {
 }
 
 /// `82h` EXEC フレームを組む。
+///
+/// # Arguments
+/// - `byte_addr`: バイトアドレス
+///
+/// # Returns
+/// - `[u8; EXEC_WIRE_LEN]` を返します。
 pub fn encode_exec(byte_addr: u32) -> [u8; EXEC_WIRE_LEN] {
 	let mut frame = [0u8; EXEC_WIRE_LEN];
 	frame[0] = cmd_io_to_cpu::EXEC;
@@ -41,6 +59,13 @@ pub fn encode_exec(byte_addr: u32) -> [u8; EXEC_WIRE_LEN] {
 }
 
 /// `83h` MEM_READ ヘッダを組む。
+///
+/// # Arguments
+/// - `byte_addr`: バイトアドレス
+/// - `count`: 件数
+///
+/// # Returns
+/// - `[u8; MEM_RW_WIRE_HEADER_LEN]` を返します。
 pub fn encode_mem_read(byte_addr: u32, count: u32) -> [u8; MEM_RW_WIRE_HEADER_LEN] {
 	let mut frame = [0u8; MEM_RW_WIRE_HEADER_LEN];
 	frame[0] = cmd_io_to_cpu::MEM_READ;
@@ -51,6 +76,13 @@ pub fn encode_mem_read(byte_addr: u32, count: u32) -> [u8; MEM_RW_WIRE_HEADER_LE
 }
 
 /// `84h` MEM_WRITE フレーム（ヘッダ＋データ）を組む。
+///
+/// # Arguments
+/// - `byte_addr`: バイトアドレス
+/// - `data`: データ列
+///
+/// # Returns
+/// - `Vec<u8>` を返します。
 pub fn encode_mem_write(byte_addr: u32, data: &[u8]) -> Vec<u8> {
 	let n = data.len() as u32;
 	let mut frame = Vec::with_capacity(MEM_RW_WIRE_HEADER_LEN + data.len());
@@ -160,6 +192,13 @@ pub fn mem_write<A: CpuBoardAgent>(
 }
 
 /// 便利ラッパ: Agent へ `82h` を発行する。
+///
+/// # Arguments
+/// - `agent`: 関数に渡す値
+/// - `byte_addr`: バイトアドレス
+///
+/// # Errors
+/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn exec<A: CpuBoardAgent>(agent: &mut A, byte_addr: u32) -> Result<(), BoardLinkError> {
 	let frame = encode_exec(byte_addr);
 	let reply = dispatch_io_to_cpu(agent, &frame)?;
@@ -170,6 +209,12 @@ pub fn exec<A: CpuBoardAgent>(agent: &mut A, byte_addr: u32) -> Result<(), Board
 }
 
 /// CPU→IO フレームへの MVP 応答（未知も OK。ブート待ちスタブ）。
+///
+/// # Arguments
+/// - `frame`: ハンドシェイクフレーム
+///
+/// # Returns
+/// - `Vec<u8>` を返します。
 pub fn handle_cpu_to_io_stub(frame: &[u8]) -> Vec<u8> {
 	if frame.is_empty() {
 		return vec![response::NG];
@@ -187,6 +232,9 @@ pub type IoHandshakePeer = HandshakeDispatcher;
 
 impl HandshakeDispatcher {
 	/// 新規。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self
 	}
@@ -201,6 +249,12 @@ impl HandshakeDispatcher {
 	}
 
 	/// CPU→IO を処理する（スタブ）。
+	///
+	/// # Arguments
+	/// - `frame`: ハンドシェイクフレーム
+	///
+	/// # Returns
+	/// - `Vec<u8>` を返します。
 	pub fn dispatch_from_cpu(&self, frame: &[u8]) -> Vec<u8> {
 		handle_cpu_to_io_stub(frame)
 	}

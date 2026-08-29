@@ -61,6 +61,12 @@ fn push_radial_disc(mesh: &mut Mesh, center: Pos2, radius: f32, inner: Color32, 
 /// 1 個の砲弾 LED を `rect` の中央に描く。
 ///
 /// `rect` は直径以上の正方形を想定。`on` が真ならグロー付きで点灯。
+///
+/// # Arguments
+/// - `ui`: 関数に渡す値
+/// - `rect`: 関数に渡す値
+/// - `on`: 点灯フラグ
+/// - `color`: 関数に渡す値
 pub fn paint_bullet(ui: &Ui, rect: Rect, on: bool, color: LedColor) {
 	let painter = ui.painter();
 	let r = (rect.width().min(rect.height()) * 0.5).max(2.0);

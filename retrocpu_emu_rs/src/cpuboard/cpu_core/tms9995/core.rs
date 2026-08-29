@@ -1,33 +1,52 @@
+//! TMS9995 CPU コア本体。
+
 use super::bus::Tms9995Bus;
 use super::cru::Tms9995Cru;
 use super::error::Tms9995Error;
 
+/// Status レジスタ: Logical Greater Than。
 pub const ST_LGT: u16 = 0x8000;
+/// Status レジスタ: Arithmetic Greater Than。
 pub const ST_AGT: u16 = 0x4000;
+/// Status レジスタ: Equal。
 pub const ST_EQ: u16 = 0x2000;
+/// Status レジスタ: Carry。
 pub const ST_C: u16 = 0x1000;
+/// Status レジスタ: Overflow。
 pub const ST_OV: u16 = 0x0800;
+/// Status レジスタ: Odd Parity。
 pub const ST_OP: u16 = 0x0400;
+/// Status レジスタ: XOP 実行中フラグ。
 pub const ST_X: u16 = 0x0200;
+/// Status レジスタ: 割り込みマスク（下位 4bit）。
 pub const ST_IMASK: u16 = 0x000f;
 
 const CRU_HSHK_OUT_DATA: u16 = 0x0023;
 const CRU_HSHK_IN_DATA: u16 = 0x0027;
 
+/// TMS9995 の主要レジスタ状態。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Tms9995State {
+	/// Program Counter（偶数境界）。
 	pub pc: u16,
+	/// Workspace Pointer（レジスタバンク先頭）。
 	pub wp: u16,
+	/// Status レジスタ。
 	pub st: u16,
+	/// `IDLE` 命令で停止中なら true。
 	pub idle: bool,
 }
 
+/// 1 ステップ実行後のコア状態。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepResult {
+	/// 実行継続可能。
 	Running,
+	/// IDLE 状態へ遷移。
 	Idle,
 }
 
+/// TMS9995 CPU コア本体。
 #[derive(Debug, Clone)]
 pub struct Tms9995Core {
 	state: Tms9995State,
@@ -46,20 +65,36 @@ impl Default for Tms9995Core {
 }
 
 impl Tms9995Core {
+	/// リセット直後相当の状態でコアを作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			state: Tms9995State::default(),
 		}
 	}
 
+	/// 現在の CPU 状態をコピーで取得する。
+	///
+	/// # Returns
+	/// - 現在の CPU 状態スナップショットを返します。
 	pub fn state(&self) -> Tms9995State {
 		self.state
 	}
 
+	/// デバッグや復元用に CPU 状態を丸ごと上書きする。
+	///
+	/// # Arguments
+	/// - `state`: CPU 状態
 	pub fn set_state(&mut self, state: Tms9995State) {
 		self.state = state;
 	}
 
+	/// メモリ先頭ベクタから `WP` / `PC` を読み取り、実行状態を初期化する。
+	///
+	/// # Arguments
+	/// - `bus`: メモリバス
 	pub fn reset_from_vector<B: Tms9995Bus>(&mut self, bus: &B) {
 		self.state.wp = bus.read_word(0x0000) & 0xfffe;
 		self.state.pc = bus.read_word(0x0002) & 0xfffe;
@@ -67,6 +102,19 @@ impl Tms9995Core {
 		self.state.idle = false;
 	}
 
+	/// 最大 `max_cycles` 命令まで実行し、`IDLE` 到達か上限超過で戻る。
+	///
+	/// # Arguments
+	/// - `bus`: 命令とデータを供給するメモリバス
+	/// - `cru`: CRU ビット I/O バス
+	/// - `max_cycles`: 実行する最大命令数
+	///
+	/// # Returns
+	/// - `IDLE` に到達するまでに実行した命令数
+	///
+	/// # Errors
+	/// - `Tms9995Error::MaxCyclesReached`: `max_cycles` 以内に停止しなかった場合
+	/// - `Tms9995Error::IllegalInstruction`: 実行中に不正命令へ到達した場合
 	pub fn run<B: Tms9995Bus, C: Tms9995Cru>(
 		&mut self,
 		bus: &mut B,
@@ -82,6 +130,18 @@ impl Tms9995Core {
 		Err(Tms9995Error::MaxCyclesReached { cycles: max_cycles })
 	}
 
+	/// 命令 1 個ぶん実行する。
+	/// 未実装命令は `IllegalInstruction` を返す。
+	///
+	/// # Arguments
+	/// - `bus`: 命令とデータを供給するメモリバス
+	/// - `cru`: CRU ビット I/O バス
+	///
+	/// # Returns
+	/// - 実行後の状態（継続実行中か `IDLE` 到達か）
+	///
+	/// # Errors
+	/// - `Tms9995Error::IllegalInstruction`: 不正命令を検出した場合
 	pub fn step<B: Tms9995Bus, C: Tms9995Cru>(
 		&mut self,
 		bus: &mut B,
@@ -233,7 +293,9 @@ impl Tms9995Core {
 
 	/// `cond_field` の上位 4 ビットが条件コードを表す。
 	/// `cond_field` の下位 8 ビットは無視される。
-	/// returns true if the condition is satisfied, false otherwise.
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、不成立時は `false`。
 	fn test_condition(&self, cond_field: u16) -> bool {
 		let c = ((cond_field >> 8) & 0x000f) as u8;
 		let st = self.state.st;

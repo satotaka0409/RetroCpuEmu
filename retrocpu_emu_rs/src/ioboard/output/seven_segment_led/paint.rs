@@ -97,6 +97,12 @@ fn paint_polygon(ui: &Ui, pts: [Pos2; 6], on: bool, style: &SevenSegmentStyle) {
 /// 1 桁分の矩形へ 8bit パターンを描く。
 ///
 /// `rect` は 1 桁全体（右端に dp 用余白を含む）。`pattern` は bit0=a … bit7=dp。
+///
+/// # Arguments
+/// - `ui`: 関数に渡す値
+/// - `rect`: 関数に渡す値
+/// - `pattern`: 関数に渡す値
+/// - `style`: 関数に渡す値
 pub fn paint_digit(ui: &Ui, rect: Rect, pattern: u8, style: &SevenSegmentStyle) {
 	let painter = ui.painter();
 	painter.rect_filled(rect, 4.0, style.digit_bg);
@@ -195,6 +201,14 @@ pub fn paint_digit(ui: &Ui, rect: Rect, pattern: u8, style: &SevenSegmentStyle) 
 /// 横一列の桁を描き、確保した領域の応答を返す。
 ///
 /// `patterns` は左から右。各要素は 8bit。
+///
+/// # Arguments
+/// - `ui`: 関数に渡す値
+/// - `patterns`: 関数に渡す値
+/// - `style`: 関数に渡す値
+///
+/// # Returns
+/// - `egui::Response` を返します。
 pub fn paint_digit_row(ui: &mut Ui, patterns: &[u8], style: &SevenSegmentStyle) -> egui::Response {
 	let n = patterns.len().max(1);
 	let w = style.digit_width * n as f32 + style.digit_gap * (n.saturating_sub(1) as f32);

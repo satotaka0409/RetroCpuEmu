@@ -42,6 +42,9 @@ impl Default for CpuBoard {
 
 impl CpuBoard {
 	/// MN1613 物理 RAM・既定 IO・空リンク付きハンドシェイクで作る。
+	///
+	/// # Returns
+	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
 		Self {
 			ram: SharedRam::mn1613(),
@@ -70,21 +73,24 @@ impl CpuBoard {
 	}
 
 	/// HALT 時のみ DMA でバイト列を書く。
-	/// @param byte_addr バイトアドレス
-	/// @param data 書き込むバイト列
-	pub fn dma_write_bytes(
-		&mut self,
-		byte_addr: u32,
-		data: &[u8],
-	) -> Result<(), DmaError> {
+	///
+	/// # Arguments
+	/// - `byte_addr`: バイトアドレス
+	/// - `data`: 書き込むバイト列
+	///
+	/// # Errors
+	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
+	pub fn dma_write_bytes(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), DmaError> {
 		self.dma.set_writable(self.halted);
 		self.dma.write_bytes(&mut self.ram, byte_addr, data)
 	}
 
 	/// コアハンドル付きで DMA 書き込み（書き込み可否をコアから取る）。
-	/// @param core CPU コア
-	/// @param byte_addr バイトアドレス
-	/// @param data 書き込むバイト列
+	///
+	/// # Arguments
+	/// - `core`: CPU コア
+	/// - `byte_addr`: バイトアドレス
+	/// - `data`: 書き込むバイト列
 	pub fn dma_write_bytes_with_core(
 		&mut self,
 		core: &impl CpuCoreHandle,
@@ -96,47 +102,75 @@ impl CpuBoard {
 	}
 
 	/// IO:0 リセットベクタ表先頭を設定する。
-	/// @param word_addr ワードアドレス
+	///
+	/// # Arguments
+	/// - `word_addr`: ワードアドレス
 	pub fn set_reset_vector(&mut self, word_addr: u32) {
 		self.io.set_reset_vector(word_addr);
 	}
 
 	/// 現在のリセットベクタ（ワード）。
+	///
+	/// # Returns
+	/// - 32bit 値を返します。
 	pub fn reset_vector(&self) -> u32 {
 		self.io.reset_vector()
 	}
 
 	/// 比較器 probe の薄いラッパ（コアの MEM/IO フックから呼ぶ）。
-	/// @param access バスアクセス
+	///
+	/// # Arguments
+	/// - `access`: バスアクセス
+	///
+	/// # Returns
+	/// - 該当要素があれば `Some(index)`、なければ `None` を返します。
 	pub fn probe_addr(&mut self, access: &AddrBusAccess) -> Option<usize> {
 		self.io.probe_addr(access)
 	}
 
 	/// 命令フェッチ時のステップ判定。
-	/// @param word 命令語
+	///
+	/// # Arguments
+	/// - `word`: 命令語
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn on_instruction_fetch(&mut self, word: u16) -> bool {
 		self.io.on_instruction_fetch(word)
 	}
 
 	/// 保留 IRQ を取り出す。
+	///
+	/// # Returns
+	/// - 保留中 IRQ があれば `Some`、なければ `None` を返します。
 	pub fn take_pending_irq(&mut self) -> Option<PendingIrq> {
 		self.io.take_pending_irq()
 	}
 
 	/// IO リード（コアの RD コールバックから委譲）。
-	/// @param port ポート番号
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	///
+	/// # Returns
+	/// - 16bit 値を返します。
 	pub fn io_read(&mut self, port: u16) -> u16 {
 		self.io.read(port)
 	}
 
 	/// IO ライト（コアの WT コールバックから委譲）。
-	/// @param port ポート番号
-	/// @param val 16bit
+	///
+	/// # Arguments
+	/// - `port`: ポート番号
+	/// - `val`: 16bit 値
 	pub fn io_write(&mut self, port: u16, val: u16) {
 		self.io.write(port, val);
 	}
 
 	/// パネル表示用の HALT 状態。
+	///
+	/// # Returns
+	/// - 条件成立時は `true`、それ以外は `false` を返します。
 	pub fn is_halted(&self) -> bool {
 		self.halted
 	}
@@ -145,19 +179,22 @@ impl CpuBoard {
 impl CpuBoardAgent for CpuBoard {
 	fn dma_write_bytes(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
 		self.dma.set_writable(self.halted);
-		self.dma
+		self
+			.dma
 			.write_bytes(&mut self.ram, byte_addr, data)
 			.map_err(|_| BoardLinkError::Ng)
 	}
 
 	fn hshk_mem_read(&mut self, byte_addr: u32, len: u32) -> Result<Vec<u8>, BoardLinkError> {
-		self.ram
+		self
+			.ram
 			.read_bytes(byte_addr, len)
 			.map_err(|_| BoardLinkError::Ng)
 	}
 
 	fn hshk_mem_write(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
-		self.ram
+		self
+			.ram
 			.write_bytes_direct(byte_addr, data)
 			.map_err(|_| BoardLinkError::Ng)
 	}
@@ -195,9 +232,7 @@ mod tests {
 		let mut board = CpuBoard::new();
 		assert_eq!(board.reset_vector(), 0x0108);
 		board.set_reset_vector(0x0200);
-		board
-			.dma_write_bytes(0x100, &[0xDE, 0xAD])
-			.unwrap();
+		board.dma_write_bytes(0x100, &[0xDE, 0xAD]).unwrap();
 		assert_eq!(board.ram.read_word(0x80), 0xDEAD);
 		board.reset();
 		assert_eq!(board.reset_vector(), 0x0108);
