@@ -10,7 +10,7 @@ pub const CPLD_COMPARATOR_COUNT: usize = 4;
 pub const IO_PORT_BREAK_CTRL: u16 = 0x0030;
 /// IO:0031 — アドレス bit0–15（TS 準拠。IO マップ表とは上下逆）
 pub const IO_PORT_BREAK_ADDR_LO: u16 = 0x0031;
-/// IO:0032 — アドレス bit16–17（下位 2bit）
+/// IO:0032 — 予約（TMS9995 は 16bit アドレスのみ。常に 0 を返し、書込は無視）
 pub const IO_PORT_BREAK_ADDR_HI: u16 = 0x0032;
 /// IO:0033 — 直近に一致した比較器番号（CPU 読取）
 pub const IO_PORT_BREAK_HIT: u16 = 0x0033;
@@ -287,6 +287,8 @@ impl AddrComparatorBank {
 
 	/// IO ライト（0030–0032）。0030 書込でスロットへ適用する。
 	///
+	/// TMS9995 は 16bit アドレスのみのため、0032（ADDR_HI）への書込は無視する。
+	///
 	/// # Arguments
 	/// - `port`: ポート番号
 	/// - `val`: 16bit 値
@@ -303,8 +305,7 @@ impl AddrComparatorBank {
 				true
 			}
 			IO_PORT_BREAK_ADDR_HI => {
-				self.addr_latch = v & 0xffff;
-				self.apply_addr_to_selected();
+				// TMS9995 は 16bit アドレス空間のため HI は未使用。
 				true
 			}
 			IO_PORT_BREAK_CTRL => {
@@ -354,8 +355,7 @@ impl AddrComparatorBank {
 	}
 
 	fn addr_hi_from_selected(&self) -> u16 {
-		let slot = self.selected_slot().min(CPLD_COMPARATOR_COUNT - 1);
-		((self.slots[slot].addr >> 16) & 0x03) as u16
+		0 as u16
 	}
 }
 
@@ -412,5 +412,20 @@ mod tests {
 		assert!(s.enabled);
 		assert_eq!(s.addr, 0xabcd);
 		assert_eq!(s.rdwr, BREAK_RDWR_BOTH);
+		assert_eq!(bank.read_port(IO_PORT_BREAK_ADDR_HI), Some(0));
+	}
+
+	#[test]
+	fn addr_hi_write_is_ignored_for_16bit_address_space() {
+		let mut bank = AddrComparatorBank::new();
+		bank.write_port(IO_PORT_BREAK_ADDR_LO, 0x1234);
+		bank.write_port(IO_PORT_BREAK_ADDR_HI, 0x03);
+		bank.write_port(
+			IO_PORT_BREAK_CTRL,
+			encode_break_ctrl(0, true, false, BREAK_RDWR_RD),
+		);
+		let s = bank.get_slot(0).unwrap();
+		assert_eq!(s.addr, 0x1234);
+		assert_eq!(bank.read_port(IO_PORT_BREAK_ADDR_HI), Some(0));
 	}
 }

@@ -11,7 +11,6 @@ use crate::cpuboard::{
 	Mn1613AddrBusAccess, Mn1613Core, Mn1613CpuRegisterPatch, Mn1613ExecStatus, Mn1613IoCallbacks,
 	Mn1613IoPorts, Mn1613MemAccessEvent, Mn1613Ram, Tms9995Bus, Tms9995Core, Tms9995CruBus,
 	Tms9995IoPorts, Tms9995Ram, Tms9995StepResult, MN1613_MONITOR_ENTRY_WORD, PHYS_MASK,
-	TMS9995_MONITOR_ENTRY_WORD,
 };
 
 /// `IoPorts` をコアの IO コールバックへ橋渡しする。
@@ -281,6 +280,10 @@ impl Tms9995CpuAgent {
 
 	/// リセットベクタ（ワード）を設定する。
 	pub fn set_reset_vector(&mut self, word_addr: u32) {
+		debug_assert!(
+			word_addr <= 0xffff,
+			"TMS9995 reset vector must fit in 16-bit word address"
+		);
 		self.ports.borrow_mut().set_reset_vector(word_addr);
 		self.apply_reset_vector_to_ram();
 	}
@@ -376,6 +379,9 @@ impl CpuBoardAgent for Tms9995CpuAgent {
 	}
 
 	fn hshk_exec(&mut self, byte_addr: u32) -> Result<(), BoardLinkError> {
+		if byte_addr > 0xffff {
+			return Err(BoardLinkError::BadFrame);
+		}
 		if (byte_addr & 1) != 0 {
 			return Err(BoardLinkError::BadFrame);
 		}
@@ -399,9 +405,10 @@ impl CpuBoardAgent for Tms9995CpuAgent {
 
 	fn pulse_reset(&mut self, reset_vector_word: Option<u32>) -> Result<(), BoardLinkError> {
 		if let Some(v) = reset_vector_word {
+			if v > 0xffff {
+				return Err(BoardLinkError::BadFrame);
+			}
 			self.set_reset_vector(v);
-		} else {
-			self.set_reset_vector(TMS9995_MONITOR_ENTRY_WORD);
 		}
 		self.ports.borrow_mut().reset_peripherals();
 		self.ext_halt = false;
@@ -411,5 +418,25 @@ impl CpuBoardAgent for Tms9995CpuAgent {
 
 	fn is_halted(&self) -> bool {
 		self.ext_halt || self.core.state().idle
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::Tms9995CpuAgent;
+	use crate::board_link::{BoardLinkError, CpuBoardAgent};
+
+	#[test]
+	fn tms9995_exec_rejects_out_of_16bit_byte_address() {
+		let mut agent = Tms9995CpuAgent::new();
+		let err = CpuBoardAgent::hshk_exec(&mut agent, 0x1_0000).unwrap_err();
+		assert_eq!(err, BoardLinkError::BadFrame);
+	}
+
+	#[test]
+	fn tms9995_reset_rejects_out_of_16bit_word_address() {
+		let mut agent = Tms9995CpuAgent::new();
+		let err = CpuBoardAgent::pulse_reset(&mut agent, Some(0x1_0000)).unwrap_err();
+		assert_eq!(err, BoardLinkError::BadFrame);
 	}
 }

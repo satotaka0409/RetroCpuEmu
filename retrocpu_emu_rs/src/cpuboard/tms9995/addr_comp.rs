@@ -1,4 +1,8 @@
 //! TMS9995 用アドレス比較器モジュール。
+//!
+//! TMS9995 側は 16bit アドレス空間を前提とする。
+//! そのため `IO_PORT_BREAK_ADDR_HI` (0x0032) は予約扱いで、
+//! read は 0、write は無視される。
 
 pub mod addr_comparator;
 

@@ -76,12 +76,6 @@ pub use tms9995::handshake::{
 	HandshakeTransport as Tms9995HandshakeTransport, HandshakeWires as Tms9995HandshakeWires,
 };
 // TMS9995: I/O ポートとリセットベクタ定数。
-pub use tms9995::io_ports::{
-	IoPorts as Tms9995IoPorts, PendingIrq as Tms9995PendingIrq,
-	IO_PORT_RESET_VECTOR as TMS9995_IO_PORT_RESET_VECTOR,
-	MONITOR_ENTRY_WORD as TMS9995_MONITOR_ENTRY_WORD,
-	RESET_VECTOR_IC_OFF as TMS9995_RESET_VECTOR_IC_OFF,
-	RESET_VECTOR_STR_OFF as TMS9995_RESET_VECTOR_STR_OFF,
-};
+pub use tms9995::io_ports::{IoPorts as Tms9995IoPorts, PendingIrq as Tms9995PendingIrq};
 // TMS9995: ステップ実行時のブレーク制御ユニット。
 pub use tms9995::step_run::StepBreakUnit as Tms9995StepBreakUnit;
