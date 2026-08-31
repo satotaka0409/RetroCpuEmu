@@ -1,0 +1,36 @@
+ws = { " " | "\t" }
+
+label_start = { ASCII_ALPHA | "_" | "." | "$" }
+label_char = { ASCII_ALPHA | ASCII_DIGIT | "_" | "." | "$" }
+label_ident = @{ label_start ~ label_char* }
+label = { label_ident ~ ":" }
+
+pseudo_opcode = { "." ~ (ASCII_ALPHA | ASCII_DIGIT | "_")+ }
+plain_opcode = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_" | "$" | "#")* }
+hash_opcode = @{ "#" ~ (ASCII_ALPHA | ASCII_DIGIT | "_" | "$")* }
+opcode = { pseudo_opcode | hash_opcode | plain_opcode }
+
+single_quoted = ${ "'" ~ single_inner ~ "'" }
+single_inner = { (!"'" ~ ANY)* }
+double_quoted = ${ "\"" ~ double_inner ~ "\"" }
+double_inner = { (!"\"" ~ ANY)* }
+quoted = { single_quoted | double_quoted }
+
+paren_group = { "(" ~ arg_list? ~ ")" }
+bracket_group = { "[" ~ arg_list? ~ "]" }
+arg_plain = @{ (!("," | ")" | "]" | "(" | "[") ~ ANY)+ }
+arg_atom = { quoted | paren_group | bracket_group | arg_plain }
+arg = { arg_atom+ }
+arg_list = { arg ~ ("," ~ ws* ~ arg)* }
+
+equ_op = { ".equ" | ".EQU" | "equ" | "EQU" }
+equ_tail = { (arg_atom | ws)+ }
+sdas_equ = { label_ident ~ ws+ ~ equ_op ~ ws+ ~ equ_tail }
+
+labeled_tail = { ws+ ~ opcode ~ op_tail? }
+labeled_instr = { label ~ labeled_tail? ~ ws* ~ &EOI }
+unlabeled_instr = { opcode ~ op_tail? ~ ws* ~ &EOI }
+op_tail = { ws+ ~ arg_list }
+
+asm_line = { SOI ~ asm_content ~ EOI }
+asm_content = { sdas_equ | labeled_instr | unlabeled_instr }

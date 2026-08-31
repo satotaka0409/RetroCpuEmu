@@ -6,8 +6,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::{
-    CpuRegisterPatch, ExecStatus, IoCallbacks, Mn1613Core, Mn1613Ram, PHYS_MASK,
+use retrocpu_emu_rs::cpuboard::{
+    Mn1613Core, Mn1613CpuRegisterPatch as CpuRegisterPatch, Mn1613ExecStatus as ExecStatus,
+    Mn1613IoCallbacks as IoCallbacks, Mn1613Ram, PHYS_MASK,
 };
 use retrocpu_emu_rs::ioboard::dma_load_intel_hex;
 
@@ -95,7 +96,7 @@ impl Mn1613AsmSession {
             FrameworkError::invalid_argument(format!("failed to read CDB {}: {e}", cdb_file.display()))
         })?;
         let cdb = parse_cdb(&cdb_text)?;
-        let ram = Arc::new(Mutex::new(Mn1613Ram::new()));
+        let ram = Arc::new(Mutex::new(Mn1613Ram::new(false)));
         let mut session = Self {
             hex_file,
             cdb_file,
@@ -203,7 +204,7 @@ impl Mn1613AsmSession {
         self.memory_mseq_seed = filled.seed;
         {
             let mut ram = self.ram.lock().expect("ram lock");
-            *ram = Mn1613Ram::new();
+            *ram = Mn1613Ram::new(false);
             for (i, chunk) in filled.buffer.chunks(2).enumerate() {
                 if chunk.len() == 2 {
                     let w = u16::from_be_bytes([chunk[0], chunk[1]]);

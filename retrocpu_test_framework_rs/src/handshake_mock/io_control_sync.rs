@@ -3,7 +3,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use retrocpu_emu_rs::cpuboard::handshake::mn1613::wires::{HandshakeWires, INT2_CAUSE_HANDSHAKE};
+use retrocpu_emu_rs::cpuboard::{
+    Mn1613HandshakeWires as HandshakeWires, MN1613_INT2_CAUSE_HANDSHAKE as INT2_CAUSE_HANDSHAKE,
+};
 
 use crate::error::FrameworkError;
 

@@ -43,6 +43,14 @@ pub use mn1613::dma::{
 pub use mn1613::handshake::{
 	CpuHandshakeAgent as Mn1613CpuHandshakeAgent, FrameLink as Mn1613FrameLink,
 	HandshakeTransport as Mn1613HandshakeTransport, HandshakeWires as Mn1613HandshakeWires,
+	HSHK_CTRL_IN_DACK as MN1613_HSHK_CTRL_IN_DACK,
+	HSHK_CTRL_OUT_DENA as MN1613_HSHK_CTRL_OUT_DENA,
+	HSHK_CTRL_OUT_REQ as MN1613_HSHK_CTRL_OUT_REQ,
+	HSHK_IN_CTRL_IN_REQ as MN1613_HSHK_IN_CTRL_IN_REQ,
+	INT2_CAUSE_HANDSHAKE as MN1613_INT2_CAUSE_HANDSHAKE,
+	IO_PORT_HSHK_IN_CTRL as MN1613_IO_PORT_HSHK_IN_CTRL,
+	IO_PORT_HSHK_OUT_CTRL as MN1613_IO_PORT_HSHK_OUT_CTRL,
+	IO_PORT_HSHK_OUT_DATA as MN1613_IO_PORT_HSHK_OUT_DATA,
 };
 // MN1613: I/O ポートとリセットベクタ定数。
 pub use mn1613::io_ports::{

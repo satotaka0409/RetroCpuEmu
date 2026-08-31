@@ -9,11 +9,16 @@ mod types;
 
 use std::sync::{Arc, Mutex};
 
-use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::{IoCallbacks, NullIo};
-use retrocpu_emu_rs::cpuboard::handshake::mn1613::board_link::{FrameLink, HandshakeTransport};
-use retrocpu_emu_rs::cpuboard::handshake::mn1613::wires::{
-    HandshakeWires, HSHK_CTRL_IN_DACK, HSHK_CTRL_OUT_DENA, HSHK_CTRL_OUT_REQ, HSHK_IN_CTRL_IN_REQ,
-    IO_PORT_HSHK_IN_CTRL, IO_PORT_HSHK_OUT_CTRL, IO_PORT_HSHK_OUT_DATA,
+use retrocpu_emu_rs::cpuboard::{
+    Mn1613FrameLink as FrameLink, Mn1613HandshakeTransport as HandshakeTransport,
+    Mn1613HandshakeWires as HandshakeWires, Mn1613IoCallbacks as IoCallbacks,
+    Mn1613NullIo as NullIo, MN1613_HSHK_CTRL_IN_DACK as HSHK_CTRL_IN_DACK,
+    MN1613_HSHK_CTRL_OUT_DENA as HSHK_CTRL_OUT_DENA,
+    MN1613_HSHK_CTRL_OUT_REQ as HSHK_CTRL_OUT_REQ,
+    MN1613_HSHK_IN_CTRL_IN_REQ as HSHK_IN_CTRL_IN_REQ,
+    MN1613_IO_PORT_HSHK_IN_CTRL as IO_PORT_HSHK_IN_CTRL,
+    MN1613_IO_PORT_HSHK_OUT_CTRL as IO_PORT_HSHK_OUT_CTRL,
+    MN1613_IO_PORT_HSHK_OUT_DATA as IO_PORT_HSHK_OUT_DATA,
 };
 
 pub use mock_state::{BeepParams, IoBoardMockState, LedDisplayData, TimerParams};

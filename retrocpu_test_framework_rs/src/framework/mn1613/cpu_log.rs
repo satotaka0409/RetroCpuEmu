@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::CpuRegister;
+use retrocpu_emu_rs::cpuboard::Mn1613CpuRegister as CpuRegister;
 
 use crate::framework::mn1613::cdb::parse_cdb;
 use crate::cpu_log_mark::{
