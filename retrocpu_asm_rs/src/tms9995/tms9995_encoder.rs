@@ -594,6 +594,7 @@ mod tests {
     use crate::assembler::assemble;
     use crate::cpu_type::CpuType;
     use crate::parser::parse_source;
+    use crate::tms9995::all_instruction_cases::TMS9995_ENCODE_CASES;
 
     fn asm_words(src: &str) -> Vec<u16> {
         assemble(
@@ -652,21 +653,15 @@ mod tests {
         assert!(msg.contains("TI syntax is not used"));
     }
 
+    /// TMS9995 全命令のエンコード期待値（TS 版 ALL_INSN 表と同一）。
     #[test]
-    fn all_mnemonics_smoke() {
-        let cases: &[(&str, &[u16])] = &[
-            ("SZC R1, R2", &[0x4081]),
-            ("MOV R1, R2", &[0xc081]),
-            ("JMP 2", &[0x1000]),
-            ("SBO #0", &[0x1d00]),
-            ("TB #-1", &[0x1fff]),
-            ("DIVS R0", &[0x0180]),
-            ("MPYS R0", &[0x01c0]),
-            ("LI R1, #1", &[0x0201, 0x0001]),
-            ("LST R1", &[0x0081]),
-        ];
-        for (src, expected) in cases {
-            assert_eq!(asm_words(&format!("        {src}")), *expected, "{src}");
+    fn all_instructions_encode() {
+        for (src, expected) in TMS9995_ENCODE_CASES {
+            assert_eq!(
+                asm_words(&format!("        {src}")),
+                *expected,
+                "TMS9995 encode mismatch: {src}"
+            );
         }
     }
 
@@ -679,18 +674,5 @@ mod tests {
             let enc = encode_instruction(line, 0, &HashMap::new(), true).expect("enc");
             assert_eq!(sz, (enc.len() as u16) * 2);
         }
-    }
-
-    #[test]
-    fn sample_all_instructions() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../retrocpu_asm_ts/sample/tms9995_all_instructions.asm"
-        );
-        let src = std::fs::read_to_string(path).expect("read sample");
-        let r = assemble(&src, None).expect("assemble sample");
-        assert_eq!(r.address_unit, crate::types::AddressUnit::Byte);
-        assert!(r.words.len() > 50);
-        assert_eq!(r.symbols.get("START"), Some(&0x1000));
     }
 }

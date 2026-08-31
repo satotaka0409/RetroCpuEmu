@@ -19,6 +19,9 @@ pub mod rel;
 pub mod tms9995;
 pub mod types;
 
+#[cfg(test)]
+mod sample_assemble;
+
 pub use assembler::assemble;
 pub use cpu_type::{parse_cpu_type, resolve_cpu_type, scan_source_cpu, CpuType};
 pub use error::AsmError;

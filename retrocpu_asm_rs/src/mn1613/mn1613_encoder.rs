@@ -1102,3 +1102,35 @@ pub fn encode_instruction(
         ))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assembler::assemble;
+    use crate::cpu_type::CpuType;
+    use crate::mn1613::all_instruction_cases::MN1613_ENCODE_CASES;
+
+    /// 1 行の MN1613 命令をアセンブルし、語列を返す。
+    fn asm_words(src: &str) -> Vec<u16> {
+        assemble(
+            &format!("        .org 0\n        {src}\n"),
+            Some(CpuType::Mn1613),
+        )
+        .expect("assemble")
+        .words
+        .into_iter()
+        .map(|w| w.value)
+        .collect()
+    }
+
+    /// MN1613 新設命令のエンコード期待値（TS 版テスト表と同一）。
+    #[test]
+    fn all_instructions_encode() {
+        for (src, expected) in MN1613_ENCODE_CASES {
+            assert_eq!(
+                asm_words(src),
+                *expected,
+                "MN1613 encode mismatch: {src}"
+            );
+        }
+    }
+}
