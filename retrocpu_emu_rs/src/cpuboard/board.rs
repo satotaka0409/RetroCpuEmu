@@ -4,10 +4,10 @@
 //! コア付きの本番エージェントは [`crate::system::Mn1613CpuAgent`]。
 
 use crate::board_link::{BoardLinkError, CpuBoardAgent};
-use crate::cpuboard::dma::{CpuDma, DmaError, SharedRam};
-use crate::cpuboard::handshake::{CpuHandshakeAgent, FrameLink};
-use crate::cpuboard::io_ports::{IoPorts, PendingIrq, MONITOR_ENTRY_WORD};
-use crate::cpuboard::mn1613::AddrBusAccess;
+use crate::cpuboard::mn1613::addr_comp::AddrBusAccess;
+use crate::cpuboard::mn1613::dma::{CpuDma, DmaError, SharedRam};
+use crate::cpuboard::mn1613::handshake::{CpuHandshakeAgent, FrameLink};
+use crate::cpuboard::mn1613::io_ports::{IoPorts, PendingIrq, MONITOR_ENTRY_WORD};
 
 /// 後から差し込む CPU コア最小面（書き換え中の実コアと置き換え可能）
 pub trait CpuCoreHandle {

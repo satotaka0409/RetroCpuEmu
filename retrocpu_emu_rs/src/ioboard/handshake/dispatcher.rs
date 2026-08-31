@@ -1,105 +1,21 @@
-//! IO ボード側ハンドシェイク（in-process MVP）。
-//!
-//! ビットバンはせず、フレームを組んで [`CpuBoardAgent`] へ即時ディスパッチする。
-//! 線上レイアウトは `HandShake.mdc`（addr32 BE / count32 BE）に合わせる。
-//! CPU→IO は MVP で OK スタブ（ブート中の応答待ち用）。
+//! IO↔CPU ハンドシェイクのディスパッチ。
 
-use crate::board_link::{
-	cmd_io_to_cpu, response, BoardLinkError, CpuBoardAgent,
+use std::sync::Arc;
+
+use crate::board_link::{cmd_io_to_cpu, response, BoardLinkError, CpuBoardAgent};
+use crate::ioboard::output::lcd_display::LcdDisplay;
+
+use super::lcd::{dispatch_lcd_frame, CMD_LCD_CTRL, CMD_LCD_TEXT};
+
+use super::codec::{
+	encode_exec, encode_mem_read, encode_mem_write, read_u32_be, EXEC_WIRE_LEN,
+	MEM_RW_WIRE_HEADER_LEN,
 };
-
-/// `82h` 線上ヘッダ長（cmd + pad + addr32）。
-pub const EXEC_WIRE_LEN: usize = 6;
-/// `83h`/`84h` 線上ヘッダ長（cmd + pad + addr32 + count32）。
-pub const MEM_RW_WIRE_HEADER_LEN: usize = 10;
-
-/// u32 をビッグエンディアン 4 バイトにする。
-///
-/// # Arguments
-/// - `v`: 関数に渡す値
-///
-/// # Returns
-/// - `[u8; 4]` を返します。
-pub fn u32_be(v: u32) -> [u8; 4] {
-	[
-		((v >> 24) & 0xff) as u8,
-		((v >> 16) & 0xff) as u8,
-		((v >> 8) & 0xff) as u8,
-		(v & 0xff) as u8,
-	]
-}
-
-/// ビッグエンディアン 4 バイトを u32 にする。
-///
-/// # Arguments
-/// - `buf`: 関数に渡す値
-///
-/// # Returns
-/// - 32bit 値を返します。
-pub fn read_u32_be(buf: &[u8]) -> u32 {
-	((buf[0] as u32) << 24)
-		| ((buf[1] as u32) << 16)
-		| ((buf[2] as u32) << 8)
-		| (buf[3] as u32)
-}
-
-/// `82h` EXEC フレームを組む。
-///
-/// # Arguments
-/// - `byte_addr`: バイトアドレス
-///
-/// # Returns
-/// - `[u8; EXEC_WIRE_LEN]` を返します。
-pub fn encode_exec(byte_addr: u32) -> [u8; EXEC_WIRE_LEN] {
-	let mut frame = [0u8; EXEC_WIRE_LEN];
-	frame[0] = cmd_io_to_cpu::EXEC;
-	frame[1] = 0;
-	frame[2..6].copy_from_slice(&u32_be(byte_addr));
-	frame
-}
-
-/// `83h` MEM_READ ヘッダを組む。
-///
-/// # Arguments
-/// - `byte_addr`: バイトアドレス
-/// - `count`: 件数
-///
-/// # Returns
-/// - `[u8; MEM_RW_WIRE_HEADER_LEN]` を返します。
-pub fn encode_mem_read(byte_addr: u32, count: u32) -> [u8; MEM_RW_WIRE_HEADER_LEN] {
-	let mut frame = [0u8; MEM_RW_WIRE_HEADER_LEN];
-	frame[0] = cmd_io_to_cpu::MEM_READ;
-	frame[1] = 0;
-	frame[2..6].copy_from_slice(&u32_be(byte_addr));
-	frame[6..10].copy_from_slice(&u32_be(count));
-	frame
-}
-
-/// `84h` MEM_WRITE フレーム（ヘッダ＋データ）を組む。
-///
-/// # Arguments
-/// - `byte_addr`: バイトアドレス
-/// - `data`: データ列
-///
-/// # Returns
-/// - `Vec<u8>` を返します。
-pub fn encode_mem_write(byte_addr: u32, data: &[u8]) -> Vec<u8> {
-	let n = data.len() as u32;
-	let mut frame = Vec::with_capacity(MEM_RW_WIRE_HEADER_LEN + data.len());
-	frame.push(cmd_io_to_cpu::MEM_WRITE);
-	frame.push(0);
-	frame.extend_from_slice(&u32_be(byte_addr));
-	frame.extend_from_slice(&u32_be(n));
-	frame.extend_from_slice(data);
-	frame
-}
 
 /// IO→CPU フレームを Agent へディスパッチする。
 ///
 /// - `82h`: 応答 1B（OK/NG）
-/// - `83h`: 応答 = データ + 末尾に IO が載せる status は呼び出し側で付与しない。
-///   ここではデータのみ返し、成功時は別途 `response::OK` を送る想定。
-///   MVP では `(data, status)` をまとめて返す。
+/// - `83h`: 応答 = データ + 末尾 status
 /// - `84h`: 応答 1B（OK/NG）
 pub fn dispatch_io_to_cpu<A: CpuBoardAgent>(
 	agent: &mut A,
@@ -192,13 +108,6 @@ pub fn mem_write<A: CpuBoardAgent>(
 }
 
 /// 便利ラッパ: Agent へ `82h` を発行する。
-///
-/// # Arguments
-/// - `agent`: 関数に渡す値
-/// - `byte_addr`: バイトアドレス
-///
-/// # Errors
-/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
 pub fn exec<A: CpuBoardAgent>(agent: &mut A, byte_addr: u32) -> Result<(), BoardLinkError> {
 	let frame = encode_exec(byte_addr);
 	let reply = dispatch_io_to_cpu(agent, &frame)?;
@@ -208,35 +117,159 @@ pub fn exec<A: CpuBoardAgent>(agent: &mut A, byte_addr: u32) -> Result<(), Board
 	Ok(())
 }
 
+/// パネル向けログの最小抽象。
+pub trait PanelEventLogger: Send + Sync {
+	/// LCD ハンドシェイクイベントを受け取る。
+	fn log_lcd_event(&self, event: &LcdLogEvent);
+}
+
+/// LCD ハンドシェイクログ 1 件。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LcdLogEvent {
+	/// コマンド番号（`0x17` / `0x18`）。
+	pub cmd: u8,
+	/// 応答ステータス。
+	pub status: u8,
+	/// `17h` kind。
+	pub kind: Option<u8>,
+	/// `17h` argA。
+	pub arg_a: Option<u8>,
+	/// `17h` argB。
+	pub arg_b: Option<u8>,
+	/// `17h` argC。
+	pub arg_c: Option<u8>,
+	/// `18h` row。
+	pub row: Option<u8>,
+	/// `18h` col。
+	pub col: Option<u8>,
+	/// `18h` len。
+	pub len: Option<u8>,
+	/// `18h` text（ASCII 正規化済み）。
+	pub text: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct NoopPanelEventLogger;
+
+impl PanelEventLogger for NoopPanelEventLogger {
+	fn log_lcd_event(&self, _event: &LcdLogEvent) {}
+}
+
 /// CPU→IO フレームへの MVP 応答（未知も OK。ブート待ちスタブ）。
-///
-/// # Arguments
-/// - `frame`: ハンドシェイクフレーム
-///
-/// # Returns
-/// - `Vec<u8>` を返します。
-pub fn handle_cpu_to_io_stub(frame: &[u8]) -> Vec<u8> {
-	if frame.is_empty() {
-		return vec![response::NG];
+pub fn handle_cpu_to_io(frame: &[u8], lcd: &mut LcdDisplay) -> Vec<u8> {
+	let noop = NoopPanelEventLogger;
+	handle_cpu_to_io_with_logger(frame, lcd, &noop)
+}
+
+/// CPU→IO フレームを処理し、必要ならパネルログを通知する。
+pub fn handle_cpu_to_io_with_logger(
+	frame: &[u8],
+	lcd: &mut LcdDisplay,
+	logger: &dyn PanelEventLogger,
+) -> Vec<u8> {
+	match dispatch_lcd_frame(frame, lcd) {
+		Some(status) => {
+			if let Some(event) = build_lcd_log_event(frame, status) {
+				logger.log_lcd_event(&event);
+			}
+			vec![status]
+		}
+		None => vec![response::OK],
 	}
-	// 多くの CPU→IO は末尾に status 1B を返す。MVP は常に OK。
-	vec![response::OK]
+}
+
+fn build_lcd_log_event(frame: &[u8], status: u8) -> Option<LcdLogEvent> {
+	if frame.is_empty() {
+		return None;
+	}
+	match frame[0] {
+		CMD_LCD_CTRL => {
+			let kind = frame.get(2).copied().unwrap_or(0);
+			let a = frame.get(3).copied().unwrap_or(0);
+			let b = frame.get(4).copied().unwrap_or(0);
+			let c = frame.get(5).copied().unwrap_or(0);
+			Some(LcdLogEvent {
+				cmd: CMD_LCD_CTRL,
+				status,
+				kind: Some(kind),
+				arg_a: Some(a),
+				arg_b: Some(b),
+				arg_c: Some(c),
+				row: None,
+				col: None,
+				len: None,
+				text: None,
+			})
+		}
+		CMD_LCD_TEXT => {
+			let row = frame.get(1).copied().unwrap_or(0);
+			let col = frame.get(2).copied().unwrap_or(0);
+			let len_u8 = frame.get(3).copied().unwrap_or(0);
+			let len = len_u8 as usize;
+			let max = len.min(16).min(frame.len().saturating_sub(4));
+			let mut text = String::with_capacity(max);
+			for &ch in &frame[4..4 + max] {
+				let v = if (0x20..=0x7e).contains(&ch) {
+					ch
+				} else {
+					b' '
+				};
+				text.push(v as char);
+			}
+			Some(LcdLogEvent {
+				cmd: CMD_LCD_TEXT,
+				status,
+				kind: None,
+				arg_a: None,
+				arg_b: None,
+				arg_c: None,
+				row: Some(row),
+				col: Some(col),
+				len: Some(len_u8),
+				text: Some(text),
+			})
+		}
+		_ => None,
+	}
 }
 
 /// ハンドシェイクディスパッチャ（状態は持たず Agent へ委譲）。
-#[derive(Debug, Default, Clone, Copy)]
-pub struct HandshakeDispatcher;
+#[derive(Clone)]
+pub struct HandshakeDispatcher {
+	logger: Arc<dyn PanelEventLogger>,
+}
+
+impl Default for HandshakeDispatcher {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl std::fmt::Debug for HandshakeDispatcher {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("HandshakeDispatcher").finish()
+	}
+}
 
 /// IO ボード側ハンドシェイク窓口（MVP = [`HandshakeDispatcher`]）。
 pub type IoHandshakePeer = HandshakeDispatcher;
 
 impl HandshakeDispatcher {
 	/// 新規。
-	///
-	/// # Returns
-	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
-		Self
+		Self {
+			logger: Arc::new(NoopPanelEventLogger),
+		}
+	}
+
+	/// ロガー指定で新規作成する。
+	pub fn with_logger(logger: Arc<dyn PanelEventLogger>) -> Self {
+		Self { logger }
+	}
+
+	/// パネルログ出力先を差し替える。
+	pub fn set_logger(&mut self, logger: Arc<dyn PanelEventLogger>) {
+		self.logger = logger;
 	}
 
 	/// IO→CPU を処理する。
@@ -249,14 +282,8 @@ impl HandshakeDispatcher {
 	}
 
 	/// CPU→IO を処理する（スタブ）。
-	///
-	/// # Arguments
-	/// - `frame`: ハンドシェイクフレーム
-	///
-	/// # Returns
-	/// - `Vec<u8>` を返します。
-	pub fn dispatch_from_cpu(&self, frame: &[u8]) -> Vec<u8> {
-		handle_cpu_to_io_stub(frame)
+	pub fn dispatch_from_cpu(&self, frame: &[u8], lcd: &mut LcdDisplay) -> Vec<u8> {
+		handle_cpu_to_io_with_logger(frame, lcd, self.logger.as_ref())
 	}
 }
 
@@ -264,6 +291,7 @@ impl HandshakeDispatcher {
 mod tests {
 	use super::*;
 	use crate::board_link::CpuBoardAgent;
+	use std::sync::{Arc, Mutex};
 
 	struct MockRam {
 		mem: Vec<u8>,
@@ -334,5 +362,33 @@ mod tests {
 		};
 		exec(&mut ram, 0x0108 * 2).expect("exec");
 		assert!(!ram.is_halted());
+	}
+
+	#[derive(Default)]
+	struct CaptureLogger {
+		events: Mutex<Vec<LcdLogEvent>>,
+	}
+
+	impl PanelEventLogger for CaptureLogger {
+		fn log_lcd_event(&self, event: &LcdLogEvent) {
+			self.events.lock().expect("lock").push(event.clone());
+		}
+	}
+
+	#[test]
+	fn injected_logger_receives_lcd_event() {
+		let logger = Arc::new(CaptureLogger::default());
+		let mut dispatcher = HandshakeDispatcher::new();
+		dispatcher.set_logger(logger.clone());
+		let mut lcd = LcdDisplay::new();
+
+		let reply = dispatcher.dispatch_from_cpu(&[CMD_LCD_TEXT, 0, 0, 2, b'O', b'K'], &mut lcd);
+		assert_eq!(reply, vec![response::OK]);
+
+		let events = logger.events.lock().expect("lock");
+		assert_eq!(events.len(), 1);
+		assert_eq!(events[0].cmd, CMD_LCD_TEXT);
+		assert_eq!(events[0].status, response::OK);
+		assert_eq!(events[0].text.as_deref(), Some("OK"));
 	}
 }

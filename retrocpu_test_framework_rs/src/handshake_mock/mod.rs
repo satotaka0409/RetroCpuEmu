@@ -10,18 +10,18 @@ mod types;
 use std::sync::{Arc, Mutex};
 
 use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::{IoCallbacks, NullIo};
-use retrocpu_emu_rs::cpuboard::handshake::board_link::{FrameLink, HandshakeTransport};
-use retrocpu_emu_rs::cpuboard::handshake::wires::{
-    HandshakeWires, HSHK_CTRL_IN_DACK, HSHK_CTRL_OUT_DENA, HSHK_CTRL_OUT_REQ,
-    HSHK_IN_CTRL_IN_REQ, IO_PORT_HSHK_IN_CTRL, IO_PORT_HSHK_OUT_CTRL, IO_PORT_HSHK_OUT_DATA,
+use retrocpu_emu_rs::cpuboard::handshake::mn1613::board_link::{FrameLink, HandshakeTransport};
+use retrocpu_emu_rs::cpuboard::handshake::mn1613::wires::{
+    HandshakeWires, HSHK_CTRL_IN_DACK, HSHK_CTRL_OUT_DENA, HSHK_CTRL_OUT_REQ, HSHK_IN_CTRL_IN_REQ,
+    IO_PORT_HSHK_IN_CTRL, IO_PORT_HSHK_OUT_CTRL, IO_PORT_HSHK_OUT_DATA,
 };
 
 pub use mock_state::{BeepParams, IoBoardMockState, LedDisplayData, TimerParams};
 pub use types::{CMD_MODE_SET, MODE_FREE, MODE_MONITOR, RESPONSE_OK};
 
 use crate::error::FrameworkError;
-use crate::json_value::CodeTestIoMockEntry;
 use crate::framework::mn1613::types::PortMockState;
+use crate::json_value::CodeTestIoMockEntry;
 
 use cpu_to_io::{cpu_to_io_remaining_size, dispatch_cpu_to_io};
 use io_control_sync::IoControlSync;
@@ -64,10 +64,7 @@ impl IoBoardHandshakeMock {
 
     /// IO→CPU フレームを積む（FrameLink 互換）。
     pub fn push_io_to_cpu(&self, frame: &[u8]) {
-        self.link
-            .lock()
-            .expect("link lock")
-            .push_io_to_cpu(frame);
+        self.link.lock().expect("link lock").push_io_to_cpu(frame);
     }
 
     /// 線状態とリンクをリセットする。
@@ -89,9 +86,8 @@ impl IoBoardHandshakeMock {
     {
         let io = IoControlSync::new(Arc::clone(&self.wires), self.timeout_ms);
         let entry_size = BREAK_HISTORY_ENTRY_SIZE_MN1613;
-        let frame = io.receive_framed_adaptive(poll, |so_far| {
-            cpu_to_io_remaining_size(so_far, entry_size)
-        })?;
+        let frame = io
+            .receive_framed_adaptive(poll, |so_far| cpu_to_io_remaining_size(so_far, entry_size))?;
         let response = self.dispatch_cpu_to_io(&frame);
         if !response.is_empty() {
             io.send(poll, &response, false)?;
@@ -115,7 +111,9 @@ impl Default for IoBoardHandshakeMock {
 }
 
 /// ioMock エントリにフレームワーク既定を足す（handshake は inert タイマー相当の timeout のみ）。
-pub fn with_framework_io_mock_defaults(entries: Vec<CodeTestIoMockEntry>) -> Vec<CodeTestIoMockEntry> {
+pub fn with_framework_io_mock_defaults(
+    entries: Vec<CodeTestIoMockEntry>,
+) -> Vec<CodeTestIoMockEntry> {
     entries
 }
 
@@ -189,7 +187,9 @@ impl TestIoCallbacks {
     }
 
     /// ioMock 設定から作る。
-    pub fn from_entries(entries: &[CodeTestIoMockEntry]) -> Result<TestIoCallbacks, FrameworkError> {
+    pub fn from_entries(
+        entries: &[CodeTestIoMockEntry],
+    ) -> Result<TestIoCallbacks, FrameworkError> {
         Ok(CodeTestIoMock::new(entries)?.build_io_callbacks())
     }
 

@@ -4,6 +4,7 @@
 //! 配線例はクレートルートの [`crate::board_link`] を参照。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::board_link::{BoardLinkError, CpuBoardAgent, PanelHost};
 use crate::ioboard::console::{ConsoleFnKey, IoConsole, IoConsoleState};
@@ -11,10 +12,10 @@ use crate::ioboard::dma::{dma_load_intel_hex, dma_load_intel_hex_file, IntelHexD
 use crate::ioboard::handshake::{self, HandshakeDispatcher};
 use crate::ioboard::input::HexKeyboard;
 use crate::ioboard::output::bullet_led::BulletLed;
+use crate::ioboard::output::lcd_display::{LcdDisplay, LcdDisplaySnapshot};
 use crate::ioboard::output::seven_segment_led::SevenSegmentLed;
 use crate::ioboard::setting_area::{
-	decode_setting_area, encode_setting_area, load_settings_jsonc, IoBoardSettings,
-	SETTING_AREA_SIZE,
+	decode_setting_area, encode_setting_area, load_settings_jsonc, IoBoardSettings, SETTING_AREA_SIZE,
 };
 
 /// UI／テスト用の表示スナップショット。
@@ -30,6 +31,8 @@ pub struct IoBoardSnapshot {
 	pub key_columns: [u8; 8],
 	/// HALT 表示。
 	pub halted: bool,
+	/// LCD1602 表示。
+	pub lcd: LcdDisplaySnapshot,
 }
 
 /// コンソールから CPU／設定へ触るときの分割ビュー（自己借用回避）。
@@ -107,6 +110,8 @@ pub struct IoBoard<A: CpuBoardAgent> {
 	seven_seg: SevenSegmentLed,
 	/// 砲弾ラッチ。
 	bullet: BulletLed,
+	/// LCD1602 表示。
+	lcd: LcdDisplay,
 	/// ハンドシェイクディスパッチャ。
 	handshake: HandshakeDispatcher,
 	/// CPU ボード Agent。
@@ -133,6 +138,7 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 			keyboard: HexKeyboard::new(),
 			seven_seg: SevenSegmentLed::new(),
 			bullet: BulletLed::new(),
+			lcd: LcdDisplay::new(),
 			handshake: HandshakeDispatcher::new(),
 			agent,
 			boot_ihx_path: None,
@@ -162,6 +168,16 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 	/// - `path`: ファイルパス
 	pub fn set_boot_ihx_path(&mut self, path: impl Into<PathBuf>) {
 		self.boot_ihx_path = Some(path.into());
+	}
+
+	/// パネル向けログ出力先を差し替える。
+	///
+	/// `17h/18h`（LCD）を含む CPU→IO イベントの通知先を設定する。
+	pub fn set_panel_event_logger(
+		&mut self,
+		logger: Arc<dyn crate::ioboard::handshake::PanelEventLogger>,
+	) {
+		self.handshake.set_logger(logger);
 	}
 
 	/// 設定参照。
@@ -238,7 +254,10 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 	///
 	/// # Errors
 	/// - 入力値不正や範囲外アクセスなどの異常時にエラーを返します
-	pub fn boot_load_ihx(&mut self, path: impl AsRef<Path>) -> Result<IntelHexDmaPlan, BoardLinkError> {
+	pub fn boot_load_ihx(
+		&mut self,
+		path: impl AsRef<Path>,
+	) -> Result<IntelHexDmaPlan, BoardLinkError> {
 		let path = path.as_ref();
 		self.boot_ihx_path = Some(path.to_path_buf());
 		let agent = &mut self.agent;
@@ -260,7 +279,8 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 			settings: &mut self.settings,
 			boot_ihx_path: &self.boot_ihx_path,
 		};
-		self.console
+		self
+			.console
 			.notify_cpu_reset(&mut host, &mut self.seven_seg, &mut self.bullet);
 	}
 
@@ -307,7 +327,8 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 	/// # Arguments
 	/// - `digit`: 関数に渡す値
 	pub fn on_hex_digit(&mut self, digit: u8) {
-		self.console
+		self
+			.console
 			.on_hex(digit, &mut self.seven_seg, &mut self.bullet);
 	}
 
@@ -328,7 +349,8 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 			settings: &mut self.settings,
 			boot_ihx_path: &self.boot_ihx_path,
 		};
-		self.console
+		self
+			.console
 			.on_function(fn_key, &mut host, &mut self.seven_seg, &mut self.bullet)
 	}
 
@@ -360,7 +382,8 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 	/// ハンドシェイク／CPU 状態の追い込み（MVP は HALT 表示同期）。
 	pub fn tick(&mut self) {
 		let halted = self.agent.is_halted();
-		self.console
+		self
+			.console
 			.sync_cpu_halted(halted, &mut self.seven_seg, &mut self.bullet);
 	}
 
@@ -383,7 +406,7 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 	/// # Returns
 	/// - `Vec<u8>` を返します。
 	pub fn dispatch_hshk_from_cpu(&mut self, frame: &[u8]) -> Vec<u8> {
-		self.handshake.dispatch_from_cpu(frame)
+		self.handshake.dispatch_from_cpu(frame, &mut self.lcd)
 	}
 
 	/// UI 用スナップショット。
@@ -399,6 +422,7 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 			bullet_bits: self.bullet.bits(),
 			key_columns: self.keyboard.column_masks(),
 			halted: self.agent.is_halted(),
+			lcd: self.lcd.snapshot(),
 		}
 	}
 }

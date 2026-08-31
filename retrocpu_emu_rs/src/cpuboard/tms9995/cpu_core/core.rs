@@ -478,11 +478,11 @@ fn add_u16(a: u16, b: u16) -> (u16, bool, bool) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::cpu_core::tms9995::{Tms9995CruBus, Tms9995Ram};
+	use crate::cpuboard::tms9995::cpu_core::{Tms9995CruBus, Tms9995Ram};
 
 	#[test]
 	fn cru_single_bit_ops_use_r12_base_with_signed_disp() {
-		let mut bus = Tms9995Ram::new(0x10000);
+		let mut bus = Tms9995Ram::new(0x10000, true);
 		let mut cru = Tms9995CruBus::default();
 		let mut cpu = Tms9995Core::new();
 
@@ -509,7 +509,7 @@ mod tests {
 
 	#[test]
 	fn ldcr_and_stcr_special_data_ports_work() {
-		let mut bus = Tms9995Ram::new(0x10000);
+		let mut bus = Tms9995Ram::new(0x10000, true);
 		let mut cru = Tms9995CruBus::default();
 		let mut cpu = Tms9995Core::new();
 
@@ -535,7 +535,7 @@ mod tests {
 
 	#[test]
 	fn stcr_builds_byte_from_cru_bits_lsb_first() {
-		let mut bus = Tms9995Ram::new(0x10000);
+		let mut bus = Tms9995Ram::new(0x10000, true);
 		let mut cru = Tms9995CruBus::default();
 		let mut cpu = Tms9995Core::new();
 

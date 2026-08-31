@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use retrocpu_emu_rs::cpuboard::cpu_core::mn1613::ExecStatus;
+use retrocpu_emu_rs::cpuboard::mn1613::cpu_core::ExecStatus;
 use retrocpu_emu_rs::ioboard::{dma_load_intel_hex, mem_read, IoBoardSettings};
 use retrocpu_emu_rs::{BoardLinkError, CpuBoardAgent, Mn1613CpuAgent};
 
@@ -79,9 +79,7 @@ fn mem_write_then_read_roundtrip_after_boot() {
 	boot_until_halt(&mut agent);
 
 	let addr = 0x1800u32 * 2; // ユーザ領域
-	agent
-		.hshk_mem_write(addr, &[0x12, 0x34])
-		.expect("write");
+	agent.hshk_mem_write(addr, &[0x12, 0x34]).expect("write");
 	let got = agent.hshk_mem_read(addr, 2).expect("read");
 	assert_eq!(got, vec![0x12, 0x34]);
 	assert_eq!(agent.read_word(0x1800), 0x1234);

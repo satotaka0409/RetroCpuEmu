@@ -37,18 +37,32 @@ impl std::fmt::Debug for Mn1613Ram {
 
 impl Default for Mn1613Ram {
 	fn default() -> Self {
-		Self::new()
+		Self::new(true)
 	}
 }
 
 impl Mn1613Ram {
 	/// 256K ワードのゼロ初期化 RAM を作る。
 	///
+	/// # Arguments
+	/// - `randam`: true ならランダム初期化、false ならゼロ初期化
 	/// # Returns
 	/// - 初期化済みインスタンスを返します。
-	pub fn new() -> Self {
-		Self {
-			words: vec![0; MEM_WORDS],
+	pub fn new(randam: bool) -> Self {
+		if randam {
+			let mut seed: u32 = 0x6d2b79f5;
+			Self {
+				words: (0..MEM_WORDS)
+					.map(|_| {
+						seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+						(seed >> 16) as u16
+					})
+					.collect(),
+			}
+		} else {
+			Self {
+				words: vec![0; MEM_WORDS],
+			}
 		}
 	}
 

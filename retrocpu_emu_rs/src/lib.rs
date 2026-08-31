@@ -8,6 +8,6 @@ pub mod system;
 pub use board_link::{
 	cmd_io_to_cpu, response, AgentBridge, BoardLinkError, CpuBoardAgent, PanelHost,
 };
-pub use cpuboard::cpu_core;
-pub use cpuboard::{CpuBoard, IoPorts, SharedRam};
-pub use system::Mn1613CpuAgent;
+pub use cpuboard::mn1613::cpu_core;
+pub use cpuboard::{CpuBoard, Mn1613IoPorts as IoPorts, Mn1613SharedRam as SharedRam};
+pub use system::{Mn1613CpuAgent, Tms9995CpuAgent};

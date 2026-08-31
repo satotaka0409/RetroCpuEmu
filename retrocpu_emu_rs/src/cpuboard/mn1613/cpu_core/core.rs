@@ -1831,7 +1831,7 @@ mod tests {
 	#[test]
 	fn l_st_h_basics() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		// mem[0x40] = 0x1234
 		ram.write_phys(0x40, 0x1234);
 		// L R0, 0x40 ; ST R0, 0x50 ; H
@@ -1847,7 +1847,7 @@ mod tests {
 	#[test]
 	fn bald_and_ret() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		// BALD dest ; H at return
 		// 0: BALD 0x10  (0x2617, 0x0010)
 		// 2: H
@@ -1864,7 +1864,7 @@ mod tests {
 	#[test]
 	fn lpsw_level2() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		// OPSW level2 at word 4/5
 		ram.write_phys(4, 0x0100); // STR with M2
 		ram.write_phys(5, 0x0020); // IC
@@ -1886,7 +1886,7 @@ mod tests {
 	#[test]
 	fn reset_loads_vector() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		cpu.set_io_callbacks(Box::new(FixedIo { port0: 0x0108 }));
 		ram.write_phys(0x010a, 0x00ff); // STR
 		ram.write_phys(0x010b, 0x1800); // IC
@@ -1901,7 +1901,7 @@ mod tests {
 	#[test]
 	fn soft_breakpoint() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		ram.load_words(0, &[0x4801, 0x4801, 0x2000]); // AI; AI; H
 		setup_running(&mut cpu, 0);
 		cpu.add_breakpoint(1);
@@ -1915,7 +1915,7 @@ mod tests {
 	#[test]
 	fn multiply_m_instruction() {
 		let mut cpu = Mn1613Core::new();
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		// M DR0,(R1): op=0x0f rrr=7 b32=3 ii=0 → lo = 0x0c ; then H
 		ram.load_words(0, &[0x7f0c, 0x2000]);
 		ram.write_phys(0x20, 3);
@@ -1932,7 +1932,7 @@ mod tests {
 
 	#[test]
 	fn dma_write_bytes_be() {
-		let mut ram = Mn1613Ram::new();
+		let mut ram = Mn1613Ram::new(true);
 		ram.dma_write_bytes(0, &[0x12, 0x34, 0x56, 0x78]);
 		assert_eq!(ram.read_phys(0), 0x1234);
 		assert_eq!(ram.read_phys(1), 0x5678);

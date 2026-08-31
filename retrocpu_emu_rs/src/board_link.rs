@@ -94,7 +94,7 @@ pub trait PanelHost {
 	fn write_setting_byte(&mut self, byte_addr: u8, value: u8);
 }
 
-/// IO が `CpuBoardAgent` を即時呼び出す薄い橋（[`crate::cpuboard::handshake::FrameLink`] とは別）。
+/// IO が `CpuBoardAgent` を即時呼び出す薄い橋（[`crate::cpuboard::mn1613::handshake::FrameLink`] とは別）。
 pub struct AgentBridge<C: CpuBoardAgent> {
 	/// CPU ボード側エージェント。
 	pub cpu: C,

@@ -7,18 +7,19 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::board_link::{BoardLinkError, CpuBoardAgent};
-use crate::cpuboard::cpu_core::mn1613::{
-	ExecStatus, IoCallbacks, MemAccessEvent, Mn1613Core, Mn1613Ram, PHYS_MASK,
+use crate::cpuboard::{
+	Mn1613AddrBusAccess, Mn1613Core, Mn1613CpuRegisterPatch, Mn1613ExecStatus, Mn1613IoCallbacks,
+	Mn1613IoPorts, Mn1613MemAccessEvent, Mn1613Ram, Tms9995Bus, Tms9995Core, Tms9995CruBus,
+	Tms9995IoPorts, Tms9995Ram, Tms9995StepResult, MN1613_MONITOR_ENTRY_WORD, PHYS_MASK,
+	TMS9995_MONITOR_ENTRY_WORD,
 };
-use crate::cpuboard::io_ports::{IoPorts, MONITOR_ENTRY_WORD};
-use crate::cpuboard::mn1613::AddrBusAccess;
 
 /// `IoPorts` をコアの IO コールバックへ橋渡しする。
 struct IoPortsCb {
-	ports: Rc<RefCell<IoPorts>>,
+	ports: Rc<RefCell<Mn1613IoPorts>>,
 }
 
-impl IoCallbacks for IoPortsCb {
+impl Mn1613IoCallbacks for IoPortsCb {
 	fn io_read(&mut self, port: u16) -> u16 {
 		self.ports.borrow_mut().read(port)
 	}
@@ -35,7 +36,7 @@ pub struct Mn1613CpuAgent {
 	/// 物理 RAM（256K ワード）。
 	pub ram: Mn1613Ram,
 	/// IO マップ（比較器・ステップ・RESET_VECTOR）。
-	ports: Rc<RefCell<IoPorts>>,
+	ports: Rc<RefCell<Mn1613IoPorts>>,
 	/// 外部 HALT 要求（パネル H/ST）。コア Halted と OR。
 	ext_halt: bool,
 }
@@ -52,18 +53,18 @@ impl Mn1613CpuAgent {
 	/// # Returns
 	/// - 初期化済みインスタンスを返します。
 	pub fn new() -> Self {
-		let ports = Rc::new(RefCell::new(IoPorts::new()));
+		let ports = Rc::new(RefCell::new(Mn1613IoPorts::new()));
 		let mut core = Mn1613Core::new();
 		core.set_io_callbacks(Box::new(IoPortsCb {
 			ports: Rc::clone(&ports),
 		}));
 		let ports_hook = Rc::clone(&ports);
-		core.set_mem_hook(Some(Box::new(move |ev: MemAccessEvent| {
+		core.set_mem_hook(Some(Box::new(move |ev: Mn1613MemAccessEvent| {
 			let mut p = ports_hook.borrow_mut();
 			if ev.fetch {
 				let _ = p.on_instruction_fetch(ev.data);
 			}
-			let access = AddrBusAccess {
+			let access = Mn1613AddrBusAccess {
 				addr: ev.phys & PHYS_MASK,
 				io: false,
 				write: ev.write,
@@ -75,7 +76,7 @@ impl Mn1613CpuAgent {
 		core.power_on_idle();
 		Self {
 			core,
-			ram: Mn1613Ram::new(),
+			ram: Mn1613Ram::new(true),
 			ports,
 			ext_halt: true,
 		}
@@ -85,7 +86,7 @@ impl Mn1613CpuAgent {
 	///
 	/// # Returns
 	/// - I/O ポート共有参照を返します。
-	pub fn ports(&self) -> &Rc<RefCell<IoPorts>> {
+	pub fn ports(&self) -> &Rc<RefCell<Mn1613IoPorts>> {
 		&self.ports
 	}
 
@@ -106,17 +107,18 @@ impl Mn1613CpuAgent {
 	///
 	/// # Returns
 	/// - 現在の実行状態を返します。
-	pub fn run_slice(&mut self, max_inst: u32) -> ExecStatus {
+	pub fn run_slice(&mut self, max_inst: u32) -> Mn1613ExecStatus {
 		if self.ext_halt {
-			return ExecStatus::Halted;
+			return Mn1613ExecStatus::Halted;
 		}
 		// 比較器／ステップ IRQ をコアへ配送
 		if let Some(irq) = self.ports.borrow_mut().take_pending_irq() {
 			self.core.trigger_interrupt(irq.level);
 		}
-		self.core
+		self
+			.core
 			.run_slice(&mut self.ram, None, max_inst as usize)
-			.unwrap_or(ExecStatus::Halted)
+			.unwrap_or(Mn1613ExecStatus::Halted)
 	}
 
 	/// HALT するまで（または上限まで）回す。
@@ -128,14 +130,14 @@ impl Mn1613CpuAgent {
 	///
 	/// # Returns
 	/// - 現在の実行状態を返します。
-	pub fn run_until_halt(&mut self, max_inst: u32) -> ExecStatus {
+	pub fn run_until_halt(&mut self, max_inst: u32) -> Mn1613ExecStatus {
 		self.ext_halt = false;
-		if self.core.get_exec_status() == ExecStatus::Idle
-			|| self.core.get_exec_status() == ExecStatus::Halted
+		if self.core.get_exec_status() == Mn1613ExecStatus::Idle
+			|| self.core.get_exec_status() == Mn1613ExecStatus::Halted
 		{
 			// リセット直後は Running。idle なら kick。
-			if self.core.get_exec_status() == ExecStatus::Idle {
-				self.core.set_exec_status(ExecStatus::Running);
+			if self.core.get_exec_status() == Mn1613ExecStatus::Idle {
+				self.core.set_exec_status(Mn1613ExecStatus::Running);
 			}
 		}
 		let mut left = max_inst;
@@ -143,12 +145,15 @@ impl Mn1613CpuAgent {
 			let before = left.min(4096);
 			let st = self.run_slice(before);
 			left = left.saturating_sub(before);
-			if matches!(st, ExecStatus::Halted | ExecStatus::Break | ExecStatus::Step) {
+			if matches!(
+				st,
+				Mn1613ExecStatus::Halted | Mn1613ExecStatus::Break | Mn1613ExecStatus::Step
+			) {
 				return st;
 			}
 			if self.ext_halt {
 				self.core.halt();
-				return ExecStatus::Halted;
+				return Mn1613ExecStatus::Halted;
 			}
 		}
 		self.core.get_exec_status()
@@ -204,11 +209,11 @@ impl CpuBoardAgent for Mn1613CpuAgent {
 		}
 		let word = (byte_addr / 2) as u16;
 		self.ext_halt = false;
-		self.core.set_state(&crate::cpuboard::cpu_core::mn1613::CpuRegisterPatch {
+		self.core.set_state(&Mn1613CpuRegisterPatch {
 			ic: Some(word),
 			..Default::default()
 		});
-		self.core.set_exec_status(ExecStatus::Running);
+		self.core.set_exec_status(Mn1613ExecStatus::Running);
 		Ok(())
 	}
 
@@ -216,8 +221,8 @@ impl CpuBoardAgent for Mn1613CpuAgent {
 		self.ext_halt = halt;
 		if halt {
 			self.core.halt();
-		} else if self.core.get_exec_status() == ExecStatus::Halted {
-			self.core.set_exec_status(ExecStatus::Running);
+		} else if self.core.get_exec_status() == Mn1613ExecStatus::Halted {
+			self.core.set_exec_status(Mn1613ExecStatus::Running);
 		}
 		Ok(())
 	}
@@ -226,7 +231,7 @@ impl CpuBoardAgent for Mn1613CpuAgent {
 		if let Some(v) = reset_vector_word {
 			self.set_reset_vector(v);
 		} else {
-			self.set_reset_vector(MONITOR_ENTRY_WORD);
+			self.set_reset_vector(MN1613_MONITOR_ENTRY_WORD);
 		}
 		self.ports.borrow_mut().reset_peripherals();
 		self.ext_halt = false;
@@ -235,6 +240,176 @@ impl CpuBoardAgent for Mn1613CpuAgent {
 	}
 
 	fn is_halted(&self) -> bool {
-		self.ext_halt || self.core.get_exec_status() == ExecStatus::Halted
+		self.ext_halt || self.core.get_exec_status() == Mn1613ExecStatus::Halted
+	}
+}
+
+/// TMS9995 CPU 側エージェント（最小実装）。
+pub struct Tms9995CpuAgent {
+	/// CPU コア。
+	pub core: Tms9995Core,
+	/// 物理 RAM（64KB）。
+	pub ram: Tms9995Ram,
+	/// CRU バス。
+	pub cru: Tms9995CruBus,
+	/// IO マップ（リセットベクタ保持）。
+	ports: Rc<RefCell<Tms9995IoPorts>>,
+	/// 外部 HALT 要求。
+	ext_halt: bool,
+}
+
+impl Default for Tms9995CpuAgent {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl Tms9995CpuAgent {
+	/// 空 RAM・既定 IO で作る。
+	pub fn new() -> Self {
+		let mut this = Self {
+			core: Tms9995Core::new(),
+			ram: Tms9995Ram::new(0x1_0000, true),
+			cru: Tms9995CruBus::default(),
+			ports: Rc::new(RefCell::new(Tms9995IoPorts::new())),
+			ext_halt: true,
+		};
+		this.apply_reset_vector_to_ram();
+		this.core.reset_from_vector(&this.ram);
+		this
+	}
+
+	/// リセットベクタ（ワード）を設定する。
+	pub fn set_reset_vector(&mut self, word_addr: u32) {
+		self.ports.borrow_mut().set_reset_vector(word_addr);
+		self.apply_reset_vector_to_ram();
+	}
+
+	/// 実行スライス（最大 `max_inst` 命令）。
+	pub fn run_slice(&mut self, max_inst: u32) -> Tms9995StepResult {
+		if self.ext_halt {
+			return Tms9995StepResult::Idle;
+		}
+		for _ in 0..max_inst {
+			if self.ports.borrow_mut().take_pending_irq().is_some() {
+				// IRQ 配線は後続。現状は保留を捨てる。
+			}
+			let Ok(st) = self.core.step(&mut self.ram, &mut self.cru) else {
+				let mut s = self.core.state();
+				s.idle = true;
+				self.core.set_state(s);
+				return Tms9995StepResult::Idle;
+			};
+			if st == Tms9995StepResult::Idle {
+				return Tms9995StepResult::Idle;
+			}
+			if self.ext_halt {
+				let mut s = self.core.state();
+				s.idle = true;
+				self.core.set_state(s);
+				return Tms9995StepResult::Idle;
+			}
+		}
+		Tms9995StepResult::Running
+	}
+
+	/// HALT まで（または上限まで）回す。
+	pub fn run_until_halt(&mut self, max_inst: u32) -> Tms9995StepResult {
+		self.ext_halt = false;
+		let mut left = max_inst;
+		while left > 0 {
+			let chunk = left.min(4096);
+			let st = self.run_slice(chunk);
+			left = left.saturating_sub(chunk);
+			if st == Tms9995StepResult::Idle {
+				return Tms9995StepResult::Idle;
+			}
+		}
+		Tms9995StepResult::Running
+	}
+
+	fn read_bytes(&self, byte_addr: u32, len: u32) -> Result<Vec<u8>, BoardLinkError> {
+		let end = byte_addr.checked_add(len).ok_or(BoardLinkError::BadFrame)?;
+		if end > self.ram.len_bytes() as u32 {
+			return Err(BoardLinkError::Ng);
+		}
+		let mut out = Vec::with_capacity(len as usize);
+		for off in 0..len {
+			out.push(self.ram.read_byte((byte_addr + off) as u16));
+		}
+		Ok(out)
+	}
+
+	fn write_bytes(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
+		let end = byte_addr
+			.checked_add(data.len() as u32)
+			.ok_or(BoardLinkError::BadFrame)?;
+		if end > self.ram.len_bytes() as u32 {
+			return Err(BoardLinkError::Ng);
+		}
+		for (i, &b) in data.iter().enumerate() {
+			self.ram.write_byte((byte_addr + i as u32) as u16, b);
+		}
+		Ok(())
+	}
+
+	fn apply_reset_vector_to_ram(&mut self) {
+		let pc_byte = ((self.ports.borrow().reset_vector() & 0xffff) as u16).wrapping_mul(2) & 0xfffe;
+		self.ram.write_word(0x0002, pc_byte);
+	}
+}
+
+impl CpuBoardAgent for Tms9995CpuAgent {
+	fn dma_write_bytes(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
+		if !self.is_halted() {
+			return Err(BoardLinkError::Ng);
+		}
+		self.write_bytes(byte_addr, data)
+	}
+
+	fn hshk_mem_read(&mut self, byte_addr: u32, len: u32) -> Result<Vec<u8>, BoardLinkError> {
+		self.read_bytes(byte_addr, len)
+	}
+
+	fn hshk_mem_write(&mut self, byte_addr: u32, data: &[u8]) -> Result<(), BoardLinkError> {
+		self.write_bytes(byte_addr, data)
+	}
+
+	fn hshk_exec(&mut self, byte_addr: u32) -> Result<(), BoardLinkError> {
+		if (byte_addr & 1) != 0 {
+			return Err(BoardLinkError::BadFrame);
+		}
+		let mut st = self.core.state();
+		st.pc = (byte_addr as u16) & 0xfffe;
+		st.idle = false;
+		self.core.set_state(st);
+		self.ext_halt = false;
+		Ok(())
+	}
+
+	fn set_halt(&mut self, halt: bool) -> Result<(), BoardLinkError> {
+		self.ext_halt = halt;
+		if halt {
+			let mut st = self.core.state();
+			st.idle = true;
+			self.core.set_state(st);
+		}
+		Ok(())
+	}
+
+	fn pulse_reset(&mut self, reset_vector_word: Option<u32>) -> Result<(), BoardLinkError> {
+		if let Some(v) = reset_vector_word {
+			self.set_reset_vector(v);
+		} else {
+			self.set_reset_vector(TMS9995_MONITOR_ENTRY_WORD);
+		}
+		self.ports.borrow_mut().reset_peripherals();
+		self.ext_halt = false;
+		self.core.reset_from_vector(&self.ram);
+		Ok(())
+	}
+
+	fn is_halted(&self) -> bool {
+		self.ext_halt || self.core.state().idle
 	}
 }

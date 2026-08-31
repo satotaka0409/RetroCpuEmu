@@ -34,12 +34,25 @@ impl Tms9995Ram {
 	///
 	/// # Arguments
 	/// - `size_bytes`: 関数に渡す値
+	/// - `random`: true ならランダム初期化、false ならゼロ初期化
 	///
 	/// # Returns
 	/// - 初期化済みインスタンスを返します。
-	pub fn new(size_bytes: usize) -> Self {
-		Self {
-			bytes: vec![0; size_bytes],
+	pub fn new(size_bytes: usize, random: bool) -> Self {
+		if random {
+			let mut seed: u32 = 0x6d2b79f5;
+			Self {
+				bytes: (0..size_bytes)
+					.map(|_| {
+						seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+						(seed >> 16) as u8
+					})
+					.collect(),
+			}
+		} else {
+			Self {
+				bytes: vec![0; size_bytes],
+			}
 		}
 	}
 
