@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::board_link::{BoardLinkError, CpuBoardAgent, PanelHost};
-use crate::ioboard::console::{ConsoleFnKey, IoConsole, IoConsoleState};
 use crate::ioboard::dma::{dma_load_intel_hex, dma_load_intel_hex_file, IntelHexDmaPlan};
 use crate::ioboard::handshake::{self, HandshakeDispatcher};
 use crate::ioboard::input::HexKeyboard;
+use crate::ioboard::monitor::{ConsoleFnKey, IoConsole, IoConsoleState};
 use crate::ioboard::output::bullet_led::BulletLed;
 use crate::ioboard::output::lcd_display::{LcdDisplay, LcdDisplaySnapshot};
 use crate::ioboard::output::seven_segment_led::SevenSegmentLed;

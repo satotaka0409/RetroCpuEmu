@@ -4,6 +4,8 @@
 //! 表示はパネル自身が 7セグ／砲弾を駆動（モニタは `16h` を使わない）。
 
 use crate::board_link::{BoardLinkError, PanelHost};
+use crate::ioboard::input::{apply_hex_digit_to_addr, apply_hex_digit_to_data};
+use crate::ioboard::monitor::IoMonitor;
 use crate::ioboard::output::bullet_led::{
 	BulletLed, LED_ADDR, LED_DATA, LED_HALT, LED_RUN, LED_UNDEF,
 };
@@ -12,7 +14,7 @@ use crate::ioboard::output::seven_segment_led::{
 	DATA_DIGIT_COUNT, DIGIT_COUNT, SEG_DASH,
 };
 use crate::ioboard::setting_area::{
-	align_addr_to_step, default_settings_for_cpu, normalize_addr_step, offsets, IoBoardSettings,
+	default_settings_for_cpu, normalize_addr_step, offsets, IoBoardSettings,
 };
 
 /// ADDR / DATA 入力フォーカス。
@@ -222,12 +224,7 @@ impl IoConsole {
 	}
 
 	/// ハンドシェイク `13h` 相当の UNDEF LED。
-	pub fn set_undef_led(
-		&mut self,
-		on: bool,
-		seven: &mut SevenSegmentLed,
-		bullet: &mut BulletLed,
-	) {
+	pub fn set_undef_led(&mut self, on: bool, seven: &mut SevenSegmentLed, bullet: &mut BulletLed) {
 		self.undef_insn = on;
 		if on {
 			self.halted = true;
@@ -236,27 +233,15 @@ impl IoConsole {
 	}
 
 	/// 16 進キー 0–F（1 ニブル）。
-	pub fn on_hex(
-		&mut self,
-		digit: u8,
-		seven: &mut SevenSegmentLed,
-		bullet: &mut BulletLed,
-	) {
-		let n = digit & 0x0f;
+	pub fn on_hex(&mut self, digit: u8, seven: &mut SevenSegmentLed, bullet: &mut BulletLed) {
 		match self.focus {
 			ConsoleFocus::Addr => {
-				if self.mode == ConsoleMode::SettingArea {
-					self.word_addr = ((self.word_addr << 4) | u32::from(n)) & 0xff;
-				} else {
-					self.word_addr = (self.word_addr << 4) | u32::from(n);
-				}
+				self.word_addr =
+					apply_hex_digit_to_addr(self.word_addr, digit, self.mode == ConsoleMode::SettingArea);
 			}
 			ConsoleFocus::Data => {
-				if self.mode == ConsoleMode::SettingArea {
-					self.data_word = ((self.data_word << 4) | u16::from(n)) & 0xff;
-				} else {
-					self.data_word = ((self.data_word << 4) | u16::from(n)) & 0xffff;
-				}
+				self.data_word =
+					apply_hex_digit_to_data(self.data_word, digit, self.mode == ConsoleMode::SettingArea);
 			}
 		}
 		self.refresh_leds(seven, bullet);
@@ -307,13 +292,12 @@ impl IoConsole {
 			}
 			ConsoleFnKey::F4 => {
 				self.align_monitor_addr();
-				if self.mode == ConsoleMode::SettingArea {
-					host.write_setting_byte((self.word_addr & 0xff) as u8, (self.data_word & 0xff) as u8);
-				} else {
-					let byte_addr = self.word_addr << 1;
-					let be = [(self.data_word >> 8) as u8, (self.data_word & 0xff) as u8];
-					host.mem_write(byte_addr, &be)?;
-				}
+				IoMonitor::write_word(
+					host,
+					self.word_addr,
+					self.data_word,
+					self.mode == ConsoleMode::SettingArea,
+				)?;
 				self.word_addr = self.add_addr(self.addr_delta() as i32);
 				self.read_at(host, self.word_addr)?;
 				self.focus = ConsoleFocus::Data;
@@ -321,7 +305,7 @@ impl IoConsole {
 			}
 			ConsoleFnKey::F5 => {
 				self.align_monitor_addr();
-				host.exec(self.word_addr << 1)?;
+				IoMonitor::exec_word(host, self.word_addr)?;
 				self.halted = false;
 				self.refresh_leds(seven, bullet);
 			}
@@ -369,35 +353,19 @@ impl IoConsole {
 		if self.mode != ConsoleMode::Monitor {
 			return;
 		}
-		self.word_addr = align_addr_to_step(self.word_addr, self.addr_step);
+		self.word_addr = IoMonitor::align_word_addr(self.word_addr, self.addr_step);
 	}
 
 	fn addr_delta(&self) -> u8 {
-		if self.mode == ConsoleMode::SettingArea {
-			1
-		} else {
-			self.addr_step
-		}
+		IoMonitor::addr_delta(self.mode == ConsoleMode::SettingArea, self.addr_step)
 	}
 
 	fn add_addr(&self, delta: i32) -> u32 {
-		if self.mode == ConsoleMode::SettingArea {
-			((self.word_addr as i32).wrapping_add(delta) as u32) & 0xff
-		} else {
-			(self.word_addr as i32).wrapping_add(delta) as u32
-		}
+		IoMonitor::shift_word_addr(self.word_addr, delta, self.mode == ConsoleMode::SettingArea)
 	}
 
 	fn read_at<H: PanelHost>(&mut self, host: &mut H, word_addr: u32) -> Result<(), BoardLinkError> {
-		if self.mode == ConsoleMode::SettingArea {
-			self.data_word = u16::from(host.read_setting_byte((word_addr & 0xff) as u8));
-			return Ok(());
-		}
-		let bytes = host.mem_read(word_addr << 1, 2)?;
-		if bytes.len() < 2 {
-			return Err(BoardLinkError::Ng);
-		}
-		self.data_word = ((u16::from(bytes[0]) << 8) | u16::from(bytes[1])) & 0xffff;
+		self.data_word = IoMonitor::read_word(host, word_addr, self.mode == ConsoleMode::SettingArea)?;
 		Ok(())
 	}
 
@@ -417,11 +385,8 @@ impl IoConsole {
 			patterns[10] = data[0];
 			patterns[11] = data[1];
 		} else {
-			let addr = word_to_seg_digits_padded(
-				self.word_addr,
-				self.addr_digits as usize,
-				ADDR_DIGIT_COUNT,
-			);
+			let addr =
+				word_to_seg_digits_padded(self.word_addr, self.addr_digits as usize, ADDR_DIGIT_COUNT);
 			let data = word_to_seg_digits_padded(
 				u32::from(self.data_word),
 				self.data_digits as usize,

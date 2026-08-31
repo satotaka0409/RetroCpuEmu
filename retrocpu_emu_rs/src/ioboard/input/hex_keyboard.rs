@@ -58,6 +58,26 @@ pub fn panel_key_column_mask(key: &str) -> Option<PanelKeyLoc> {
 	None
 }
 
+/// ADDR 入力欄に 16 進 1 ニブルを反映する。
+pub fn apply_hex_digit_to_addr(word_addr: u32, digit: u8, setting_area: bool) -> u32 {
+	let n = u32::from(digit & 0x0f);
+	if setting_area {
+		((word_addr << 4) | n) & 0xff
+	} else {
+		(word_addr << 4) | n
+	}
+}
+
+/// DATA 入力欄に 16 進 1 ニブルを反映する。
+pub fn apply_hex_digit_to_data(data_word: u16, digit: u8, setting_area: bool) -> u16 {
+	let n = u16::from(digit & 0x0f);
+	if setting_area {
+		((data_word << 4) | n) & 0xff
+	} else {
+		((data_word << 4) | n) & 0xffff
+	}
+}
+
 /// 16 進キー行列の押下状態。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HexKeyboard {
@@ -162,5 +182,13 @@ mod tests {
 		assert_ne!(cols[4] & 0x08, 0); // F0 は Bit3
 		kb.release("A");
 		assert!(!kb.is_pressed("A"));
+	}
+
+	#[test]
+	fn apply_hex_digit_addr_and_data() {
+		assert_eq!(apply_hex_digit_to_addr(0x1234, 0xa, false), 0x1234a);
+		assert_eq!(apply_hex_digit_to_addr(0x12, 0x3, true), 0x23);
+		assert_eq!(apply_hex_digit_to_data(0x1234, 0xb, false), 0x234b);
+		assert_eq!(apply_hex_digit_to_data(0x12, 0x3, true), 0x23);
 	}
 }

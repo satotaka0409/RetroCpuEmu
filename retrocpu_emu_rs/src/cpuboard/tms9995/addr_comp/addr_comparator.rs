@@ -33,15 +33,15 @@ pub struct AddrComparatorSlot {
 	pub io: bool,
 	/// Bit5–6 の値（01/10/11）。00 はアクセス種別不一致
 	pub rdwr: u8,
-	/// 監視する 18bit 物理ワードアドレス（MEM）または IO ポート下位
-	pub addr: u32,
+	/// 監視する 16bit 物理ワードアドレス（MEM）または IO ポート下位
+	pub addr: u16,
 }
 
 /// バスアクセス 1 回分（probe 入力）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AddrBusAccess {
-	/// MEM なら 18bit 物理ワード、IO ならポート番号
-	pub addr: u32,
+	/// MEM なら 16bit 物理ワード、IO ならポート番号
+	pub addr: u16,
 	/// true=IO 空間
 	pub io: bool,
 	/// true=WRITE、false=READ
@@ -56,12 +56,12 @@ impl AddrBusAccess {
 	/// MEM/IO リードアクセスを作る。
 	///
 	/// # Arguments
-	/// - `addr`: 18bit 物理ワードまたは IO ポート
+	/// - `addr`: 16bit 物理ワードまたは IO ポート
 	/// - `io`: `true` なら IO 空間
 	///
 	/// # Returns
 	/// - 初期化済みインスタンスを返します。
-	pub fn read(addr: u32, io: bool) -> Self {
+	pub fn read(addr: u16, io: bool) -> Self {
 		Self {
 			addr,
 			io,
@@ -74,14 +74,14 @@ impl AddrBusAccess {
 	/// MEM/IO ライトアクセスを作る。
 	///
 	/// # Arguments
-	/// - `addr`: 18bit 物理ワードまたは IO ポート
+	/// - `addr`: 16bit 物理ワードまたは IO ポート
 	/// - `io`: `true` なら IO 空間
 	/// - `after`: 書込後値
 	/// - `before`: 書込前値
 	///
 	/// # Returns
 	/// - 初期化済みインスタンスを返します。
-	pub fn write(addr: u32, io: bool, after: u16, before: u16) -> Self {
+	pub fn write(addr: u16, io: bool, after: u16, before: u16) -> Self {
 		Self {
 			addr,
 			io,
@@ -150,11 +150,7 @@ pub fn slot_matches(slot: &AddrComparatorSlot, access: &AddrBusAccess) -> bool {
 	} else if (rdwr & BREAK_RDWR_RD) == 0 {
 		return false;
 	}
-	if access.io {
-		(slot.addr & 0xffff) == (access.addr & 0xffff)
-	} else {
-		(slot.addr & 0x3_ffff) == (access.addr & 0x3_ffff)
-	}
+	(slot.addr & 0xffff) == (access.addr & 0xffff)
 }
 
 /// 4 本のアドレス比較器。IO 0030–0034 で設定・取得する。
@@ -162,8 +158,7 @@ pub fn slot_matches(slot: &AddrComparatorSlot, access: &AddrBusAccess) -> bool {
 pub struct AddrComparatorBank {
 	slots: [AddrComparatorSlot; CPLD_COMPARATOR_COUNT],
 	ctrl_latch: u16,
-	addr_lo_latch: u16,
-	addr_hi_latch: u16,
+	addr_latch: u16,
 	/// 直近ヒットしたスロット。無しは 0xFFFF
 	last_hit: u16,
 	prev_write: [u16; CPLD_COMPARATOR_COUNT],
@@ -185,8 +180,7 @@ impl AddrComparatorBank {
 		Self {
 			slots: [AddrComparatorSlot::default(); CPLD_COMPARATOR_COUNT],
 			ctrl_latch: 0,
-			addr_lo_latch: 0,
-			addr_hi_latch: 0,
+			addr_latch: 0,
 			last_hit: 0xffff,
 			prev_write: [0; CPLD_COMPARATOR_COUNT],
 			prev_latch: 0,
@@ -199,8 +193,7 @@ impl AddrComparatorBank {
 			*s = AddrComparatorSlot::default();
 		}
 		self.ctrl_latch = 0;
-		self.addr_lo_latch = 0;
-		self.addr_hi_latch = 0;
+		self.addr_latch = 0;
 		self.last_hit = 0xffff;
 		self.prev_latch = 0;
 		self.prev_write = [0; CPLD_COMPARATOR_COUNT];
@@ -228,7 +221,7 @@ impl AddrComparatorBank {
 				enabled: cfg.enabled,
 				io: cfg.io,
 				rdwr: cfg.rdwr & 0x03,
-				addr: cfg.addr & 0x3_ffff,
+				addr: cfg.addr & 0xffff,
 			};
 		}
 	}
@@ -305,12 +298,12 @@ impl AddrComparatorBank {
 		let v = val & 0xffff;
 		match p {
 			IO_PORT_BREAK_ADDR_LO => {
-				self.addr_lo_latch = v;
+				self.addr_latch = v & 0xffff;
 				self.apply_addr_to_selected();
 				true
 			}
 			IO_PORT_BREAK_ADDR_HI => {
-				self.addr_hi_latch = v & 0x03;
+				self.addr_latch = v & 0xffff;
 				self.apply_addr_to_selected();
 				true
 			}
@@ -338,7 +331,7 @@ impl AddrComparatorBank {
 		s.enabled = enabled;
 		s.io = io;
 		s.rdwr = rdwr;
-		s.addr = ((u32::from(self.addr_hi_latch) & 0x03) << 16) | u32::from(self.addr_lo_latch);
+		s.addr = self.addr_latch & 0xffff;
 	}
 
 	fn apply_addr_to_selected(&mut self) {
@@ -346,8 +339,7 @@ impl AddrComparatorBank {
 		if slot >= CPLD_COMPARATOR_COUNT {
 			return;
 		}
-		self.slots[slot].addr =
-			((u32::from(self.addr_hi_latch) & 0x03) << 16) | u32::from(self.addr_lo_latch);
+		self.slots[slot].addr = self.addr_latch & 0xffff;
 	}
 
 	fn ctrl_from_selected(&self) -> u16 {
@@ -418,7 +410,7 @@ mod tests {
 		);
 		let s = bank.get_slot(2).unwrap();
 		assert!(s.enabled);
-		assert_eq!(s.addr, 0x2_abcd);
+		assert_eq!(s.addr, 0xabcd);
 		assert_eq!(s.rdwr, BREAK_RDWR_BOTH);
 	}
 }
