@@ -1,6 +1,6 @@
 //! 砲弾 LED 16 本（0–F）の状態と egui 配置。
 
-use egui::{Align, Color32, Frame, Layout, RichText, Stroke, Ui, Widget};
+use egui::{Align, Color32, Frame, Layout, RichText, Stroke, Ui, Vec2, Widget};
 
 use super::color::{default_color_for_index, LedColor};
 use super::paint::{paint_bullet_allocated, BulletLedStyle};
@@ -214,6 +214,23 @@ impl BulletLed {
 		inner.response
 	}
 
+	/// 0–A 行の 1 列幅（ラベル + LED）。
+	fn labeled_column_width(&self) -> f32 {
+		(self.style.diameter + (self.style.diameter * 0.45).max(4.0)).max(18.0)
+	}
+
+	/// 0–A 行の内容幅（枠 padding 除く）。
+	pub fn user_row_content_width(&self) -> f32 {
+		let n = USER_LED_LAST + 1;
+		self.labeled_column_width() * n as f32 + self.style.gap * (n.saturating_sub(1) as f32)
+	}
+
+	/// 0–A 行の内容高さ（枠 padding 除く）。
+	pub fn user_row_content_height(&self) -> f32 {
+		let bullet_h = self.style.diameter + (self.style.diameter * 0.45).max(4.0);
+		self.style.label_size + 2.0 + bullet_h
+	}
+
 	/// 砲弾 0–A（ラベル付き）を 1 行で描く。
 	///
 	/// # Arguments
@@ -222,20 +239,39 @@ impl BulletLed {
 	/// # Returns
 	/// - `egui::Response` を返します。
 	pub fn show_user_row(&self, ui: &mut Ui) -> egui::Response {
-		Frame::new()
-			.fill(self.style.bank_bg)
-			.stroke(Stroke::new(1.0, self.style.bank_border))
-			.corner_radius(8.0)
-			.inner_margin(8.0)
-			.show(ui, |ui| {
-				ui.horizontal(|ui| {
-					ui.spacing_mut().item_spacing.x = self.style.gap;
-					for i in 0..=USER_LED_LAST {
-						self.paint_labeled(ui, i, &format!("{i:X}"), self.style.label_color);
-					}
-				});
-			})
-			.response
+		let content_w = self.user_row_content_width();
+		let content_h = self.user_row_content_height();
+		const FRAME_PAD: f32 = 16.0;
+		let frame_w = content_w + FRAME_PAD;
+		let frame_h = content_h + FRAME_PAD;
+		let spare_x = (ui.available_width() - frame_w).max(0.0);
+
+		ui.allocate_ui_with_layout(
+			Vec2::new(ui.available_width(), frame_h),
+			Layout::left_to_right(Align::TOP),
+			|ui| {
+				ui.add_space(spare_x * 0.5);
+				let response = Frame::new()
+					.fill(self.style.bank_bg)
+					.stroke(Stroke::new(1.0, self.style.bank_border))
+					.corner_radius(8.0)
+					.inner_margin(8.0)
+					.show(ui, |ui| {
+						ui.set_min_size(Vec2::new(content_w, content_h));
+						ui.set_max_size(Vec2::new(content_w, content_h));
+						ui.with_layout(Layout::left_to_right(Align::TOP), |ui| {
+							ui.spacing_mut().item_spacing.x = self.style.gap;
+							for i in 0..=USER_LED_LAST {
+								self.paint_labeled(ui, i, &format!("{i:X}"), self.style.label_color);
+							}
+						});
+					})
+					.response;
+				ui.add_space(spare_x * 0.5);
+				response
+			},
+		)
+		.inner
 	}
 
 	/// RUN / HALT / UNDEF を縦に並べる（DATA 右のステータス列）。
@@ -270,8 +306,12 @@ impl BulletLed {
 
 	/// ラベル上・LED 下の 1 本（0–A 行用）。
 	fn paint_labeled(&self, ui: &mut Ui, index: usize, label: &str, label_color: Color32) {
-		ui.vertical(|ui| {
-			ui.with_layout(Layout::top_down(Align::Center), |ui| {
+		let col_w = self.labeled_column_width();
+		let col_h = self.user_row_content_height();
+		ui.allocate_ui_with_layout(
+			Vec2::new(col_w, col_h),
+			Layout::top_down(Align::Center),
+			|ui| {
 				ui.label(
 					RichText::new(label)
 						.size(self.style.label_size)
@@ -284,8 +324,8 @@ impl BulletLed {
 					self.is_on(index),
 					Self::color_of(index),
 				);
-			});
-		});
+			},
+		);
 	}
 
 	/// LED の右にステータス名を置く 1 行。

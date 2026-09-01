@@ -99,7 +99,9 @@ impl Mn1613CpuAgent {
 
 	/// 最大 `max_inst` 命令まで進める（外部 HALT 中は 0）。
 	///
-	/// * `max_inst` — 実行上限（0=何もしない）
+	/// 比較器／ステップで上がった IRQ は **命令ごと** にコアへ渡す（1 バッチ内遅延を防ぐ）。
+	///
+	/// * `max_inst` — 実行上限（0=上限なし）
 	///
 	/// # Arguments
 	/// - `max_inst`: 実行する最大命令数（0 で無制限）
@@ -110,14 +112,28 @@ impl Mn1613CpuAgent {
 		if self.ext_halt {
 			return Mn1613ExecStatus::Halted;
 		}
-		// 比較器／ステップ IRQ をコアへ配送
-		if let Some(irq) = self.ports.borrow_mut().take_pending_irq() {
-			self.core.trigger_interrupt(irq.level);
+		let limit = if max_inst == 0 { u32::MAX } else { max_inst };
+		for _ in 0..limit {
+			if let Some(irq) = self.ports.borrow_mut().take_pending_irq() {
+				self.core.trigger_interrupt(irq.level);
+			}
+			if self.core.get_exec_status() == Mn1613ExecStatus::Idle {
+				self.core.set_exec_status(Mn1613ExecStatus::Running);
+			}
+			self.core.tick(&mut self.ram);
+			let st = self.core.get_exec_status();
+			if matches!(
+				st,
+				Mn1613ExecStatus::Halted | Mn1613ExecStatus::Break | Mn1613ExecStatus::Step
+			) {
+				return st;
+			}
+			if self.ext_halt {
+				self.core.halt();
+				return Mn1613ExecStatus::Halted;
+			}
 		}
-		self
-			.core
-			.run_slice(&mut self.ram, None, max_inst as usize)
-			.unwrap_or(Mn1613ExecStatus::Halted)
+		self.core.get_exec_status()
 	}
 
 	/// HALT するまで（または上限まで）回す。
@@ -423,7 +439,7 @@ impl CpuBoardAgent for Tms9995CpuAgent {
 
 #[cfg(test)]
 mod tests {
-	use super::Tms9995CpuAgent;
+	use super::{Mn1613CpuAgent, Mn1613ExecStatus, Tms9995CpuAgent};
 	use crate::board_link::{BoardLinkError, CpuBoardAgent};
 
 	#[test]
@@ -438,5 +454,39 @@ mod tests {
 		let mut agent = Tms9995CpuAgent::new();
 		let err = CpuBoardAgent::pulse_reset(&mut agent, Some(0x1_0000)).unwrap_err();
 		assert_eq!(err, BoardLinkError::BadFrame);
+	}
+
+	/// 比較器ヒット IRQ が `run_slice` ループ先頭でコアへ渡る。
+	#[test]
+	fn mn1613_comparator_irq_delivered_per_instruction() {
+		use crate::cpuboard::mn1613::addr_comp::{AddrBusAccess, AddrComparatorSlot, BREAK_RDWR_RD};
+
+		let mut agent = Mn1613CpuAgent::new();
+		let _ = agent.set_halt(false);
+		agent.core.set_exec_status(Mn1613ExecStatus::Running);
+		{
+			let mut ports = agent.ports.borrow_mut();
+			ports.comparators_mut().set_slot(
+				0,
+				AddrComparatorSlot {
+					enabled: true,
+					io: false,
+					rdwr: BREAK_RDWR_RD,
+					addr: 1,
+				},
+			);
+			ports.probe_addr(&AddrBusAccess::read(1, false));
+			assert!(ports.peek_pending_irq().is_some());
+		}
+		let _ = agent.run_slice(1);
+		assert!(
+			agent.ports.borrow().peek_pending_irq().is_none(),
+			"run_slice must consume pending comparator IRQ before ticking"
+		);
+		assert_eq!(
+			agent.core.get_pending_irq() & 0x02,
+			0x02,
+			"level-1 IRQ should be forwarded to the core"
+		);
 	}
 }

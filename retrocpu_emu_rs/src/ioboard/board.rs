@@ -244,7 +244,10 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 					message: "dma write failed".into(),
 				})
 		})
-		.map_err(|_| BoardLinkError::Ng)
+		.map_err(|e| {
+			eprintln!("boot_load_ihx_text: {e}");
+			BoardLinkError::Ng
+		})
 	}
 
 	/// IHX ファイルを DMA ロードする。
@@ -268,7 +271,10 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 					message: "dma write failed".into(),
 				})
 		})
-		.map_err(|_| BoardLinkError::Ng)
+		.map_err(|e| {
+			eprintln!("boot_load_ihx({}): {e}", path.display());
+			BoardLinkError::Ng
+		})
 	}
 
 	/// パネルを RST 後状態にする。
@@ -352,6 +358,20 @@ impl<A: CpuBoardAgent> IoBoard<A> {
 		self
 			.console
 			.on_function(fn_key, &mut host, &mut self.seven_seg, &mut self.bullet)
+	}
+
+	/// F0 長押し（設定エリア切替）。
+	pub fn on_ads_long_press(&mut self) -> Result<(), BoardLinkError> {
+		let mut host = HostView {
+			agent: &mut self.agent,
+			setting_raw: &mut self.setting_raw,
+			settings: &mut self.settings,
+			boot_ihx_path: &self.boot_ihx_path,
+		};
+		self
+			.console
+			.on_ads_long_press(&mut host, &mut self.seven_seg, &mut self.bullet);
+		Ok(())
 	}
 
 	/// キー名からコンソール操作（16 進 or F0–F7）。押下時のみアクション。

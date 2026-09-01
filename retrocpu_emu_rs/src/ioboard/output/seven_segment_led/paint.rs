@@ -1,4 +1,6 @@
-//! 1 桁分の 7セグ（台形セグメント + 小数点）を egui で描く。
+//! 1 桁分の 7セグ（矩形セグメント + 小数点）を egui で描く。
+//!
+//! 幾何は `retrocpu_emu_ts/src/renderer/seven_segment.ts` と同じ（台形ではなく矩形）。
 
 use egui::{epaint::CircleShape, Color32, Pos2, Rect, Shape, Stroke, Ui, Vec2};
 
@@ -46,44 +48,14 @@ impl Default for SevenSegmentStyle {
 	}
 }
 
-/// 水平セグメント（a / g / d）の 6 頂点。左上原点、長さ `len`、太さ `t`。
-fn horiz_seg(origin: Pos2, len: f32, t: f32) -> [Pos2; 6] {
-	let m = t * 0.5;
-	let x = origin.x;
-	let y = origin.y;
-	[
-		Pos2::new(x + m, y),
-		Pos2::new(x + len - m, y),
-		Pos2::new(x + len, y + m),
-		Pos2::new(x + len - m, y + t),
-		Pos2::new(x + m, y + t),
-		Pos2::new(x, y + m),
-	]
-}
-
-/// 垂直セグメント（b / c / e / f）の 6 頂点。左上原点、長さ `len`、太さ `t`。
-fn vert_seg(origin: Pos2, len: f32, t: f32) -> [Pos2; 6] {
-	let m = t * 0.5;
-	let x = origin.x;
-	let y = origin.y;
-	[
-		Pos2::new(x + m, y),
-		Pos2::new(x + t, y + m),
-		Pos2::new(x + t, y + len - m),
-		Pos2::new(x + m, y + len),
-		Pos2::new(x, y + len - m),
-		Pos2::new(x, y + m),
-	]
-}
-
 /// 点灯セグメントのグロー用ストローク色を作る。
 fn glow_stroke(on: Color32) -> Stroke {
 	let [r, g, b, _] = on.to_array();
 	Stroke::new(2.4, Color32::from_rgba_unmultiplied(r, g, b, 90))
 }
 
-/// 1 セグメント（凸 6 角形）を塗る。
-fn paint_polygon(ui: &Ui, pts: [Pos2; 6], on: bool, style: &SevenSegmentStyle) {
+/// 1 セグメント（矩形）を塗る。
+fn paint_rect_seg(ui: &Ui, rect: Rect, on: bool, style: &SevenSegmentStyle, radius: f32) {
 	let painter = ui.painter();
 	let fill = if on { style.on } else { style.off };
 	let stroke = if on {
@@ -91,99 +63,104 @@ fn paint_polygon(ui: &Ui, pts: [Pos2; 6], on: bool, style: &SevenSegmentStyle) {
 	} else {
 		Stroke::NONE
 	};
-	painter.add(Shape::convex_polygon(pts.to_vec(), fill, stroke));
+	painter.rect_filled(rect, radius, fill);
+	if on {
+		painter.rect_stroke(rect, radius, stroke, egui::StrokeKind::Inside);
+	}
 }
 
-/// 1 桁分の矩形へ 8bit パターンを描く。
+/// 1 桁分の矩形へ 8bit パターンを描く（TS `createSevenSegment` 相当）。
 ///
 /// `rect` は 1 桁全体（右端に dp 用余白を含む）。`pattern` は bit0=a … bit7=dp。
-///
-/// # Arguments
-/// - `ui`: 関数に渡す値
-/// - `rect`: 関数に渡す値
-/// - `pattern`: 関数に渡す値
-/// - `style`: 関数に渡す値
 pub fn paint_digit(ui: &Ui, rect: Rect, pattern: u8, style: &SevenSegmentStyle) {
 	let painter = ui.painter();
 	painter.rect_filled(rect, 4.0, style.digit_bg);
 
-	let pad = (style.thickness * 0.25).clamp(1.0, 4.0);
-	let body = Rect::from_min_max(
-		rect.min + Vec2::new(pad, pad),
-		Pos2::new(rect.right() - style.thickness * 1.35, rect.bottom() - pad),
-	);
-	let t = style
-		.thickness
-		.min(body.width() * 0.28)
-		.min(body.height() * 0.14);
-	let gap = (t * 0.18).max(0.8);
-	let inner_w = (body.width() - t).max(t * 2.0);
-	let half_h = (body.height() * 0.5 - t * 0.5).max(t * 2.0);
-	let vert_len = (half_h - gap).max(t);
+	let t = style.thickness;
+	let w = style.digit_width;
+	let h = rect.height();
+	let r = (t * 0.5).max(1.0);
+	let x = rect.left();
+	let y = rect.top();
+	let half_h = h * 0.5;
 
-	let x0 = body.left();
-	let y0 = body.top();
-	let x1 = body.left() + inner_w;
-	let y_mid = body.center().y - t * 0.5;
-	let y_bot = body.bottom() - t;
-
-	paint_polygon(
+	// a — 上
+	paint_rect_seg(
 		ui,
-		horiz_seg(
-			Pos2::new(x0 + t * 0.5 + gap, y0),
-			inner_w - t - gap * 2.0,
-			t,
-		),
+		Rect::from_min_size(Pos2::new(x + t, y), Vec2::new((w - 2.0 * t).max(t), t)),
 		segment_on(pattern, SEG_A),
 		style,
+		r,
 	);
-	paint_polygon(
+	// b — 右上
+	paint_rect_seg(
 		ui,
-		vert_seg(Pos2::new(x1, y0 + t * 0.5 + gap), vert_len, t),
+		Rect::from_min_size(
+			Pos2::new(x + w - t, y + t),
+			Vec2::new(t, (half_h - t).max(t)),
+		),
 		segment_on(pattern, SEG_B),
 		style,
+		r,
 	);
-	paint_polygon(
+	// c — 右下
+	paint_rect_seg(
 		ui,
-		vert_seg(Pos2::new(x1, y_mid + t * 0.5 + gap), vert_len, t),
+		Rect::from_min_size(
+			Pos2::new(x + w - t, y + half_h),
+			Vec2::new(t, (half_h - t).max(t)),
+		),
 		segment_on(pattern, SEG_C),
 		style,
+		r,
 	);
-	paint_polygon(
+	// d — 下
+	paint_rect_seg(
 		ui,
-		horiz_seg(
-			Pos2::new(x0 + t * 0.5 + gap, y_bot),
-			inner_w - t - gap * 2.0,
-			t,
+		Rect::from_min_size(
+			Pos2::new(x + t, y + h - t),
+			Vec2::new((w - 2.0 * t).max(t), t),
 		),
 		segment_on(pattern, SEG_D),
 		style,
+		r,
 	);
-	paint_polygon(
+	// e — 左下
+	paint_rect_seg(
 		ui,
-		vert_seg(Pos2::new(x0, y_mid + t * 0.5 + gap), vert_len, t),
+		Rect::from_min_size(
+			Pos2::new(x, y + half_h),
+			Vec2::new(t, (half_h - t).max(t)),
+		),
 		segment_on(pattern, SEG_E),
 		style,
+		r,
 	);
-	paint_polygon(
+	// f — 左上
+	paint_rect_seg(
 		ui,
-		vert_seg(Pos2::new(x0, y0 + t * 0.5 + gap), vert_len, t),
+		Rect::from_min_size(
+			Pos2::new(x, y + t),
+			Vec2::new(t, (half_h - t).max(t)),
+		),
 		segment_on(pattern, SEG_F),
 		style,
+		r,
 	);
-	paint_polygon(
+	// g — 中
+	paint_rect_seg(
 		ui,
-		horiz_seg(
-			Pos2::new(x0 + t * 0.5 + gap, y_mid),
-			inner_w - t - gap * 2.0,
-			t,
+		Rect::from_min_size(
+			Pos2::new(x + t, y + half_h - t * 0.5),
+			Vec2::new((w - 2.0 * t).max(t), t),
 		),
 		segment_on(pattern, SEG_G),
 		style,
+		r,
 	);
 
-	let dp_r = (t * 0.42).max(2.0);
-	let dp_c = Pos2::new(rect.right() - dp_r - pad * 0.4, body.bottom() - dp_r);
+	let dp_r = (t * 0.4).max(2.0);
+	let dp_c = Pos2::new(x + w - t * 1.2 + 8.0, y + h - t * 1.2 + 8.0);
 	let dp_on = segment_on(pattern, SEG_DP);
 	let dp_fill = if dp_on { style.on } else { style.off };
 	painter.add(Shape::Circle(CircleShape {
@@ -201,14 +178,6 @@ pub fn paint_digit(ui: &Ui, rect: Rect, pattern: u8, style: &SevenSegmentStyle) 
 /// 横一列の桁を描き、確保した領域の応答を返す。
 ///
 /// `patterns` は左から右。各要素は 8bit。
-///
-/// # Arguments
-/// - `ui`: 関数に渡す値
-/// - `patterns`: 関数に渡す値
-/// - `style`: 関数に渡す値
-///
-/// # Returns
-/// - `egui::Response` を返します。
 pub fn paint_digit_row(ui: &mut Ui, patterns: &[u8], style: &SevenSegmentStyle) -> egui::Response {
 	let n = patterns.len().max(1);
 	let w = style.digit_width * n as f32 + style.digit_gap * (n.saturating_sub(1) as f32);

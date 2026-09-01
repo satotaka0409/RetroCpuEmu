@@ -17,6 +17,22 @@ pub const HEX_KEY_COL_BIT3_TO_0: [&[&str]; KEY_ACTIVE_COLUMNS] = [
 	&["F1", "F3", "F5", "F7"],
 ];
 
+/// TS `hex_keyboard.ts` の `HEX_KEYS` と同じ 4×4 表示（行=上→下、列=左→右）。
+pub const HEX_KEY_ROWS: [[&str; 4]; 4] = [
+	["C", "D", "E", "F"],
+	["8", "9", "A", "B"],
+	["4", "5", "6", "7"],
+	["0", "1", "2", "3"],
+];
+
+/// 実機 6×4 キーパッド 1 行分（列 0–3=16 進、列 4–5=F0–F7）。
+pub const KEYBOARD_ROW_KEYS: [[&str; 6]; 4] = [
+	["C", "D", "E", "F", "F0", "F1"],
+	["8", "9", "A", "B", "F2", "F3"],
+	["4", "5", "6", "7", "F4", "F5"],
+	["0", "1", "2", "3", "F6", "F7"],
+];
+
 /// ファンクションキー表示名（ioboard.mdc）。
 pub const FN_KEY_LABELS: [(&str, &str); 8] = [
 	("F0", "ADS"),
@@ -169,6 +185,33 @@ impl HexKeyboard {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn hex_key_rows_match_handshake_layout() {
+		for row in 0..4 {
+			for col in 0..4 {
+				assert_eq!(
+					HEX_KEY_ROWS[row][col],
+					HEX_KEY_COL_BIT3_TO_0[col][row],
+					"row {row} col {col}"
+				);
+			}
+		}
+		assert_eq!(HEX_KEY_ROWS[0], ["C", "D", "E", "F"]);
+		assert_eq!(HEX_KEY_ROWS[3], ["0", "1", "2", "3"]);
+	}
+
+	#[test]
+	fn keyboard_row_keys_match_columns() {
+		for row in 0..4 {
+			for col in 0..6 {
+				assert_eq!(
+					KEYBOARD_ROW_KEYS[row][col],
+					HEX_KEY_COL_BIT3_TO_0[col][row]
+				);
+			}
+		}
+	}
 
 	#[test]
 	fn press_hex_and_fn() {

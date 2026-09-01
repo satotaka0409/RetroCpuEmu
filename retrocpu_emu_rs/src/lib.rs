@@ -4,6 +4,7 @@ pub mod board_link;
 pub mod cpuboard;
 pub mod ioboard;
 pub mod system;
+pub mod ui;
 
 pub use board_link::{
 	cmd_io_to_cpu, response, AgentBridge, BoardLinkError, CpuBoardAgent, PanelHost,

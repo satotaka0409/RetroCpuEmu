@@ -2,6 +2,7 @@
 
 use egui::{Frame, RichText, Stroke, Ui, Widget};
 
+use crate::ioboard::output::bullet_led::{BulletLed, FocusLed};
 use super::paint::{paint_digit_row, SevenSegmentStyle};
 use super::pattern::{
 	hex_nibble_to_seg_with_dp, word_to_seg_digits, word_to_seg_digits_padded, ADDR_DIGIT_COUNT,
@@ -193,32 +194,70 @@ impl SevenSegmentLed {
 	/// - `egui::Response` を返します。
 	pub fn show(&self, ui: &mut Ui) -> egui::Response {
 		let inner = ui.horizontal(|ui| {
-			self.paint_bank(ui, "ADDRESS", self.addr_patterns());
+			self.paint_bank(ui, self.addr_patterns());
 			ui.add_space(18.0);
-			self.paint_bank(ui, "DATA", self.data_patterns());
+			self.paint_bank(ui, self.data_patterns());
 		});
 		inner.response
 	}
 
-	/// ADDR/DATA 片方のバンク（暗い枠 + 桁 + キャプション）を描く。
-	fn paint_bank(&self, ui: &mut Ui, caption: &str, patterns: &[u8]) {
-		ui.vertical(|ui| {
-			Frame::new()
-				.fill(self.style.bank_bg)
-				.stroke(Stroke::new(1.0, self.style.bank_border))
-				.corner_radius(8.0)
-				.inner_margin(10.0)
-				.show(ui, |ui| {
-					paint_digit_row(ui, patterns, &self.style);
+	/// IO ボード画面どおり（ADDR+DATA、RUN/HALT/UNDEF は DATA 右、E/F は各フッタ）。
+	///
+	/// `retrocpu_emu_ts/src/renderer/index.html` の `led-bank-split` 配置。
+	pub fn show_io_board_layout(&self, ui: &mut Ui, bullet: &BulletLed) -> egui::Response {
+		let inner = ui.with_layout(
+			egui::Layout::left_to_right(egui::Align::Min).with_cross_justify(true),
+			|ui| {
+				ui.spacing_mut().item_spacing.x = 22.0;
+				// ADDRESS グループ（上揃え。DATA 列が高くても ADDR 桁の下に空白を作らない）
+				ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+					self.paint_bank(ui, self.addr_patterns());
+					ui.add_space(6.0);
+					ui.horizontal(|ui| {
+						ui.spacing_mut().item_spacing.x = 10.0;
+						bullet.show_focus(ui, FocusLed::Addr);
+						ui.label(
+							RichText::new("ADDRESS")
+								.size(11.0)
+								.color(self.style.caption)
+								.extra_letter_spacing(1.6),
+						);
+					});
 				});
-			ui.add_space(4.0);
-			ui.label(
-				RichText::new(caption)
-					.size(11.0)
-					.color(self.style.caption)
-					.extra_letter_spacing(1.6),
-			);
-		});
+				// DATA グループ
+				ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+					ui.horizontal(|ui| {
+						ui.spacing_mut().item_spacing.x = 12.0;
+						self.paint_bank(ui, self.data_patterns());
+						bullet.show_status_col(ui);
+					});
+					ui.add_space(6.0);
+					ui.horizontal(|ui| {
+						ui.spacing_mut().item_spacing.x = 10.0;
+						bullet.show_focus(ui, FocusLed::Data);
+						ui.label(
+							RichText::new("DATA")
+								.size(11.0)
+								.color(self.style.caption)
+								.extra_letter_spacing(1.6),
+						);
+					});
+				});
+			},
+		);
+		inner.response
+	}
+
+	/// ADDR/DATA 片方のバンク（暗い枠 + 桁）を描く。
+	fn paint_bank(&self, ui: &mut Ui, patterns: &[u8]) {
+		Frame::new()
+			.fill(self.style.bank_bg)
+			.stroke(Stroke::new(1.0, self.style.bank_border))
+			.corner_radius(8.0)
+			.inner_margin(10.0)
+			.show(ui, |ui| {
+				paint_digit_row(ui, patterns, &self.style);
+			});
 	}
 }
 
