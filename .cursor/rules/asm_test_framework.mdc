@@ -5,13 +5,28 @@ description: MN1613 アセンブラテスト統合仕様（asm 結合テスト +
 
 # asm テストフレームワーク
 
-現在、Typescript から Rust へ移植中
-根拠: 本ファイル。実装は `retrocpu_test_framework/`（共通）と `retrocpu_test_framework/src/mn1613/`（MN1613 固有）と `retrocpu_test_framework/src/tms9995/`（TMS9995 固有）と `retrocpu_emu/src/code_test/`。
+TypeScript 版と Rust 版を併存運用中
+根拠: 本ファイル。実装は `retrocpu_test_framework_ts/src/`（TS 共通）と `retrocpu_test_framework_ts/src/mn1613/`（TS MN1613 固有）と `retrocpu_test_framework_ts/src/tms9995/`（TS TMS9995 固有）と `retrocpu_test_framework_rs/src/`（Rust 共通）と `retrocpu_emu_ts/src/code_test/`（TS ハーネス）。
 呼び出し規約は `asm-rules.mdc`、BIOS 公開 API は `boot_monitor.mdc`、線仕様は `HandShake.mdc`。
+
+## 概要
+
+このフレームワークは、MN1613 / TMS9995 向けアセンブラ成果物を TypeScript / Rust テストから検証するための統合ハーネスである。
+セッションは `.asm` を直接扱わず、事前生成済みの `.ihx`（Intel HEX）と `.cdb`（シンボル情報）だけを入力に使う。
+
+主な役割は次の 4 点。
+
+1. HEX/CDB のロードとテスト実行コンテキストの初期化（`reload` / `runInit`）。
+2. 公開ラベル（`.global` / `.globl`）の呼び出しと引数受け渡し（`call`）。
+3. 実行結果の断言（レジスタ・メモリ・スタック・IO/CRU）。
+4. 失敗解析用ログ出力（START/END、`checkpoint`、`instruction`）。
+
+運用上は、**アセンブル/リンクは外部ビルド（Makefile / sdld）で完了させ、テストは成果物を読むだけ** を原則とする。
+これにより、実機相当の命令列を対象に、結合テスト（BIOS/モニタ）とハーネス単体テストを同じ規約で再現できる。
 
 ## 目的
 
-MN1613 / TMS9995 の成果物を TypeScript テストから検証するための統合仕様。
+MN1613 / TMS9995 の成果物を TypeScript / Rust テストから検証するための統合仕様。
 セッションがテスト対象として読んでよい入力は **`.ihx` と `.cdb` のみ**（`.asm` は読まない）。
 アセンブル／リンクは Makefile 等で事前に行い、成果物パスを `JsonTestSettings` に書く。
 
@@ -35,7 +50,7 @@ MN1613 / TMS9995 の成果物を TypeScript テストから検証するための
 ## 共通原則
 
 1. **テスト対象のロードは `.ihx` / `.cdb` のみ。** `createMn1613AsmSession` / `createSessionFromSettings` / `createTms9995SessionFromSettings` は `.asm` を読まない。
-2. ドライバ専用 `.asm` は作らない。TS から `call` で引数を渡す（TMS 実行はコア実装後）。
+2. ドライバ専用 `.asm` は作らない。TS/Rust から `call` で引数を渡す（TMS 実行はコア実装後）。
 3. MN1613: 第1引数=`R0`、第2引数=`R1`、第3引数=`R2`、第4引数以降はスタック。**R3 / R4 は引数に使わない**。戻り値=`R0`/`R1`/`R2`（必要な分）。TMS9995 は `asm_rules.mdc`（第1=`R2`…）を正とする。
 4. 被試験ラベルは `.global` / `.globl`。
 5. `call()` はメモリと IO ピンを消さない。ケース分離は `reload()` を使う。
@@ -71,16 +86,17 @@ TMS9995 は現状フロー末尾の実行部分を省略し、シンボル／メ
 ### 原則
 
 1. セッション入力は `.ihx` / `.cdb` のみ。`sources` / `sourceRoot` は設定に持たない。
-2. 1 対象モジュール（または機能）= 1 `*_test.ts`。
+2. 1 対象モジュール（または機能）= 1 テストファイル（TS: `*_test.ts`、Rust: `tests/*_test.rs` など）。
 3. テストはプロジェクトをまたがない。
-4. Vitest は使わない（独自 `test()` / `expect()`）。
+4. TS は Vitest を使わない（独自 `test()` / `expect()`）。Rust は `cargo test` を使う。
 
 ### 配置
 
-| プロジェクト              | 置き場                     | 内容                            |
-| :------------------------ | :------------------------- | :------------------------------ |
-| `retrocpu_test_framework` | `test/*.unit.ts`           | フレームワーク単体              |
-| `retrocpu_boot_monitor`   | `mn1613/test/**/*_test.ts` | BIOS 結合（事前ビルド HEX/CDB） |
+| プロジェクト                 | 置き場                     | 内容                               |
+| :--------------------------- | :------------------------- | :--------------------------------- |
+| `retrocpu_test_framework_ts` | `test/*.unit.ts`           | フレームワーク単体（Typescript版） |
+| `retrocpu_test_framework_rs` | `test/*.unit.rs`           | フレームワーク単体（Rsut版）       |
+| `retrocpu_boot_monitor`      | `mn1613/test/**/*_test.ts` | BIOS 結合（事前ビルド HEX/CDB）    |
 
 ## HEX/CDB ハーネス（code_test）
 
@@ -237,12 +253,19 @@ L:__CP$uart_initialized$0001:812A
 
 ## 実行
 
-フレームワーク単体:
+フレームワーク単体（TypeScript）:
 
 ```bash
-cd retrocpu_test_framework
+cd retrocpu_test_framework_ts
 npm install
 npm test
+```
+
+フレームワーク単体（Rust）:
+
+```bash
+cd retrocpu_test_framework_rs
+cargo test -- --test-threads=1
 ```
 
 BIOS/asm 結合:

@@ -13,16 +13,16 @@
       "path": "./retrocpu_boot_monitor",
     },
     {
-      "name": "retrocpu_test_framework_ts",
-      "path": "./retrocpu_test_framework_ts",
+      "name": "retrocpu_emu_rs",
+      "path": "./retrocpu_emu_rs",
+    },
+    {
+      "name": "retrocpu_asm_rs",
+      "path": "./retrocpu_asm_rs",
     },
     {
       "name": "retrocpu_test_framework_rs",
       "path": "./retrocpu_test_framework_rs",
-    },
-    {
-      "name": "retrocpu_emu_rs",
-      "path": "./retrocpu_emu_rs",
     },
     {
       "name": "retrocpu_emu_ts",
@@ -33,8 +33,8 @@
       "path": "./retrocpu_asm_ts",
     },
     {
-      "name": "retrocpu_asm_rs",
-      "path": "./retrocpu_asm_rs",
+      "name": "retrocpu_test_framework_ts",
+      "path": "./retrocpu_test_framework_ts",
     },
     {
       "name": "tutorial",
