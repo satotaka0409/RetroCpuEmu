@@ -30,6 +30,7 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
@@ -72,25 +73,16 @@ fn call_handler(
     to_cpu: &[u8],
     from_cpu_len: usize,
 ) -> Result<Vec<u8>, FrameworkError> {
-    let io = Arc::clone(mock);
-    let frame = to_cpu.to_vec();
-    let worker = std::thread::spawn(move || {
-        let mut poll = || std::thread::yield_now();
-        io.exchange_with_cpu(&frame, from_cpu_len, &mut poll)
-    });
-
-    wait_req1(mock, Duration::from_millis(5000))?;
-    let _ = s.call(
-        "g_handshake_interrupt_handler",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-
-    worker
-        .join()
-        .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?
+    mock.run_io_handler_exchange(to_cpu, from_cpu_len, || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
 }
 
 fn plant_entry(s: &mut Mn1613AsmSession, slot: u8, index: u8, mark: u16) {

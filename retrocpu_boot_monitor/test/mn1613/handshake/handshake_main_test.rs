@@ -26,6 +26,7 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
@@ -114,26 +115,16 @@ fn call_handler(
     to_cpu: &[u8],
     from_cpu_len: usize,
 ) -> Result<Vec<u8>, FrameworkError> {
-    let io = Arc::clone(mock);
-    let frame = to_cpu.to_vec();
-    let feeder = std::thread::spawn(move || feed_io_to_cpu_frame(&io, &frame));
-
-    let _ = s.call(
-        "g_handshake_interrupt_handler",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-
-    feeder
-        .join()
-        .map_err(|_| FrameworkError::invalid_argument("io feeder panicked"))??;
-
-    if from_cpu_len == 0 {
-        return Ok(Vec::new());
-    }
-    collect_cpu_reply(mock, from_cpu_len)
+    mock.run_io_handler_exchange(to_cpu, from_cpu_len, || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
 }
 
 #[test]
@@ -172,7 +163,7 @@ fn cmd_0x44_finishes_without_reply() -> Result<(), FrameworkError> {
 fn cmd_0x12_drains_payload_and_returns_ng() -> Result<(), FrameworkError> {
     with_case(|s, mock| {
         let reply = call_handler(s, &mock, &[0x12, 0x00, 0x00, 0x02, 0x00, 0x00], 1)?;
-        assert_eq!(reply, vec![0x00]);
+        assert_eq!(reply, vec![0x01]);
         s.expect_registers(
             &CallRegisters {
                 r0: Some(0),

@@ -55,6 +55,23 @@ pub struct LedDisplayData {
     pub bullet_led_8_f: u8,
 }
 
+/// 1Ah ブレイク通知の記録（TS `lastBreakNotify` 相当）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BreakNotifyInfo {
+    /// 0=命令 / 1=MEM / 2=IO
+    pub kind: u8,
+    /// 比較器スロット 0–3
+    pub slot: u8,
+    /// 80h 設定の flags エコー
+    pub flags: u8,
+    /// n_stop エコー
+    pub break_count: u8,
+    /// 有効履歴件数
+    pub history_count: u8,
+    /// 監視アドレス（32bit）
+    pub addr: u32,
+}
+
 /// IO ボード mock 状態。
 #[derive(Debug, Clone)]
 pub struct IoBoardMockState {
@@ -80,6 +97,10 @@ pub struct IoBoardMockState {
     pub light_raw: LightRawData,
     /// 距離センサー生値
     pub distance_raw: DistanceRawData,
+    /// 直近 1Ah ブレイク通知。未通知なら None。
+    pub last_break_notify: Option<BreakNotifyInfo>,
+    /// 13h 未定義命令 LED（UNDEF 砲弾）
+    pub undef_led: bool,
 }
 
 impl IoBoardMockState {
@@ -105,6 +126,8 @@ impl IoBoardMockState {
                 distance_mm: 0,
                 range_status: 0,
             },
+            last_break_notify: None,
+            undef_led: false,
         }
     }
 

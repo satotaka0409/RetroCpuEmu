@@ -29,6 +29,7 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
@@ -50,66 +51,46 @@ fn wait_req1(mock: &IoBoardHandshakeMock, timeout: Duration) -> Result<(), Frame
     }
 }
 
-fn collect_cpu_frame(
-    mock: &IoBoardHandshakeMock,
-    expected_len: usize,
-) -> Result<Vec<u8>, FrameworkError> {
-    let mut frame = Vec::with_capacity(expected_len);
-    let start = Instant::now();
-    while frame.len() < expected_len {
-        if let Some(chunk) = mock.take_cpu_to_io_frame() {
-            frame.extend(chunk);
-            continue;
-        }
-        if start.elapsed() > Duration::from_millis(2000) {
-            return Err(FrameworkError::invalid_argument(
-                "timeout collecting cpu_to_io frame",
-            ));
-        }
-        std::thread::yield_now();
-    }
-    frame.truncate(expected_len);
-    Ok(frame)
-}
-
 fn cpu_to_io_bytes(
     s: &mut Mn1613AsmSession,
-    mock: &IoBoardHandshakeMock,
+    mock: &Arc<IoBoardHandshakeMock>,
     bytes: &[u8],
 ) -> Result<Vec<u8>, FrameworkError> {
-    let init = s.call(
-        "g_hshk_initiate_send",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-    assert_eq!(init.registers.r[0], HSHK_OK);
-
-    for b in bytes {
-        let sent = s.call(
-            "g_hshk_send_byte",
+    let received = mock.run_with_cpu_out_capture(bytes.len(), || {
+        let init = s.call(
+            "g_hshk_initiate_send",
             CallOptions {
-                registers: Some(CallRegisters {
-                    r0: Some(*b as u16),
-                    ..base_regs()
-                }),
+                registers: Some(base_regs()),
                 ..Default::default()
             },
         )?;
-        assert_eq!(sent.registers.r[0], HSHK_OK);
-    }
+        assert_eq!(init.registers.r[0], HSHK_OK);
 
-    let fin = s.call(
-        "g_hshk_finalize_send",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-    assert_eq!(fin.registers.r[0], HSHK_OK);
+        for b in bytes {
+            let sent = s.call(
+                "g_hshk_send_byte",
+                CallOptions {
+                    registers: Some(CallRegisters {
+                        r0: Some(*b as u16),
+                        ..base_regs()
+                    }),
+                    ..Default::default()
+                },
+            )?;
+            assert_eq!(sent.registers.r[0], HSHK_OK);
+        }
 
-    collect_cpu_frame(mock, bytes.len())
+        let fin = s.call(
+            "g_hshk_finalize_send",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        assert_eq!(fin.registers.r[0], HSHK_OK);
+        Ok(())
+    })?;
+    Ok(received)
 }
 
 fn io_to_cpu_bytes(
@@ -215,37 +196,38 @@ fn cpu_to_io_multiple_bytes_arrive_in_order() -> Result<(), FrameworkError> {
 #[test]
 fn send_word_sends_big_endian_two_bytes() -> Result<(), FrameworkError> {
     with_case(|s, mock| {
-        let init = s.call(
-            "g_hshk_initiate_send",
-            CallOptions {
-                registers: Some(base_regs()),
-                ..Default::default()
-            },
-        )?;
-        assert_eq!(init.registers.r[0], HSHK_OK);
+        let received = mock.run_with_cpu_out_capture(2, || {
+            let init = s.call(
+                "g_hshk_initiate_send",
+                CallOptions {
+                    registers: Some(base_regs()),
+                    ..Default::default()
+                },
+            )?;
+            assert_eq!(init.registers.r[0], HSHK_OK);
 
-        let sent = s.call(
-            "g_hshk_send_word",
-            CallOptions {
-                registers: Some(CallRegisters {
-                    r0: Some(0xabcd),
-                    ..base_regs()
-                }),
-                ..Default::default()
-            },
-        )?;
-        assert_eq!(sent.registers.r[0], HSHK_OK);
+            let sent = s.call(
+                "g_hshk_send_word",
+                CallOptions {
+                    registers: Some(CallRegisters {
+                        r0: Some(0xabcd),
+                        ..base_regs()
+                    }),
+                    ..Default::default()
+                },
+            )?;
+            assert_eq!(sent.registers.r[0], HSHK_OK);
 
-        let fin = s.call(
-            "g_hshk_finalize_send",
-            CallOptions {
-                registers: Some(base_regs()),
-                ..Default::default()
-            },
-        )?;
-        assert_eq!(fin.registers.r[0], HSHK_OK);
-
-        let received = collect_cpu_frame(&mock, 2)?;
+            let fin = s.call(
+                "g_hshk_finalize_send",
+                CallOptions {
+                    registers: Some(base_regs()),
+                    ..Default::default()
+                },
+            )?;
+            assert_eq!(fin.registers.r[0], HSHK_OK);
+            Ok(())
+        })?;
         assert_eq!(received, vec![0xab, 0xcd]);
         s.expect_registers(
             &CallRegisters {

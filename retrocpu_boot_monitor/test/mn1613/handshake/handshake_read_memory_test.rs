@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use retrocpu_test_framework_rs::{
     create_session_from_settings, CallOptions, CallRegisters, CodeTestIoMockEntry, FrameworkError,
@@ -32,47 +31,11 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
     ret
-}
-
-fn wait_req1(mock: &IoBoardHandshakeMock, timeout: Duration) -> Result<(), FrameworkError> {
-    let start = Instant::now();
-    loop {
-        if mock.wires.lock().expect("wires lock").hshk_in_req == 1 {
-            return Ok(());
-        }
-        if start.elapsed() > timeout {
-            return Err(FrameworkError::invalid_argument(
-                "timeout waiting hshk_in_req",
-            ));
-        }
-        std::thread::yield_now();
-    }
-}
-
-fn collect_cpu_reply(
-    mock: &IoBoardHandshakeMock,
-    expected_len: usize,
-) -> Result<Vec<u8>, FrameworkError> {
-    let mut out = Vec::with_capacity(expected_len);
-    let start = Instant::now();
-    while out.len() < expected_len {
-        if let Some(chunk) = mock.take_cpu_to_io_frame() {
-            out.extend(chunk);
-            continue;
-        }
-        if start.elapsed() > Duration::from_millis(5000) {
-            return Err(FrameworkError::invalid_argument(
-                "timeout collecting cpu reply",
-            ));
-        }
-        std::thread::yield_now();
-    }
-    out.truncate(expected_len);
-    Ok(out)
 }
 
 fn mem_read_header(byte_addr: u32, byte_count: usize) -> Vec<u8> {
@@ -96,29 +59,17 @@ fn call_read(
     byte_addr: u32,
     byte_count: usize,
 ) -> Result<Vec<u8>, FrameworkError> {
-    let io = Arc::clone(mock);
     let header = mem_read_header(byte_addr, byte_count);
-    let worker = std::thread::spawn(move || {
-        let mut poll = || std::thread::yield_now();
-        let _ = io.exchange_with_cpu(&header, 0, &mut poll)?;
-        let out = collect_cpu_reply(&io, byte_count)?;
-        let _ = io.exchange_with_cpu(&[0x00], 0, &mut poll)?;
-        Ok::<Vec<u8>, FrameworkError>(out)
-    });
-
-    wait_req1(mock, Duration::from_millis(5000))?;
-
-    let _ = s.call(
-        "g_handshake_interrupt_handler",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-
-    worker
-        .join()
-        .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?
+    mock.run_io_handler_exchange_ext(&header, byte_count, Some(&[0x00]), || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
 }
 
 fn write_byte_at(s: &mut Mn1613AsmSession, byte_addr: u32, b: u8) {

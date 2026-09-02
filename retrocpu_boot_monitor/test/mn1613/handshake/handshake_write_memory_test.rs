@@ -36,21 +36,6 @@ where
     ret
 }
 
-fn wait_req1(mock: &IoBoardHandshakeMock, timeout: Duration) -> Result<(), FrameworkError> {
-    let start = Instant::now();
-    loop {
-        if mock.wires.lock().expect("wires lock").hshk_in_req == 1 {
-            return Ok(());
-        }
-        if start.elapsed() > timeout {
-            return Err(FrameworkError::invalid_argument(
-                "timeout waiting hshk_in_req",
-            ));
-        }
-        std::thread::yield_now();
-    }
-}
-
 fn mem_write_frame(byte_addr: u32, data: &[u8]) -> Vec<u8> {
     let count = data.len() as u32;
     let mut out = vec![
@@ -69,107 +54,21 @@ fn mem_write_frame(byte_addr: u32, data: &[u8]) -> Vec<u8> {
     out
 }
 
-fn wait_in_dack<P>(
-    mock: &IoBoardHandshakeMock,
-    timeout: Duration,
-    pred: P,
-) -> Result<(), FrameworkError>
-where
-    P: Fn(u8) -> bool,
-{
-    let start = Instant::now();
-    loop {
-        let dack = mock.wires.lock().expect("wires lock").hshk_in_dack;
-        if pred(dack) {
-            return Ok(());
-        }
-        if start.elapsed() > timeout {
-            return Err(FrameworkError::invalid_argument(
-                "timeout waiting hshk_in_dack",
-            ));
-        }
-        std::thread::yield_now();
-    }
-}
-
-fn feed_io_to_cpu_frame(mock: &IoBoardHandshakeMock, data: &[u8]) -> Result<(), FrameworkError> {
-    let timeout = Duration::from_millis(5000);
-    {
-        let mut w = mock.wires.lock().expect("wires lock");
-        w.hshk_in_req = 1;
-        w.hshk_in_dena = 0;
-    }
-
-    let mut i = 0usize;
-    while i < data.len() {
-        let b0 = data[i];
-        let b1 = if i + 1 < data.len() { data[i + 1] } else { 0 };
-        {
-            let mut w = mock.wires.lock().expect("wires lock");
-            w.hshk_in_data = b0;
-            w.hshk_in_dena = 1;
-        }
-        wait_in_dack(mock, timeout, |d| d != 0)?;
-        {
-            let mut w = mock.wires.lock().expect("wires lock");
-            w.hshk_in_data = b1;
-            w.hshk_in_dena = 0;
-        }
-        wait_in_dack(mock, timeout, |d| d == 0)?;
-        i += 2;
-    }
-
-    mock.wires.lock().expect("wires lock").hshk_in_req = 0;
-    Ok(())
-}
-
-fn collect_cpu_reply(
-    mock: &IoBoardHandshakeMock,
-    expected_len: usize,
-) -> Result<Vec<u8>, FrameworkError> {
-    let mut out = Vec::with_capacity(expected_len);
-    let start = Instant::now();
-    while out.len() < expected_len {
-        if let Some(chunk) = mock.take_cpu_to_io_frame() {
-            out.extend(chunk);
-            continue;
-        }
-        if start.elapsed() > Duration::from_millis(5000) {
-            return Err(FrameworkError::invalid_argument(
-                "timeout collecting cpu reply",
-            ));
-        }
-        std::thread::yield_now();
-    }
-    out.truncate(expected_len);
-    Ok(out)
-}
-
 fn call_write(
     s: &mut Mn1613AsmSession,
     mock: &Arc<IoBoardHandshakeMock>,
     payload: &[u8],
 ) -> Result<Vec<u8>, FrameworkError> {
-    let io = Arc::clone(mock);
-    let frame = payload.to_vec();
-    let worker = std::thread::spawn(move || {
-        feed_io_to_cpu_frame(&io, &frame)?;
-        collect_cpu_reply(&io, 1)
-    });
-
-    wait_req1(mock, Duration::from_millis(5000))?;
-
-    let _ = s.call(
-        "g_handshake_interrupt_handler",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-
-    worker
-        .join()
-        .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?
+    mock.run_io_handler_exchange(payload, 1, || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
 }
 
 #[test]

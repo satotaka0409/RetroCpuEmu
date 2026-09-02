@@ -65,6 +65,32 @@ impl IoControlSync {
         Ok(bytes)
     }
 
+    /// IO→CPU 1 セッションで CPU 応答を論理バイト数だけ受信する（`OUT_REQ` 待ちなし。TS `receiveBytesFromCpu` 相当）。
+    pub fn receive_bytes_from_cpu<P>(
+        &self,
+        poll: &mut P,
+        length: usize,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        P: FnMut(),
+    {
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+        let mut data = vec![0u8; length];
+        let mut i = 0usize;
+        while i < length {
+            let (b0, b1) = self.receive_unit_from_cpu(poll)?;
+            data[i] = b0;
+            i += 1;
+            if i < length {
+                data[i] = b1;
+                i += 1;
+            }
+        }
+        Ok(data)
+    }
+
     /// IO→CPU 方向へ応答を送る。`raise_irq=false` は CPU→IO 応答（INT2 なし）。
     pub fn send<P>(&self, poll: &mut P, data: &[u8], raise_irq: bool) -> Result<(), FrameworkError>
     where
@@ -74,6 +100,30 @@ impl IoControlSync {
         self.transfer_bytes_to_cpu(poll, data)?;
         self.finalize_send(poll)?;
         Ok(())
+    }
+
+    /// IO→CPU 要求を開始する（TS `initiateSend` 相当）。
+    pub fn initiate_send<P>(&self, poll: &mut P, raise_irq: bool) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        self.initiate_send_inner(poll, raise_irq)
+    }
+
+    /// IO→CPU データ転送（同一 `IN_REQ` セッション内）。
+    pub fn transfer_bytes_to_cpu<P>(&self, poll: &mut P, data: &[u8]) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        self.transfer_bytes_to_cpu_inner(poll, data)
+    }
+
+    /// IO→CPU セッション完了（`IN_REQ` を下ろす。TS `finalizeSend` 相当）。
+    pub fn finalize_send<P>(&self, poll: &mut P) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        self.finalize_send_inner(poll)
     }
 
     fn wait<P, F>(&self, poll: &mut P, cond: F) -> Result<(), FrameworkError>
@@ -138,7 +188,7 @@ impl IoControlSync {
         self.wait(poll, |w| w.hshk_out_req == 0)
     }
 
-    fn initiate_send<P>(&self, poll: &mut P, raise_irq: bool) -> Result<(), FrameworkError>
+    fn initiate_send_inner<P>(&self, poll: &mut P, raise_irq: bool) -> Result<(), FrameworkError>
     where
         P: FnMut(),
     {
@@ -182,7 +232,7 @@ impl IoControlSync {
         self.wait(poll, |w| w.hshk_in_dack == 0)
     }
 
-    fn transfer_bytes_to_cpu<P>(&self, poll: &mut P, data: &[u8]) -> Result<(), FrameworkError>
+    fn transfer_bytes_to_cpu_inner<P>(&self, poll: &mut P, data: &[u8]) -> Result<(), FrameworkError>
     where
         P: FnMut(),
     {
@@ -196,7 +246,7 @@ impl IoControlSync {
         Ok(())
     }
 
-    fn finalize_send<P>(&self, poll: &mut P) -> Result<(), FrameworkError>
+    fn finalize_send_inner<P>(&self, poll: &mut P) -> Result<(), FrameworkError>
     where
         P: FnMut(),
     {

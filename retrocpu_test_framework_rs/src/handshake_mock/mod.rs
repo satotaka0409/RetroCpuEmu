@@ -7,20 +7,23 @@ mod io_control_sync;
 mod mock_state;
 mod types;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use retrocpu_emu_rs::cpuboard::{
     Mn1613FrameLink as FrameLink, Mn1613HandshakeTransport as HandshakeTransport,
     Mn1613HandshakeWires as HandshakeWires, Mn1613IoCallbacks as IoCallbacks,
     Mn1613NullIo as NullIo, MN1613_HSHK_CTRL_IN_DACK as HSHK_CTRL_IN_DACK,
-    MN1613_HSHK_CTRL_OUT_DENA as HSHK_CTRL_OUT_DENA, MN1613_HSHK_CTRL_OUT_REQ as HSHK_CTRL_OUT_REQ,
     MN1613_HSHK_IN_CTRL_IN_REQ as HSHK_IN_CTRL_IN_REQ,
+    MN1613_INT2_CAUSE_HANDSHAKE as INT2_CAUSE_HANDSHAKE,
     MN1613_IO_PORT_HSHK_IN_CTRL as IO_PORT_HSHK_IN_CTRL,
-    MN1613_IO_PORT_HSHK_OUT_CTRL as IO_PORT_HSHK_OUT_CTRL,
-    MN1613_IO_PORT_HSHK_OUT_DATA as IO_PORT_HSHK_OUT_DATA,
 };
 
-pub use mock_state::{BeepParams, IoBoardMockState, LedDisplayData, TimerParams};
+pub use mock_state::{
+    BeepParams, BreakNotifyInfo, IoBoardMockState, LedDisplayData, TimerParams,
+};
 pub use types::{CMD_MODE_SET, MODE_FREE, MODE_MONITOR, RESPONSE_OK};
 
 use crate::error::FrameworkError;
@@ -77,31 +80,135 @@ impl IoBoardHandshakeMock {
         self.link.lock().expect("link lock").clear();
         *self.state.lock().expect("state lock") = IoBoardMockState::new();
     }
-
-    /// 受信フレームをディスパッチして応答バイト列を返す（線シミュレーションなし）。
     pub fn dispatch_cpu_to_io(&self, frame: &[u8]) -> Vec<u8> {
         dispatch_cpu_to_io(&mut self.state.lock().expect("state lock"), frame)
     }
 
-    /// CPU→IO を 1 トランザクション処理（受信→dispatch→応答送信）。
+    fn wait_in_dack<P>(
+        &self,
+        poll: &mut P,
+        timeout: Duration,
+        pred: impl Fn(u8) -> bool,
+    ) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        let start = Instant::now();
+        loop {
+            poll();
+            let dack = self.wires.lock().expect("wires lock").hshk_in_dack;
+            if pred(dack) {
+                return Ok(());
+            }
+            if start.elapsed() > timeout {
+                return Err(FrameworkError::invalid_argument(
+                    "timeout waiting hshk_in_dack",
+                ));
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    /// CPU の OUT_REQ が立つまで短時間ポーリングする（TS `serveLoop` 相当）。
+    fn wait_out_req<P>(&self, poll: &mut P, timeout: Duration) -> bool
+    where
+        P: FnMut(),
+    {
+        let start = Instant::now();
+        loop {
+            if self.wires.lock().expect("wires lock").hshk_out_req != 0 {
+                return true;
+            }
+            if start.elapsed() >= timeout {
+                return false;
+            }
+            poll();
+            std::thread::yield_now();
+        }
+    }
+
+    /// IO→CPU 応答バイト列を線上へ送る（CPU→IO 応答用。INT2 は上げない）。
+    pub fn feed_io_response<P>(&self, poll: &mut P, data: &[u8]) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        let timeout = Duration::from_millis(self.timeout_ms);
+        {
+            let mut w = self.wires.lock().expect("wires lock");
+            w.hshk_in_req = 1;
+            w.hshk_in_dena = 0;
+            w.int_cause = INT2_CAUSE_HANDSHAKE;
+        }
+        let mut i = 0usize;
+        while i < data.len() {
+            let b0 = data[i];
+            let b1 = if i + 1 < data.len() { data[i + 1] } else { 0 };
+            {
+                let mut w = self.wires.lock().expect("wires lock");
+                w.hshk_in_data = b0;
+                w.hshk_in_dena = 1;
+            }
+            self.wait_in_dack(poll, timeout, |d| d != 0)?;
+            {
+                let mut w = self.wires.lock().expect("wires lock");
+                w.hshk_in_data = b1;
+                w.hshk_in_dena = 0;
+            }
+            self.wait_in_dack(poll, timeout, |d| d == 0)?;
+            i += 2;
+        }
+        self.wires.lock().expect("wires lock").hshk_in_req = 0;
+        Ok(())
+    }
+
+    /// CPU→IO を 1 トランザクション処理（線シミュレーション + 可変長 1Ah）。
     pub fn handle_one_request<P>(&self, poll: &mut P) -> Result<Vec<u8>, FrameworkError>
     where
         P: FnMut(),
     {
         let io = IoControlSync::new(Arc::clone(&self.wires), self.timeout_ms);
-        let entry_size = BREAK_HISTORY_ENTRY_SIZE_MN1613;
-        let frame = io
-            .receive_framed_adaptive(poll, |so_far| cpu_to_io_remaining_size(so_far, entry_size))?;
+        let frame = io.receive_framed_adaptive(poll, |so_far| {
+            cpu_to_io_remaining_size(so_far, BREAK_HISTORY_ENTRY_SIZE_MN1613)
+        })?;
         let response = self.dispatch_cpu_to_io(&frame);
         if !response.is_empty() {
-            io.send(poll, &response, false)?;
+            self.feed_io_response(poll, &response)?;
         }
         Ok(response)
+    }
+
+    /// IO→CPU 1 フレームを線上へ送る（`g_handshake_interrupt_handler` を `call` するテスト向け）。
+    pub fn feed_io_to_cpu<P>(&self, poll: &mut P, data: &[u8]) -> Result<(), FrameworkError>
+    where
+        P: FnMut(),
+    {
+        self.feed_io_response(poll, data)
+    }
+
+    /// `call` 完了後に CPU→IO 応答を線から読み出す（独立 `OUT_REQ` トランザクション向け）。
+    pub fn receive_cpu_to_io<P>(
+        &self,
+        poll: &mut P,
+        from_cpu_len: usize,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        P: FnMut(),
+    {
+        if from_cpu_len == 0 {
+            return Ok(Vec::new());
+        }
+        let io = IoControlSync::new(Arc::clone(&self.wires), self.timeout_ms);
+        io.receive_framed_adaptive(poll, |so_far| from_cpu_len.saturating_sub(so_far.len()))
+            .map(|mut frame| {
+                frame.truncate(from_cpu_len);
+                frame
+            })
     }
 
     /// IO→CPU フレームを送信し、CPU→IO 応答を指定バイト数だけ受信する。
     ///
     /// TS の `exchangeWithCpu(toCpu, fromCpu)` 相当。
+    /// `call` 直列のテストでは `run_io_handler_exchange` を使う。
     pub fn exchange_with_cpu<P>(
         &self,
         to_cpu: &[u8],
@@ -112,14 +219,15 @@ impl IoBoardHandshakeMock {
         P: FnMut(),
     {
         let io = IoControlSync::new(Arc::clone(&self.wires), self.timeout_ms);
-        io.send(poll, to_cpu, true)?;
-        if from_cpu_len == 0 {
-            return Ok(Vec::new());
-        }
-        let mut frame =
-            io.receive_framed_adaptive(poll, |so_far| from_cpu_len.saturating_sub(so_far.len()))?;
-        frame.truncate(from_cpu_len);
-        Ok(frame)
+        io.initiate_send(poll, false)?;
+        io.transfer_bytes_to_cpu(poll, to_cpu)?;
+        let reply = if from_cpu_len > 0 {
+            io.receive_bytes_from_cpu(poll, from_cpu_len)?
+        } else {
+            Vec::new()
+        };
+        io.finalize_send(poll)?;
+        Ok(reply)
     }
 
     /// 64bit タイマー応答（11h）を設定する。
@@ -128,6 +236,181 @@ impl IoBoardHandshakeMock {
             .lock()
             .expect("state lock")
             .set_timestamp_u64(value);
+    }
+
+    /// IO:0021 割り込み要因（下位 3bit）を設定する。
+    pub fn set_int_cause(&self, cause: u8) {
+        self.wires.lock().expect("wires lock").int_cause = cause & 0x07;
+    }
+
+    /// 直近 1Ah ブレイク通知。
+    pub fn last_break_notify(&self) -> Option<BreakNotifyInfo> {
+        self.state.lock().expect("state lock").last_break_notify.clone()
+    }
+
+    /// 13h 後の UNDEF LED 状態。
+    pub fn undef_led(&self) -> bool {
+        self.state.lock().expect("state lock").undef_led
+    }
+
+    /// モック状態の通知記録をクリアする。
+    pub fn clear_notify_state(&self) {
+        let mut st = self.state.lock().expect("state lock");
+        st.last_break_notify = None;
+        st.undef_led = false;
+    }
+
+    /// ハンドシェイク転送線だけアイドルに戻す（応答 DACK 未完了の残骸を消す）。
+    pub fn reset_handshake_activity(&self) {
+        let mut w = self.wires.lock().expect("wires lock");
+        w.hshk_out_req = 0;
+        w.hshk_out_dena = 0;
+        w.hshk_in_dack = 0;
+        w.hshk_in_req = 0;
+        w.hshk_in_dena = 0;
+        w.hshk_out_dack = 0;
+        w.interrupt_busy = 0;
+    }
+
+    /// IO→CPU を送りつつ `run_handler`（通常 `session.call(g_handshake_interrupt_handler)`）と並行し、CPU→IO 応答を返す。
+    pub fn run_io_handler_exchange<F>(
+        self: &Arc<Self>,
+        to_cpu: &[u8],
+        from_cpu_len: usize,
+        run_handler: F,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        F: FnOnce() -> Result<(), FrameworkError>,
+    {
+        self.run_io_handler_exchange_ext(to_cpu, from_cpu_len, None, run_handler)
+    }
+
+    /// `run_io_handler_exchange` に、CPU 応答後の追加 IO→CPU（13h status 等）を足した版。
+    pub fn run_io_handler_exchange_ext<F>(
+        self: &Arc<Self>,
+        to_cpu: &[u8],
+        from_cpu_len: usize,
+        then_to_cpu: Option<&[u8]>,
+        run_handler: F,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        F: FnOnce() -> Result<(), FrameworkError>,
+    {
+        self.reset_handshake_activity();
+        let io = Arc::clone(self);
+        let frame = to_cpu.to_vec();
+        let tail = then_to_cpu.map(|s| s.to_vec());
+        let worker = std::thread::spawn(move || -> Result<Vec<u8>, FrameworkError> {
+            let mut poll = || std::thread::yield_now();
+            let sync = IoControlSync::new(Arc::clone(&io.wires), io.timeout_ms);
+            sync.initiate_send(&mut poll, false)?;
+            sync.transfer_bytes_to_cpu(&mut poll, &frame)?;
+            let reply = if from_cpu_len > 0 {
+                sync.receive_bytes_from_cpu(&mut poll, from_cpu_len)?
+            } else {
+                Vec::new()
+            };
+            if let Some(extra) = tail.as_ref() {
+                if !extra.is_empty() {
+                    sync.transfer_bytes_to_cpu(&mut poll, extra)?;
+                }
+            }
+            sync.finalize_send(&mut poll)?;
+            Ok(reply)
+        });
+        let handler_result = run_handler();
+        let io_result = worker
+            .join()
+            .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?;
+        handler_result.map_err(|e| {
+            FrameworkError::invalid_argument(format!("g_handshake_interrupt_handler call: {e}"))
+        })?;
+        io_result.map_err(|e| FrameworkError::invalid_argument(format!("io exchange: {e}")))
+    }
+
+    /// CPU→IO 1 トランザクションを `run_cpu` と並行処理する（TS `Promise.all([call, handleOneRequest])` 相当）。
+    pub fn run_with_cpu_to_io_request<F>(
+        self: &Arc<Self>,
+        run_cpu: F,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        F: FnOnce() -> Result<(), FrameworkError>,
+    {
+        self.reset_handshake_activity();
+        let io = Arc::clone(self);
+        let worker = std::thread::spawn(move || -> Result<Vec<u8>, FrameworkError> {
+            let mut poll = || std::thread::yield_now();
+            io.handle_one_request(&mut poll)
+        });
+        run_cpu()?;
+        worker
+            .join()
+            .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?
+            .map_err(|e| FrameworkError::invalid_argument(format!("cpu_to_io serve: {e}")))
+    }
+
+    /// `g_hshk_*` 送信のみ検証向け。CPU→IO バイト列を線から受信する（dispatch なし）。
+    pub fn run_with_cpu_out_capture<F>(
+        self: &Arc<Self>,
+        expected_len: usize,
+        run_cpu: F,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        F: FnOnce() -> Result<(), FrameworkError>,
+    {
+        self.reset_handshake_activity();
+        let io = Arc::clone(self);
+        let worker = std::thread::spawn(move || -> Result<Vec<u8>, FrameworkError> {
+            let mut poll = || std::thread::yield_now();
+            io.receive_cpu_to_io(&mut poll, expected_len)
+        });
+        run_cpu()?;
+        worker
+            .join()
+            .map_err(|_| FrameworkError::invalid_argument("io worker panicked"))?
+            .map_err(|e| FrameworkError::invalid_argument(format!("cpu out capture: {e}")))
+    }
+
+    /// CPU→IO 応答をバックグラウンドで処理する（TS `start()` 相当）。
+    pub fn start_serve(self: &Arc<Self>) -> BackgroundServe {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_flag = Arc::clone(&stop);
+        let mock = Arc::clone(self);
+        let join = thread::spawn(move || {
+            while !stop_flag.load(Ordering::Relaxed) {
+                let mut poll = || std::thread::yield_now();
+                if !mock.wait_out_req(&mut poll, Duration::from_millis(1)) {
+                    continue;
+                }
+                match mock.handle_one_request(&mut poll) {
+                    Ok(_) => {}
+                    Err(e)
+                        if e.to_string().contains("timeout")
+                            || e.to_string().contains("ENA0") =>
+                    {
+                        continue;
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        BackgroundServe { stop, join: Some(join) }
+    }
+}
+
+/// `start_serve` の停止ハンドル。
+pub struct BackgroundServe {
+    stop: Arc<AtomicBool>,
+    join: Option<JoinHandle<()>>,
+}
+
+impl BackgroundServe {
+    /// 受信ループを止める（TS `stop()` 相当）。
+    pub fn stop(mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
     }
 }
 
@@ -236,25 +519,8 @@ impl TestIoCallbacks {
         };
         let mut wires = hs.wires.lock().expect("wires lock");
         wires.write_port(port, val);
-        if port == IO_PORT_HSHK_OUT_CTRL {
-            if (val & HSHK_CTRL_OUT_DENA) != 0 {
-                wires.hshk_out_dack = 1;
-            } else if wires.hshk_out_dena == 0 {
-                wires.hshk_out_dack = 0;
-            }
-            if (val & HSHK_CTRL_OUT_REQ) != 0 {
-                wires.hshk_out_dena = 0;
-            }
-        }
         if port == IO_PORT_HSHK_IN_CTRL && (val & HSHK_CTRL_IN_DACK) != 0 {
             wires.hshk_in_dena = 0;
-        }
-        if port == IO_PORT_HSHK_OUT_DATA {
-            let _ = hs
-                .link
-                .lock()
-                .expect("link lock")
-                .push_cpu_to_io(&[(val & 0xff) as u8]);
         }
     }
 }

@@ -25,6 +25,7 @@ where
     F: FnOnce(&mut Mn1613AsmSession) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&super::mn1613_rs_settings(), None)?;
+    s.run_init()?;
     f(&mut s)
 }
 
@@ -39,32 +40,53 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
-    let ret = f(&mut s, mock);
+    let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
     ret
 }
 
-fn set_single_recv_byte(mock: &IoBoardHandshakeMock, value: u8) {
-    let mut w = mock.wires.lock().expect("wires lock");
-    w.hshk_in_dena = 1;
-    w.hshk_in_data = value;
-}
-
 fn call_break_resume(
     s: &mut Mn1613AsmSession,
-    mock: &IoBoardHandshakeMock,
+    mock: &Arc<IoBoardHandshakeMock>,
     mode: u8,
 ) -> Result<Vec<u8>, FrameworkError> {
-    set_single_recv_byte(mock, mode);
-    let _ = s.call(
-        "g_hshk_break_resume",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-    Ok(mock.take_cpu_to_io_frame().unwrap_or_default())
+    mock.run_io_handler_exchange(&[0x18, mode], 1, || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
+}
+
+fn preset_io_status_byte(mock: &IoBoardHandshakeMock) {
+    let mut w = mock.wires.lock().expect("wires lock");
+    w.hshk_in_req = 1;
+    w.hshk_in_dena = 1;
+    w.hshk_in_data = 0;
+}
+
+fn call_step_interrupt_and_capture(
+    s: &mut Mn1613AsmSession,
+    mock: &Arc<IoBoardHandshakeMock>,
+) -> Result<Vec<u8>, FrameworkError> {
+    preset_io_status_byte(mock);
+    mock.run_with_cpu_out_capture(60, || {
+        let r = s.call(
+            "g_step_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        assert_eq!(r.registers.r[0], 1);
+        Ok(())
+    })
 }
 
 #[test]
@@ -156,22 +178,8 @@ fn step_interrupt_notify_contains_user_ic() -> Result<(), FrameworkError> {
     with_handshake_session(|s, mock| {
         s.write_word(INT1_STR_SAVE, 0x0700);
         s.write_word(INT1_IC_SAVE, USER_IC);
-        let mut w = mock.wires.lock().expect("wires lock");
-        w.hshk_in_req = 1;
-        w.hshk_in_dena = 1;
-        w.hshk_in_data = 0;
-        drop(w);
 
-        let r = s.call(
-            "g_step_interrupt_handler",
-            CallOptions {
-                registers: Some(base_regs()),
-                ..Default::default()
-            },
-        )?;
-        assert_eq!(r.registers.r[0], 1);
-
-        let frame = mock.take_cpu_to_io_frame().unwrap_or_default();
+        let frame = call_step_interrupt_and_capture(s, &mock)?;
         assert!(frame.len() >= 6);
         assert_eq!(frame[0], 0x1b);
         let ic = ((frame[4] as u16) << 8) | frame[5] as u16;
@@ -185,22 +193,8 @@ fn step_interrupt_notify_contains_main_loop_ic() -> Result<(), FrameworkError> {
     with_handshake_session(|s, mock| {
         s.write_word(INT1_STR_SAVE, 0x0700);
         s.write_word(INT1_IC_SAVE, IDLE_IC);
-        let mut w = mock.wires.lock().expect("wires lock");
-        w.hshk_in_req = 1;
-        w.hshk_in_dena = 1;
-        w.hshk_in_data = 0;
-        drop(w);
 
-        let r = s.call(
-            "g_step_interrupt_handler",
-            CallOptions {
-                registers: Some(base_regs()),
-                ..Default::default()
-            },
-        )?;
-        assert_eq!(r.registers.r[0], 1);
-
-        let frame = mock.take_cpu_to_io_frame().unwrap_or_default();
+        let frame = call_step_interrupt_and_capture(s, &mock)?;
         assert!(frame.len() >= 6);
         assert_eq!(frame[0], 0x1b);
         let ic = ((frame[4] as u16) << 8) | frame[5] as u16;

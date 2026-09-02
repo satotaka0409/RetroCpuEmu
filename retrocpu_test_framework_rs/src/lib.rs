@@ -41,7 +41,8 @@ pub use framework::tms9995::{
 };
 pub use handshake_mock::{
     is_io_to_cpu_request_asserted, is_io_to_cpu_request_asserted_ports,
-    with_framework_io_mock_defaults, CodeTestIoMock, IoBoardHandshakeMock, TestIoCallbacks,
+    with_framework_io_mock_defaults, BackgroundServe, BreakNotifyInfo, CodeTestIoMock,
+    IoBoardHandshakeMock, TestIoCallbacks,
 };
 pub use hex_cdb::{defs_to_cdb, image_to_intel_hex};
 pub use json_suite::{expand_placeholders, resolve_suite_path};
@@ -59,6 +60,9 @@ pub use mn1613::{
     clear_cpu_logs_before_run, create_mn1613_asm_session, create_session_from_settings,
     mn1613_logs_dir_from_test_file, CallOptions, CallRegisters, Mn1613AsmSession,
     Mn1613SessionOptions, RegisterExpect,
+};
+pub use retrocpu_emu_rs::cpuboard::{
+    Mn1613CpuRegister, Mn1613CpuRegisterPatch, Mn1613ExecStatus,
 };
 
 /// 逆アセンブラ（CPU 別サブモジュール）。

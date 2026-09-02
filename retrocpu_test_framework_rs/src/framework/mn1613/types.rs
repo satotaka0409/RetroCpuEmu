@@ -18,6 +18,10 @@ pub struct CallRegisters {
     pub ssbr: Option<u16>,
     pub tsr0: Option<u16>,
     pub tsr1: Option<u16>,
+    pub ic: Option<u16>,
+    pub iisr: Option<u16>,
+    pub npp: Option<u8>,
+    pub osr: Option<[u8; 4]>,
 }
 
 /// サブルーチン呼び出しオプション。
@@ -44,6 +48,7 @@ pub struct CallResultRegisters {
     pub ic: u16,
     pub csbr: u16,
     pub ssbr: u16,
+    pub iisr: u16,
 }
 
 /// call の戻り値。

@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use retrocpu_emu_rs::cpuboard::{
-    Mn1613Core, Mn1613CpuRegisterPatch as CpuRegisterPatch, Mn1613ExecStatus as ExecStatus,
+    Mn1613Core, Mn1613CpuRegister as CpuRegister,
+    Mn1613CpuRegisterPatch as CpuRegisterPatch, Mn1613ExecStatus as ExecStatus,
     Mn1613IoCallbacks as IoCallbacks, Mn1613Ram, PHYS_MASK,
 };
 use retrocpu_emu_rs::ioboard::dma_load_intel_hex;
@@ -266,27 +267,62 @@ impl Mn1613AsmSession {
         Ok(())
     }
 
+    /// 指定ワードアドレスから HALT まで実行する（TS `run()` 相当）。
+    pub fn run(&mut self, entry: u16) -> Result<ExecStatus, FrameworkError> {
+        self.bind_cpu_log_hooks();
+        self.core.set_state(&CpuRegisterPatch {
+            ic: Some(entry),
+            ..Default::default()
+        });
+        self.core.set_exec_status(ExecStatus::Running);
+        if let Some(log) = &self.cpu_log {
+            log.begin_run("run", &format!("0x{}", hex4(entry)));
+        }
+        self.run_until_halt(entry)
+    }
+
+    /// 現在の CPU レジスタ（TS `getState()` 相当）。
+    pub fn cpu_state(&self) -> CpuRegister {
+        self.core.get_state()
+    }
+
+    /// CPU レジスタを部分更新する（TS `setState()` 相当）。
+    pub fn set_cpu_state(&mut self, patch: &CpuRegisterPatch) {
+        self.core.set_state(patch);
+    }
+
+    /// 割り込み要求（level 0–2）。`int_cause` は IO:0021 へ載せる値（省略可）。
+    pub fn trigger_interrupt(&mut self, level: u8, int_cause: Option<u8>) {
+        if let Some(cause) = int_cause {
+            if let Some(mock) = &self.attached_io_mock {
+                if let Some(hs) = &mock.handshake {
+                    hs.set_int_cause(cause);
+                }
+            }
+        }
+        self.core.trigger_interrupt(level);
+    }
+
     fn run_until_halt(&mut self, entry: u16) -> Result<ExecStatus, FrameworkError> {
         let mut ic = entry;
         let mut remaining = self.max_cycles as usize;
         while remaining > 0 {
             let batch = remaining.min(4096);
-            let st =
-                match self
-                    .core
-                    .run_slice(&mut self.ram.lock().expect("ram lock"), Some(ic), batch)
-                {
-                    Ok(st) => st,
-                    Err(e) => {
-                        let msg = e.to_string();
-                        if msg.contains("max cycles reached") {
-                            remaining = remaining.saturating_sub(batch);
-                            ic = self.core.get_state().ic;
-                            continue;
-                        }
-                        return Err(FrameworkError::invalid_argument(format!("run: {e}")));
+            let st = match self
+                .core
+                .run_slice(&mut self.ram.lock().expect("ram lock"), Some(ic), batch)
+            {
+                Ok(st) => st,
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("max cycles reached") {
+                        remaining = remaining.saturating_sub(batch);
+                        ic = self.core.get_state().ic;
+                        continue;
                     }
-                };
+                    return Err(FrameworkError::invalid_argument(format!("run: {e}")));
+                }
+            };
             remaining = remaining.saturating_sub(batch);
             if matches!(
                 st,
@@ -419,6 +455,7 @@ impl Mn1613AsmSession {
                 ic: reg.ic,
                 csbr: reg.csbr as u16,
                 ssbr: reg.ssbr as u16,
+                iisr: reg.iisr,
             },
             pre_call_sp,
             entry_word_addr: entry,
@@ -446,6 +483,7 @@ impl Mn1613AsmSession {
             ic: s.ic,
             csbr: s.csbr as u16,
             ssbr: s.ssbr as u16,
+            iisr: s.iisr,
         };
         check_all_regs(&reg, expected)
     }
@@ -564,10 +602,21 @@ fn apply_call_registers(core: &mut Mn1613Core, regs: Option<&CallRegisters>) {
     }
     patch.sp = regs.sp;
     patch.str = regs.str_reg;
+    patch.ic = regs.ic;
+    patch.iisr = regs.iisr;
+    patch.npp = regs.npp;
     patch.csbr = regs.csbr.map(|v| v as u8);
     patch.ssbr = regs.ssbr.map(|v| v as u8);
     patch.tsr0 = regs.tsr0.map(|v| v as u8);
     patch.tsr1 = regs.tsr1.map(|v| v as u8);
+    if let Some(osr) = regs.osr {
+        patch.osr = Some([
+            Some(osr[0]),
+            Some(osr[1]),
+            Some(osr[2]),
+            Some(osr[3]),
+        ]);
+    }
     core.set_state(&patch);
 }
 
@@ -584,6 +633,8 @@ fn check_all_regs(
     check_reg("STR", reg.str_reg, expected.str_reg)?;
     check_reg("CSBR", reg.csbr, expected.csbr)?;
     check_reg("SSBR", reg.ssbr, expected.ssbr)?;
+    check_reg("IC", reg.ic, expected.ic)?;
+    check_reg("IISR", reg.iisr, expected.iisr)?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 //! CPU→IO コマンド受信長とディスパッチ（HandShake.mdc）。
 
-use super::mock_state::{read_u16_be, IoBoardMockState, LedDisplayData};
+use super::mock_state::{read_u16_be, BreakNotifyInfo, IoBoardMockState, LedDisplayData};
 use super::types::*;
 
 /// 可変長 1Ah を含む残余バイト数。
@@ -108,9 +108,38 @@ pub fn dispatch_cpu_to_io(state: &mut IoBoardMockState, frame: &[u8]) -> Vec<u8>
             if slot >= ADDR_BREAK_SLOT_COUNT {
                 return vec![RESPONSE_NG];
             }
+            let history_count = frame[2];
+            if history_count > BREAK_HISTORY_MAX_COUNT {
+                return vec![RESPONSE_NG];
+            }
+            let flags = frame[3];
+            let break_count = frame[4];
+            let addr = u32::from(frame[5]) << 24
+                | u32::from(frame[6]) << 16
+                | u32::from(frame[7]) << 8
+                | u32::from(frame[8]);
+            let kind = if (flags & 0x40) != 0 {
+                0
+            } else if (flags & 0x01) != 0 {
+                2
+            } else {
+                1
+            };
+            state.last_break_notify = Some(BreakNotifyInfo {
+                kind,
+                slot,
+                flags,
+                break_count,
+                history_count,
+                addr,
+            });
             vec![RESPONSE_OK]
         }
-        CMD_LCD_CTRL | CMD_LCD_TEXT | CMD_STEP_NOTIFY | CMD_UNDEF_NOTIFY => vec![RESPONSE_OK],
+        CMD_LCD_CTRL | CMD_LCD_TEXT | CMD_STEP_NOTIFY => vec![RESPONSE_OK],
+        CMD_UNDEF_NOTIFY => {
+            state.undef_led = true;
+            vec![RESPONSE_OK]
+        }
         0x1c => {
             let mut out = state.rtc_raw.to_vec();
             out.push(RESPONSE_OK);

@@ -33,6 +33,7 @@ where
     F: FnOnce(&mut Mn1613AsmSession, Arc<IoBoardHandshakeMock>) -> Result<(), FrameworkError>,
 {
     let mut s = create_session_from_settings(&handshake_settings(), None)?;
+    s.run_init()?;
     let mock = s.require_handshake_mock()?;
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
@@ -83,23 +84,16 @@ fn call_handler(
     mock: &Arc<IoBoardHandshakeMock>,
     to_cpu: &[u8],
 ) -> Result<Vec<u8>, FrameworkError> {
-    let io = Arc::clone(mock);
-    let frame = to_cpu.to_vec();
-    let feeder = std::thread::spawn(move || feed_io_to_cpu_frame(&io, &frame));
-
-    let _ = s.call(
-        "g_handshake_interrupt_handler",
-        CallOptions {
-            registers: Some(base_regs()),
-            ..Default::default()
-        },
-    )?;
-
-    feeder
-        .join()
-        .map_err(|_| FrameworkError::invalid_argument("io feeder panicked"))??;
-
-    Ok(mock.take_cpu_to_io_frame().unwrap_or_default())
+    mock.run_io_handler_exchange(to_cpu, 1, || {
+        let _ = s.call(
+            "g_handshake_interrupt_handler",
+            CallOptions {
+                registers: Some(base_regs()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
 }
 
 fn wait_wire<P>(
