@@ -92,7 +92,7 @@ impl IoControlSync {
             if start.elapsed() >= Duration::from_millis(self.timeout_ms) {
                 return Err(FrameworkError::invalid_argument("handshake timeout"));
             }
-            std::thread::sleep(Duration::from_millis(1));
+            std::thread::yield_now();
         }
     }
 

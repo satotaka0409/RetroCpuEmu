@@ -8,7 +8,6 @@
 
 	.cpu	mn1613
 
-	.include "../interrupt_io.inc"
 	.include "../handshake/handshake_io.inc"
 
 	.area	_CODE		(REL,CON)
@@ -91,9 +90,6 @@ l_bp_ha_prev_z:
 	eor	R0, R0
 	st	R0, BP_HA_PREVW(X0)
 l_bp_ha_prev_done:
-	; 11h。INT2 中は BUSY=1 のままでは IO が応答しない
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
 	bald	g_hshk_get_time_
 
 	; スロット → メタ。dest = F000h + slot*132 + head*33

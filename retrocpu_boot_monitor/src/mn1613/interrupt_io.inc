@@ -1,7 +1,7 @@
 ; 割り込み関連 IO ポート定義
 ; 根拠: MN1613_CPUボードメモリ_IOマップ.mdc
 
-INTERRUPT_BUSY	.equ	0x20	; 割り込み処理中フラグ Bit0
+HANDHSAKE_INTERRUPT_BUSY	.equ	0x20	; ハンドシェイク割り込み処理中フラグ Bit0
 INT_CAUSE	.equ	0x21	; Bit0=INT1_CAUSE, Bit1-2=INT2_CAUSE
 
 ; INT1 要因（Bit0）

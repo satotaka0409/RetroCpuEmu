@@ -1,7 +1,7 @@
 ; ハンドシェイク用IOポート定義（CPUボード視点）
 ; 根拠: HandShake.mdc / MN1613_CPUボードメモリ_IOマップ.mdc
 ;
-; 割り込みポート（INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
+; 割り込みポート（HANDHSAKE_INTERRUPT_BUSY / INT_CAUSE / INT_CAUSE_HSHK）は
 ; interrupt_io.inc と共有。二重 .equ を避けるため include する。
 ; memmap.inc は _VECTOR/_BIOS の .org を含むのでここからは include しない。
 	.include "../interrupt_io.inc"

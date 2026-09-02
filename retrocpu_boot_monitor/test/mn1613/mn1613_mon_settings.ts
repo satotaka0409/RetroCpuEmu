@@ -8,7 +8,7 @@ import type {
   CodeTestIoMockEntry,
   CpuLogMode,
   JsonTestSettings,
-} from "../../../retrocpu_test_framework/src/index.js";
+} from "../../../retrocpu_test_framework_ts/src/index.js";
 
 /** `logs/mn1613`（テスト専用 CPU ログ） */
 export const MN1613_TEST_LOG_DIR = path.resolve(

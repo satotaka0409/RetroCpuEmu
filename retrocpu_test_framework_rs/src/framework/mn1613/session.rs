@@ -25,7 +25,7 @@ use super::cdb::{parse_cdb, require_symbol, CdbTable};
 use super::cpu_log::CpuExecutionLog;
 use super::m_sequence::create_m_sequence_memory;
 use super::types::{
-    CallMode, CallOptions, CallResult, CallResultRegisters, CallRegisters, Mn1613SessionOptions,
+    CallMode, CallOptions, CallRegisters, CallResult, CallResultRegisters, Mn1613SessionOptions,
     RegisterExpect, StackWorkExpect,
 };
 
@@ -93,7 +93,10 @@ impl Mn1613AsmSession {
         let hex_file = hex_file.into();
         let cdb_file = cdb_file.into();
         let cdb_text = fs::read_to_string(&cdb_file).map_err(|e| {
-            FrameworkError::invalid_argument(format!("failed to read CDB {}: {e}", cdb_file.display()))
+            FrameworkError::invalid_argument(format!(
+                "failed to read CDB {}: {e}",
+                cdb_file.display()
+            ))
         })?;
         let cdb = parse_cdb(&cdb_text)?;
         let ram = Arc::new(Mutex::new(Mn1613Ram::new(false)));
@@ -268,12 +271,27 @@ impl Mn1613AsmSession {
         let mut remaining = self.max_cycles as usize;
         while remaining > 0 {
             let batch = remaining.min(4096);
-            let st = self
-                .core
-                .run_slice(&mut self.ram.lock().expect("ram lock"), Some(ic), batch)
-                .map_err(|e| FrameworkError::invalid_argument(format!("run: {e}")))?;
+            let st =
+                match self
+                    .core
+                    .run_slice(&mut self.ram.lock().expect("ram lock"), Some(ic), batch)
+                {
+                    Ok(st) => st,
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if msg.contains("max cycles reached") {
+                            remaining = remaining.saturating_sub(batch);
+                            ic = self.core.get_state().ic;
+                            continue;
+                        }
+                        return Err(FrameworkError::invalid_argument(format!("run: {e}")));
+                    }
+                };
             remaining = remaining.saturating_sub(batch);
-            if matches!(st, ExecStatus::Halted | ExecStatus::Break | ExecStatus::Step) {
+            if matches!(
+                st,
+                ExecStatus::Halted | ExecStatus::Break | ExecStatus::Step
+            ) {
                 return Ok(st);
             }
             ic = self.core.get_state().ic;
@@ -306,11 +324,22 @@ impl Mn1613AsmSession {
             .write_phys(u18(word_addr as u32), value);
     }
 
+    pub fn write_word_phys(&mut self, word_addr: u32, value: u16) {
+        self.ram
+            .lock()
+            .expect("ram lock")
+            .write_phys(u18(word_addr), value);
+    }
+
     pub fn read_word(&self, word_addr: u16) -> u16 {
         self.ram
             .lock()
             .expect("ram lock")
             .read_phys(u18(word_addr as u32))
+    }
+
+    pub fn read_word_phys(&self, word_addr: u32) -> u16 {
+        self.ram.lock().expect("ram lock").read_phys(u18(word_addr))
     }
 
     pub fn write_label_words(&mut self, name: &str, words: &[u16]) -> Result<(), FrameworkError> {
@@ -322,7 +351,11 @@ impl Mn1613AsmSession {
     }
 
     /// サブルーチンを呼び、戻りスタブの H で止まるまで実行する。
-    pub fn call(&mut self, label: &str, options: CallOptions) -> Result<CallResult, FrameworkError> {
+    pub fn call(
+        &mut self,
+        label: &str,
+        options: CallOptions,
+    ) -> Result<CallResult, FrameworkError> {
         self.bind_cpu_log_hooks();
         if options.reset_cpu {
             self.core.reset(&self.ram.lock().expect("ram lock"));
@@ -335,7 +368,11 @@ impl Mn1613AsmSession {
         }
         apply_call_registers(&mut self.core, options.registers.as_ref());
 
-        let mut sp = options.registers.as_ref().and_then(|r| r.sp).unwrap_or(self.stack_init);
+        let mut sp = options
+            .registers
+            .as_ref()
+            .and_then(|r| r.sp)
+            .unwrap_or(self.stack_init);
         if let Some(stack) = &options.stack {
             for &word in stack {
                 self.write_word(sp, word);
@@ -413,7 +450,11 @@ impl Mn1613AsmSession {
         check_all_regs(&reg, expected)
     }
 
-    pub fn expect_memory_words(&self, word_addr: u16, expected: &[u16]) -> Result<(), FrameworkError> {
+    pub fn expect_memory_words(
+        &self,
+        word_addr: u16,
+        expected: &[u16],
+    ) -> Result<(), FrameworkError> {
         let actual: Vec<u16> = expected
             .iter()
             .enumerate()
@@ -422,14 +463,34 @@ impl Mn1613AsmSession {
         assert_words(&format!("mem@0x{}", hex4(word_addr)), &actual, expected)
     }
 
+    pub fn expect_memory_words_phys(
+        &self,
+        word_addr: u32,
+        expected: &[u16],
+    ) -> Result<(), FrameworkError> {
+        let actual: Vec<u16> = expected
+            .iter()
+            .enumerate()
+            .map(|(i, _)| self.read_word_phys((word_addr + i as u32) & PHYS_MASK))
+            .collect();
+        assert_words(
+            &format!("mem@0x{:05X}", word_addr & PHYS_MASK),
+            &actual,
+            expected,
+        )
+    }
+
     pub fn expect_label_words(&self, name: &str, expected: &[u16]) -> Result<(), FrameworkError> {
         self.expect_memory_words(self.word_addr(name)?, expected)
     }
 
     pub fn expect_stack_work(&self, spec: &StackWorkExpect) -> Result<(), FrameworkError> {
-        let base = self
-            .last_pre_call_sp
-            .max(self.last_result.as_ref().map(|r| r.pre_call_sp).unwrap_or(0));
+        let base = self.last_pre_call_sp.max(
+            self.last_result
+                .as_ref()
+                .map(|r| r.pre_call_sp)
+                .unwrap_or(0),
+        );
         if base == 0 {
             return Err(FrameworkError::invalid_argument(
                 "expectStackWork: no preCallSp (call first)",
@@ -460,12 +521,14 @@ impl Mn1613AsmSession {
         if let Some(log) = &self.cpu_log {
             let log_before = Arc::clone(log);
             let log_after = Arc::clone(log);
-            self.core.set_on_before_execute(Some(Box::new(move |st, ram| {
-                log_before.on_before_execute(st, |a| ram.read_phys(u18(a as u32)));
-            })));
-            self.core.set_on_after_execute(Some(Box::new(move |st, ram| {
-                log_after.on_after_execute(st, |a| ram.read_phys(u18(a as u32)));
-            })));
+            self.core
+                .set_on_before_execute(Some(Box::new(move |st, ram| {
+                    log_before.on_before_execute(st, |a| ram.read_phys(u18(a as u32)));
+                })));
+            self.core
+                .set_on_after_execute(Some(Box::new(move |st, ram| {
+                    log_after.on_after_execute(st, |a| ram.read_phys(u18(a as u32)));
+                })));
             set_active_cpu_log_marker(Some(log.clone()));
         } else {
             clear_cpu_log_test_mark();
@@ -508,7 +571,10 @@ fn apply_call_registers(core: &mut Mn1613Core, regs: Option<&CallRegisters>) {
     core.set_state(&patch);
 }
 
-fn check_all_regs(reg: &CallResultRegisters, expected: &RegisterExpect) -> Result<(), FrameworkError> {
+fn check_all_regs(
+    reg: &CallResultRegisters,
+    expected: &RegisterExpect,
+) -> Result<(), FrameworkError> {
     check_reg("R0", reg.r[0], expected.r0)?;
     check_reg("R1", reg.r[1], expected.r1)?;
     check_reg("R2", reg.r[2], expected.r2)?;

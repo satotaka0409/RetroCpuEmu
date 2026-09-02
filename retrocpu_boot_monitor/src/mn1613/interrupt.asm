@@ -5,7 +5,6 @@
 
 	.cpu	mn1613
 
-	.include "interrupt_io.inc"
 	.include "handshake/handshake_io.inc"
 
 	.area	_CODE		(REL,CON)
@@ -121,8 +120,6 @@ g_int1_handler:
 	push	R1
 	si	SP, #1
 	mv	X1, SP
-	mvwi	R0, #1
-	wt	R0, INTERRUPT_BUSY
 	rd	R0, INT_CAUSE
 	andi	R0, #INT1_CAUSE_MASK
 	st	R0, 1(X1)
@@ -144,8 +141,6 @@ l_int1_do_step:
 	or	R0, R0, Z
 	b	l_int1_halt
 l_int1_epilogue:
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
 	ai	SP, #2
 	pop	R1
 	pop	R0
@@ -156,8 +151,6 @@ l_int1_epilogue:
 	popm
 	lpsw	1
 l_int1_halt:
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
 	ai	SP, #2
 	pop	R1
 	pop	R0
@@ -180,7 +173,7 @@ g_int2_handler:
 	mv	X1, SP
 	; 割り込み処理実行中フラグをセット
 	mvwi	R0, #1
-	wt	R0, INTERRUPT_BUSY
+	wt	R0, HANDHSAKE_INTERRUPT_BUSY
 	; 割り込み要因を読み込み
 	rd	R0, INT_CAUSE
 	andi	R0, #INT2_CAUSE_MASK
@@ -205,7 +198,7 @@ l_next_handshake:
 	pop	X1
 	; 割り込み処理実行中フラグをクリア
 	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
+	wt	R0, HANDHSAKE_INTERRUPT_BUSY
 	; 確保した 1 ワードを捨てる
 	ai	SP, #1
 	pop	R1

@@ -4,8 +4,7 @@ use std::collections::HashMap;
 
 use crate::area_order::{asxxxx_area_flags, canonical_area_name, order_link_area_names};
 use crate::types::{
-    AddressUnit, AssemblyResult, EmittedWord, RelocOperand, RelocWidth, SymbolKind,
-    WordDiffReloc,
+    AddressUnit, AssemblyResult, EmittedWord, RelocOperand, RelocWidth, SymbolKind, WordDiffReloc,
 };
 
 const MAX_T_DATA_BYTES: usize = 14;
@@ -117,11 +116,25 @@ pub fn write_rel(result: &AssemblyResult, module_name: &str) -> String {
     }
     global_entries.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let area_names = order_link_area_names(std::iter::once("_CODE").chain(
-        global_entries
-            .iter()
-            .filter_map(|g| g.area.as_deref()),
-    ));
+    let mut area_inputs: Vec<String> = Vec::new();
+    area_inputs.push("_CODE".to_string());
+    for g in &global_entries {
+        if let Some(a) = &g.area {
+            area_inputs.push(a.clone());
+        }
+    }
+    for w in &result.words {
+        area_inputs.push(w.area.clone());
+    }
+    for r in &result.relocs {
+        if let Some(a) = &r.area {
+            area_inputs.push(a.clone());
+        }
+        if let RelocOperand::Word { area: Some(a), .. } = &r.left {
+            area_inputs.push(a.clone());
+        }
+    }
+    let area_names = order_link_area_names(area_inputs);
     if area_names.is_empty() {
         return "XH2\nE\n".to_string();
     }
@@ -165,11 +178,11 @@ pub fn write_rel(result: &AssemblyResult, module_name: &str) -> String {
     }
 
     for area_name in &area_names {
-        let mut sorted: Vec<&EmittedWord> = if area_name == "_CODE" {
-            result.words.iter().collect()
-        } else {
-            Vec::new()
-        };
+        let mut sorted: Vec<&EmittedWord> = result
+            .words
+            .iter()
+            .filter(|w| canonical_area_name(&w.area) == *area_name)
+            .collect();
         sorted.sort_by_key(|w| w.address);
         let max_addr = sorted.iter().map(|w| w.address).max();
         let from_words = match max_addr {
@@ -191,11 +204,7 @@ pub fn write_rel(result: &AssemblyResult, module_name: &str) -> String {
                 continue;
             }
             let def_rel = units_to_rel_addr(g.value, byte_addrs);
-            lines.push(format!(
-                "S {} Def{}",
-                sdld_sym_name(&g.name),
-                hex4(def_rel)
-            ));
+            lines.push(format!("S {} Def{}", sdld_sym_name(&g.name), hex4(def_rel)));
         }
 
         let area_idx = area_index_by_name.get(area_name).copied().unwrap_or(0);
@@ -248,8 +257,12 @@ pub fn write_rel(result: &AssemblyResult, module_name: &str) -> String {
                     let item = reloc_item(r, rtp, &area_index_by_name, &sym_index_by_name)
                         .unwrap_or_else(|| {
                             panic!(
-                                "unsupported reloc at {} in {area_name} (sdld needs a single absolute symbol or area)",
-                                hex4(r.byte_addr)
+                                "unsupported reloc at {} in {area_name}: left={:?} right={:?} width={:?} area={:?} (sdld needs a single absolute symbol or area)",
+                                hex4(r.byte_addr),
+                                r.left,
+                                r.right,
+                                r.width,
+                                r.area
                             )
                         });
                     items.push(format!(
@@ -293,6 +306,7 @@ mod tests {
         let result = AssemblyResult {
             words: vec![EmittedWord {
                 address: 0x0200,
+                area: "_CODE".to_string(),
                 value: 0x5809,
                 line_no: 1,
                 source: String::new(),

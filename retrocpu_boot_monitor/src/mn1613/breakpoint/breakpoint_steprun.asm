@@ -11,7 +11,6 @@
 
 	.cpu	mn1613
 
-	.include "../interrupt_io.inc"
 	.include "../handshake/handshake_io.inc"
 
 	.area	_CODE		(REL,CON)
@@ -54,7 +53,8 @@ l_sr_61_ng:
 	pop	R3
 	ret
 l_sr_61_ok:
-	st	R1, *GL_BP_STEP_ARM
+	mvwi	X1, #GL_BP_STEP_ARM
+	st	R1, 0(X1)
 	mvwi	R0, #HSHK_OK
 	bald	g_hshk_send_byte
 	pop	R4
@@ -68,13 +68,14 @@ l_sr_61_ok:
 ; @Destruction R0, R1, R2
 ; -------------------------------------------------------
 g_step_arm_cpld:
-	l	R0, *GL_BP_STEP_ARM
+	mvwi	X1, #GL_BP_STEP_ARM
+	l	R0, 0(X1)
 	or	R0, R0, Z
 	b	l_sr_arm_go
 	ret
 l_sr_arm_go:
 	eor	R0, R0
-	st	R0, *GL_BP_STEP_ARM
+	st	R0, 0(X1)
 	mvwi	R0, #STEP_BRK_DELAY_1STEP
 	wt	R0, IO_STEP_BRK_DELAY
 	mvi	R0, #1
@@ -232,8 +233,6 @@ l_sr_nt_stk_ok:
 	b	l_sr_nt_wait
 	bd	l_sr_nt_fail
 l_sr_nt_wait:
-	eor	R0, R0
-	wt	R0, INTERRUPT_BUSY
 	bald	g_hshk_wait_req1_1
 	cwi	R0, #HSHK_OK, NZ
 	b	l_sr_nt_accept

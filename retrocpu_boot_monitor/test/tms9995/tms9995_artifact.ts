@@ -8,7 +8,7 @@ import {
   createTms9995SessionFromSettings,
   expect,
   type Tms9995ArtifactSession,
-} from "../../../retrocpu_test_framework/src/index.js";
+} from "../../../retrocpu_test_framework_ts/src/index.js";
 import {
   tms9995MonHandshakeSettings,
   tms9995MonSettings,

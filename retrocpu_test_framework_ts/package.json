@@ -8,7 +8,7 @@
   "scripts": {
     "test": "npm run build:asm && tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:asm": "npm --prefix ../retrocpu_asm run build"
+    "build:asm": "npm --prefix ../retrocpu_asm_ts run build"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",

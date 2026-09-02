@@ -3,7 +3,7 @@
 //! 第 1 パスで PC を進めラベル／`.equ` を確定し、第 2 パスで機械語を出力する。
 //! MN1613 は `mn1613_encoder`、TMS9995 は `tms9995_encoder`。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::cpu_type::{resolve_cpu_type, CpuType};
 use crate::error::AsmError;
@@ -11,13 +11,13 @@ use crate::expression::{ascii_codes_from_string_arg, eval_expr};
 use crate::mn1613::mn1613_encoder::{
     encode_instruction as encode_mn1613_instruction, is_two_word_op, split_ai_si_imm4_chunks,
 };
-use crate::tms9995::tms9995_encoder::{
-    encode_instruction as encode_tms9995_instruction, instruction_size as tms9995_instruction_size,
-};
 use crate::parser::parse_source;
 use crate::reloc::{
-    apply_mn1613_abs_reloc_to_last_word, apply_mn1613_page0_reloc_to_last_word,
-    build_symbol_infos, collect_globl_names, eval_word_arg,
+    apply_mn1613_abs_reloc_to_last_word, apply_mn1613_page0_reloc_to_last_word, build_symbol_infos,
+    collect_globl_names, eval_word_arg,
+};
+use crate::tms9995::tms9995_encoder::{
+    encode_instruction as encode_tms9995_instruction, instruction_size as tms9995_instruction_size,
 };
 use crate::types::{AddressUnit, AssemblyResult, EmittedWord, ParsedLine};
 
@@ -95,6 +95,108 @@ fn is_label_like(op: &str) -> bool {
     true
 }
 
+#[derive(Clone, Copy)]
+struct AreaLoc {
+    pc: u16,
+    noload: bool,
+}
+
+struct AreaContext {
+    current: String,
+    areas: HashMap<String, AreaLoc>,
+}
+
+fn create_area_context() -> AreaContext {
+    let mut areas = HashMap::new();
+    areas.insert(
+        "".to_string(),
+        AreaLoc {
+            pc: 0,
+            noload: false,
+        },
+    );
+    AreaContext {
+        current: "".to_string(),
+        areas,
+    }
+}
+
+fn area_pc(ctx: &AreaContext) -> u16 {
+    ctx.areas.get(&ctx.current).map(|a| a.pc).unwrap_or(0)
+}
+
+fn set_area_pc(ctx: &mut AreaContext, pc: u16) {
+    if let Some(loc) = ctx.areas.get_mut(&ctx.current) {
+        loc.pc = pc;
+    } else {
+        ctx.areas
+            .insert(ctx.current.clone(), AreaLoc { pc, noload: false });
+    }
+}
+
+fn area_noload(ctx: &AreaContext) -> bool {
+    ctx.areas
+        .get(&ctx.current)
+        .map(|a| a.noload)
+        .unwrap_or(false)
+}
+
+fn switch_area(ctx: &mut AreaContext, name: &str, noload: bool) {
+    let key = name.trim().to_ascii_uppercase();
+    match ctx.areas.get_mut(&key) {
+        Some(loc) => {
+            if noload {
+                loc.noload = true;
+            }
+        }
+        None => {
+            ctx.areas.insert(key.clone(), AreaLoc { pc: 0, noload });
+        }
+    }
+    ctx.current = key;
+}
+
+fn parse_area_directive(args: &[String], line_no: usize) -> Result<(String, bool), AsmError> {
+    if args.is_empty() || args[0].trim().is_empty() {
+        return Err(AsmError::new(format!(
+            "Line {}: .area requires a name",
+            line_no
+        )));
+    }
+    let joined = args.join(" ").trim().to_string();
+    let paren = joined.find('(').unwrap_or(joined.len());
+    let name = joined[..paren].trim().to_string();
+    if name.is_empty() {
+        return Err(AsmError::new(format!(
+            "Line {}: .area requires a name",
+            line_no
+        )));
+    }
+    let mut flags = Vec::new();
+    if paren < joined.len() {
+        let tail = joined[paren..].replace(['(', ')'], " ");
+        for f in tail.split(|c: char| c.is_whitespace() || c == ',') {
+            let t = f.trim();
+            if !t.is_empty() {
+                flags.push(t.to_ascii_uppercase());
+            }
+        }
+    }
+    let known: HashSet<&str> = HashSet::from([
+        "REL", "ABS", "CON", "OVR", "PAG", "NOPAG", "NOLOAD", "CODE", "DATA", "XDATA", "BIT",
+    ]);
+    for f in &flags {
+        if !known.contains(f.as_str()) {
+            return Err(AsmError::new(format!(
+                "Line {}: unknown .area flag '{}' (REL/ABS/CON/OVR/PAG/NOLOAD/...)",
+                line_no, f
+            )));
+        }
+    }
+    let noload = name.eq_ignore_ascii_case("_WORK") || flags.iter().any(|f| f == "NOLOAD");
+    Ok((name, noload))
+}
+
 /// ソース文字列をアセンブルする。
 ///
 /// * `explicit_cpu` — CLI `--cpu` 相当。None なら先頭 `.cpu` を参照。
@@ -114,21 +216,28 @@ pub fn assemble(
     let globl_names = collect_globl_names(&parsed);
     let mut symbols: HashMap<String, u16> = HashMap::new();
     let mut symbol_areas: HashMap<String, String> = HashMap::new();
-    let mut pc: u16 = 0;
-    const DEFAULT_AREA: &str = "_CODE";
+    let mut area_ctx = create_area_context();
 
     // --- 第 1 パス: ラベル・PC・.equ ---
     for line in &parsed {
+        let op_u_opt = line.op.as_ref().map(|s| s.to_ascii_uppercase());
+        let is_label_equ =
+            line.label.is_some() && matches!(op_u_opt.as_deref(), Some(".EQU") | Some("EQU"));
+
         if let Some(label) = &line.label {
-            let key = label.to_ascii_uppercase();
-            if symbols.contains_key(&key) {
-                return Err(AsmError::new(format!(
-                    "Line {}: Duplicate symbol {}",
-                    line.line_no, label
-                )));
+            if is_label_equ {
+                // .equ ラベルは定数。PC/area シンボルとしては登録しない。
+            } else {
+                let key = label.to_ascii_uppercase();
+                if symbols.contains_key(&key) {
+                    return Err(AsmError::new(format!(
+                        "Line {}: Duplicate symbol {}",
+                        line.line_no, label
+                    )));
+                }
+                symbols.insert(key.clone(), area_pc(&area_ctx));
+                symbol_areas.insert(key, area_ctx.current.clone());
             }
-            symbols.insert(key.clone(), pc);
-            symbol_areas.insert(key, DEFAULT_AREA.to_string());
         }
 
         if line.label.is_none() && line.op.is_some() && line.args.len() >= 2 {
@@ -145,7 +254,12 @@ pub fn assemble(
             continue;
         };
         let op_u = op.to_ascii_uppercase();
-        if op_u == ".CPU" || op_u == ".AREA" || op_u == ".GLOBL" || op_u == ".GLOBAL" {
+        if op_u == ".CPU" || op_u == ".GLOBL" || op_u == ".GLOBAL" {
+            continue;
+        }
+        if op_u == ".AREA" {
+            let (name, noload) = parse_area_directive(&line.args, line.line_no)?;
+            switch_area(&mut area_ctx, &name, noload);
             continue;
         }
         if op_u == ".ORG" {
@@ -155,7 +269,10 @@ pub fn assemble(
                     line.line_no
                 )));
             }
-            pc = eval_expr(&line.args[0], &symbols, true)? as u16;
+            set_area_pc(
+                &mut area_ctx,
+                eval_expr(&line.args[0], &symbols, true)? as u16,
+            );
             continue;
         }
         if op_u == ".EQU" || op_u == "EQU" {
@@ -195,25 +312,29 @@ pub fn assemble(
             } else {
                 count as u16
             };
-            pc = pc.wrapping_add(size);
+            let next = area_pc(&area_ctx).wrapping_add(size);
+            set_area_pc(&mut area_ctx, next);
             continue;
         }
 
         let size = directive_size(line, cpu)?;
         if size > 0 {
-            pc = pc.wrapping_add(size);
+            let next = area_pc(&area_ctx).wrapping_add(size);
+            set_area_pc(&mut area_ctx, next);
             continue;
         }
 
         if cpu == CpuType::Mn1613 {
             let isz = mn1613_instruction_size(line, &symbols)?;
             if isz > 0 {
-                pc = pc.wrapping_add(isz);
+                let next = area_pc(&area_ctx).wrapping_add(isz);
+                set_area_pc(&mut area_ctx, next);
             }
         } else {
             let isz = tms9995_instruction_size(line)?;
             if isz > 0 {
-                pc = pc.wrapping_add(isz);
+                let next = area_pc(&area_ctx).wrapping_add(isz);
+                set_area_pc(&mut area_ctx, next);
             }
         }
     }
@@ -222,7 +343,7 @@ pub fn assemble(
     let mut words: Vec<EmittedWord> = Vec::new();
     let mut relocs = Vec::new();
     let mut storage_addrs: HashMap<usize, u16> = HashMap::new();
-    pc = 0;
+    area_ctx = create_area_context();
     let byte_mode = cpu == CpuType::Tms9995;
     // --- 第 2 パス: 機械語出力 ---
     for line in &parsed {
@@ -230,15 +351,21 @@ pub fn assemble(
             continue;
         };
         let op_u = op.to_ascii_uppercase();
-        if op_u == ".CPU" || op_u == ".AREA" || op_u == ".GLOBL" || op_u == ".GLOBAL" {
+        if op_u == ".CPU" || op_u == ".GLOBL" || op_u == ".GLOBAL" {
+            continue;
+        }
+        if op_u == ".AREA" {
+            let (name, noload) = parse_area_directive(&line.args, line.line_no)?;
+            switch_area(&mut area_ctx, &name, noload);
             continue;
         }
         if op_u == ".ORG" {
-            pc = eval_expr(
+            let next = eval_expr(
                 line.args.first().map(|s| s.as_str()).unwrap_or("0"),
                 &symbols,
                 false,
             )? as u16;
+            set_area_pc(&mut area_ctx, next);
             continue;
         }
         if op_u == ".EQU" || op_u == "EQU" {
@@ -250,39 +377,45 @@ pub fn assemble(
                 &symbols,
                 false,
             )? as u16;
+            let pc = area_pc(&area_ctx);
             storage_addrs.insert(line.line_no, pc);
             let size = if cpu == CpuType::Tms9995 && op_u == ".BLKW" {
                 count.wrapping_mul(2)
             } else {
                 count
             };
-            pc = pc.wrapping_add(size);
+            set_area_pc(&mut area_ctx, pc.wrapping_add(size));
             continue;
         }
         if op_u == ".WORD" || op_u == ".DW" || op_u == "DW" {
             let ex = expand_word_args(&line.args)?;
             for a in &ex {
+                let pc = area_pc(&area_ctx);
                 let v = eval_word_arg(
                     a,
                     byte_mode,
-                    DEFAULT_AREA,
+                    &area_ctx.current,
                     pc,
                     &symbols,
                     &symbol_infos,
                     &mut relocs,
                 )
                 .map_err(AsmError::new)?;
-                words.push(EmittedWord {
-                    address: pc,
-                    value: v,
-                    line_no: line.line_no,
-                    source: line.text.clone(),
-                });
-                pc = if byte_mode {
+                if !area_noload(&area_ctx) {
+                    words.push(EmittedWord {
+                        address: pc,
+                        area: area_ctx.current.clone(),
+                        value: v,
+                        line_no: line.line_no,
+                        source: line.text.clone(),
+                    });
+                }
+                let next = if byte_mode {
                     pc.wrapping_add(2)
                 } else {
                     pc.wrapping_add(1)
                 };
+                set_area_pc(&mut area_ctx, next);
             }
             continue;
         }
@@ -291,6 +424,7 @@ pub fn assemble(
         }
 
         if cpu == CpuType::Mn1613 {
+            let pc = area_pc(&area_ctx);
             let pc_word = pc;
             let mut symbols_for_encode = symbols.clone();
             for (name, info) in &symbol_infos {
@@ -302,23 +436,27 @@ pub fn assemble(
             }
             let encoded = encode_mn1613_instruction(line, pc_word, &symbols_for_encode, false)
                 .map_err(|e| {
-                AsmError::new(format!(
-                    "Line {}: {} ({})",
-                    line.line_no,
-                    e,
-                    line.text.trim()
-                ))
-            })?;
+                    AsmError::new(format!(
+                        "Line {}: {} ({})",
+                        line.line_no,
+                        e,
+                        line.text.trim()
+                    ))
+                })?;
             let encoded_len = encoded.len();
             let word_start = words.len();
             for w in encoded {
-                words.push(EmittedWord {
-                    address: pc,
-                    value: w,
-                    line_no: line.line_no,
-                    source: line.text.clone(),
-                });
-                pc = pc.wrapping_add(1);
+                if !area_noload(&area_ctx) {
+                    words.push(EmittedWord {
+                        address: area_pc(&area_ctx),
+                        area: area_ctx.current.clone(),
+                        value: w,
+                        line_no: line.line_no,
+                        source: line.text.clone(),
+                    });
+                }
+                let cur = area_pc(&area_ctx);
+                set_area_pc(&mut area_ctx, cur.wrapping_add(1));
             }
             if encoded_len >= 2 {
                 apply_mn1613_abs_reloc_to_last_word(
@@ -327,7 +465,7 @@ pub fn assemble(
                     &symbol_infos,
                     &mut words[word_start..],
                     &mut relocs,
-                    DEFAULT_AREA,
+                    &area_ctx.current,
                 );
             }
             if encoded_len == 1 {
@@ -337,26 +475,40 @@ pub fn assemble(
                     &symbol_infos,
                     &mut words[word_start..],
                     &mut relocs,
-                    DEFAULT_AREA,
+                    &area_ctx.current,
                 );
             }
         } else {
-            let encoded = encode_tms9995_instruction(line, pc, &symbols, false).map_err(|e| {
-                AsmError::new(format!(
-                    "Line {}: {} ({})",
-                    line.line_no,
-                    e,
-                    line.text.trim()
-                ))
-            })?;
+            let pc = area_pc(&area_ctx);
+            let mut symbols_for_encode = symbols.clone();
+            for (name, info) in &symbol_infos {
+                if info.kind == crate::types::SymbolKind::External
+                    && !symbols_for_encode.contains_key(name)
+                {
+                    symbols_for_encode.insert(name.clone(), 0);
+                }
+            }
+            let encoded = encode_tms9995_instruction(line, pc, &symbols_for_encode, false)
+                .map_err(|e| {
+                    AsmError::new(format!(
+                        "Line {}: {} ({})",
+                        line.line_no,
+                        e,
+                        line.text.trim()
+                    ))
+                })?;
             for w in encoded {
-                words.push(EmittedWord {
-                    address: pc,
-                    value: w,
-                    line_no: line.line_no,
-                    source: line.text.clone(),
-                });
-                pc = pc.wrapping_add(2);
+                if !area_noload(&area_ctx) {
+                    words.push(EmittedWord {
+                        address: area_pc(&area_ctx),
+                        area: area_ctx.current.clone(),
+                        value: w,
+                        line_no: line.line_no,
+                        source: line.text.clone(),
+                    });
+                }
+                let cur = area_pc(&area_ctx);
+                set_area_pc(&mut area_ctx, cur.wrapping_add(2));
             }
         }
     }

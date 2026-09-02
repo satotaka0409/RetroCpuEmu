@@ -8,7 +8,7 @@ import {
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,
-} from "../../../../retrocpu_test_framework/src/index.js";
+} from "../../../../retrocpu_test_framework_ts/src/index.js";
 import {
   mn1613MonHandshakeSettings,
   withMn1613CpuLog,

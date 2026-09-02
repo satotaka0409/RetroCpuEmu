@@ -4,7 +4,7 @@
  * 
  * ケース名は MN1613 と揃える。現状は対応シンボルの CDB 存在確認のみ。
  */
-import { expect, test } from "../../../../retrocpu_test_framework/src/index.js";
+import { expect, test } from "../../../../retrocpu_test_framework_ts/src/index.js";
 import { createTmsMonSession, expectGlobals } from "../tms9995_artifact.js";
 
 const REQUIRED = [

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type {
   CodeTestIoMockEntry,
   JsonTestSettings,
-} from "../../../retrocpu_test_framework/src/index.js";
+} from "../../../retrocpu_test_framework_ts/src/index.js";
 
 /** `logs/tms9995`（将来の実行ログ用） */
 export const TMS9995_TEST_LOG_DIR = path.resolve(

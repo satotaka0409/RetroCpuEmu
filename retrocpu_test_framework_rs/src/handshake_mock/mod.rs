@@ -13,8 +13,7 @@ use retrocpu_emu_rs::cpuboard::{
     Mn1613FrameLink as FrameLink, Mn1613HandshakeTransport as HandshakeTransport,
     Mn1613HandshakeWires as HandshakeWires, Mn1613IoCallbacks as IoCallbacks,
     Mn1613NullIo as NullIo, MN1613_HSHK_CTRL_IN_DACK as HSHK_CTRL_IN_DACK,
-    MN1613_HSHK_CTRL_OUT_DENA as HSHK_CTRL_OUT_DENA,
-    MN1613_HSHK_CTRL_OUT_REQ as HSHK_CTRL_OUT_REQ,
+    MN1613_HSHK_CTRL_OUT_DENA as HSHK_CTRL_OUT_DENA, MN1613_HSHK_CTRL_OUT_REQ as HSHK_CTRL_OUT_REQ,
     MN1613_HSHK_IN_CTRL_IN_REQ as HSHK_IN_CTRL_IN_REQ,
     MN1613_IO_PORT_HSHK_IN_CTRL as IO_PORT_HSHK_IN_CTRL,
     MN1613_IO_PORT_HSHK_OUT_CTRL as IO_PORT_HSHK_OUT_CTRL,
@@ -98,6 +97,29 @@ impl IoBoardHandshakeMock {
             io.send(poll, &response, false)?;
         }
         Ok(response)
+    }
+
+    /// IO→CPU フレームを送信し、CPU→IO 応答を指定バイト数だけ受信する。
+    ///
+    /// TS の `exchangeWithCpu(toCpu, fromCpu)` 相当。
+    pub fn exchange_with_cpu<P>(
+        &self,
+        to_cpu: &[u8],
+        from_cpu_len: usize,
+        poll: &mut P,
+    ) -> Result<Vec<u8>, FrameworkError>
+    where
+        P: FnMut(),
+    {
+        let io = IoControlSync::new(Arc::clone(&self.wires), self.timeout_ms);
+        io.send(poll, to_cpu, true)?;
+        if from_cpu_len == 0 {
+            return Ok(Vec::new());
+        }
+        let mut frame =
+            io.receive_framed_adaptive(poll, |so_far| from_cpu_len.saturating_sub(so_far.len()))?;
+        frame.truncate(from_cpu_len);
+        Ok(frame)
     }
 
     /// 64bit タイマー応答（11h）を設定する。

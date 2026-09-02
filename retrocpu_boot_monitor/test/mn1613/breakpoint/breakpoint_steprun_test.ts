@@ -3,20 +3,20 @@
  * 根拠: breakpoint.mdc「ステップ実行」/ HandShake.mdc 18h・1Bh /
  * MN1613_CPUボードメモリ_IOマップ.mdc（STEP_BRK_ENA / STEP_BRK_DELAY）
  */
-import { stepBreak } from "../../../../retrocpu_emu/src/cpuboard/mn1613/step_break.js";
+import { stepBreak } from "../../../../retrocpu_emu_ts/src/cpuboard/mn1613/step_break.js";
 import {
   getState,
   run,
   setState,
   triggerInterrupt,
-} from "../../../../retrocpu_emu/src/cpuboard/mn1613/mn1613.js";
+} from "../../../../retrocpu_emu_ts/src/cpuboard/mn1613/mn1613.js";
 import {
   createSessionFromSettings,
   expect,
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,
-} from "../../../../retrocpu_test_framework/src/index.js";
+} from "../../../../retrocpu_test_framework_ts/src/index.js";
 import {
   mn1613MonHandshakeSettings,
   withMn1613CpuLog,

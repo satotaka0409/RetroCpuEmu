@@ -30,13 +30,15 @@ ifneq ("$(wildcard $(HOME)/sdcc-mn1613/sdcc/sdcc/sdas/linksrc/Makefile)","")
 SDCC_SRC_DIR := $(HOME)/sdcc-mn1613/sdcc/sdcc
 endif
 endif
-SDCC_BIN_DIR  ?= $(SDCC_SRC_DIR)/bin
+SYSTEM_SDLD   := $(shell command -v sdld 2>/dev/null)
+SDCC_BIN_DIR  ?= $(if $(SYSTEM_SDLD),$(patsubst %/,%,$(dir $(SYSTEM_SDLD))),$(SDCC_SRC_DIR)/bin)
 CMAKE_DIR     := $(BUILD_DIR)/cmake
 
 # --- retrocpu_asm ---
-RETROCPU_ASM_DIR ?= $(ROOT_DIR)/retrocpu_asm
+RETROCPU_ASM_DIR ?= $(ROOT_DIR)/retrocpu_asm_ts
 ASM_CLI       := $(RETROCPU_ASM_DIR)/dist/main/cli.js
 SDLD_LINK_CLI := $(RETROCPU_ASM_DIR)/dist/main/sdldLinkCli.js
+RETROCPU_EMU_DIR ?= $(ROOT_DIR)/retrocpu_emu_ts
 
 # --- ツール ---
 export PATH := $(SDCC_BIN_DIR):$(PATH)
@@ -263,7 +265,7 @@ $(REL_BIOS): $(SRC_DIR)/bios/bios_common.asm $(INC_DEPS) | retrocpu-asm-build $(
 $(IHX): $(RELS) $(SDLD) | $(HEX_DIR)
 	@test -x "$(SDLD)"
 	node $(SDLD_LINK_CLI) $(RELS) -o $@ --cdb $(CDB) --map $(MAP)
-	cp -f $@ ../retrocpu_emu/
+	cp -f $@ $(RETROCPU_EMU_DIR)/
 
 TMS9995_ASM_SRCS := \
 	$(TMS9995_SRC_DIR)/main.asm \
@@ -302,7 +304,7 @@ $(TMS9995_OBJ_DIR)/%.rel: $(TMS9995_SRC_DIR)/%.asm | retrocpu-asm-build $(TMS999
 $(TMS9995_IHX): $(TMS9995_RELS) $(SDLD) | $(TMS9995_HEX_DIR)
 	@test -x "$(SDLD)"
 	node $(SDLD_LINK_CLI) $(TMS9995_RELS) -o $@ --cdb $(TMS9995_CDB) --map $(TMS9995_MAP) --byte-addr
-	cp -f $@ ../retrocpu_emu/
+	cp -f $@ $(RETROCPU_EMU_DIR)/
 
 ihx-tms9995: sdcc-setup retrocpu-asm-build $(TMS9995_IHX)
 	@echo "Wrote $(TMS9995_IHX)"

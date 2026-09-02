@@ -8,7 +8,7 @@ import {
   test,
   type IoBoardHandshakeMock,
   type Mn1613AsmSession,
-} from "../../../../retrocpu_test_framework/src/index.js";
+} from "../../../../retrocpu_test_framework_ts/src/index.js";
 import {
   mn1613MonHandshakeSettings,
   withMn1613CpuLog,
@@ -134,7 +134,7 @@ test("CPU→IO 1 バイトが initiate / send / finalize で届く", async () =>
   await withCase(async (s, mock) => {
     const received = await cpuToIoBytes(mock, [0xa5]);
     expect(Array.from(received)).toEqual([0xa5]);
-    expect(mock.bus.HSHK_ENA).toBe(0);
+    expect(mock.bus.HSHK_OUT_DENA).toBe(0);
     expect(mock.bus.HSHK_IN_REQ).toBe(0);
     s.expectRegisters({ R0: HSHK_OK, ...SAVED });
   });
@@ -173,7 +173,7 @@ test("g_hshk_send_word は 16bit をビッグエンディアン 2 バイトで�
 
 test("ENA が 1 のままなら g_hshk_initiate_send は NG", async () => {
   await withCase(async (s, mock) => {
-    mock.bus.HSHK_ENA = 1;
+    mock.bus.HSHK_OUT_DENA = 1;
     const r = await s.call("g_hshk_initiate_send", {
       registers: { ...BASE_REGS },
     });
@@ -196,7 +196,7 @@ test("IO→CPU 1 バイトが accept / recv / finalize で R1 に入る", async 
   await withCase(async (s, mock) => {
     const got = await ioToCpuBytes(mock, [0xc3]);
     expect(got).toEqual([0xc3]);
-    expect(mock.bus.HSHK_ENA).toBe(0);
+    expect(mock.bus.HSHK_OUT_DENA).toBe(0);
     expect(mock.bus.HSHK_IN_REQ).toBe(0);
     s.expectRegisters({ R0: HSHK_OK, ...SAVED });
   });
@@ -234,12 +234,12 @@ test("g_hshk_wait_req1_1 は REQ_1 が来なければ NG", async () => {
 
 test("g_hshk_finalize_recv は ENA を落として OK を返す", async () => {
   await withCase(async (s, mock) => {
-    mock.bus.HSHK_ENA = 1;
+    mock.bus.HSHK_OUT_DENA = 1;
     const r = await s.call("g_hshk_finalize_recv", {
       registers: { ...BASE_REGS },
     });
     expect(r.registers.R[0]).toBe(HSHK_OK);
-    expect(mock.bus.HSHK_ENA).toBe(0);
+    expect(mock.bus.HSHK_OUT_DENA).toBe(0);
     s.expectRegisters({ R3: 0x3333, R4: 0x4444 });
   });
 });

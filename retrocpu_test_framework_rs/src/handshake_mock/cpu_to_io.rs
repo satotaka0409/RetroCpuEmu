@@ -112,13 +112,32 @@ pub fn dispatch_cpu_to_io(state: &mut IoBoardMockState, frame: &[u8]) -> Vec<u8>
         }
         CMD_LCD_CTRL | CMD_LCD_TEXT | CMD_STEP_NOTIFY | CMD_UNDEF_NOTIFY => vec![RESPONSE_OK],
         0x1c => {
-            let mut out = vec![0u8; 7];
+            let mut out = state.rtc_raw.to_vec();
             out.push(RESPONSE_OK);
             out
         }
-        0x1d => vec![0, 0, RESPONSE_OK],
-        0x1e => vec![0, 0, 0, 0, 0, 0, 0, 0, RESPONSE_OK],
-        0x1f => vec![0, 0, 0, RESPONSE_OK],
+        0x1d => vec![
+            ((state.temp_raw >> 8) & 0xff) as u8,
+            (state.temp_raw & 0xff) as u8,
+            RESPONSE_OK,
+        ],
+        0x1e => vec![
+            ((state.light_raw.clear >> 8) & 0xff) as u8,
+            (state.light_raw.clear & 0xff) as u8,
+            ((state.light_raw.red >> 8) & 0xff) as u8,
+            (state.light_raw.red & 0xff) as u8,
+            ((state.light_raw.green >> 8) & 0xff) as u8,
+            (state.light_raw.green & 0xff) as u8,
+            ((state.light_raw.blue >> 8) & 0xff) as u8,
+            (state.light_raw.blue & 0xff) as u8,
+            RESPONSE_OK,
+        ],
+        0x1f => vec![
+            ((state.distance_raw.distance_mm >> 8) & 0xff) as u8,
+            (state.distance_raw.distance_mm & 0xff) as u8,
+            state.distance_raw.range_status & 0x1f,
+            RESPONSE_OK,
+        ],
         _ => vec![RESPONSE_NG],
     }
 }

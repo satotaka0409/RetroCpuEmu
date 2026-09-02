@@ -22,6 +22,28 @@ pub struct TimerParams {
     pub count: u16,
 }
 
+/// 光センサー生値（RGBC）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LightRawData {
+    /// クリア
+    pub clear: u16,
+    /// 赤
+    pub red: u16,
+    /// 緑
+    pub green: u16,
+    /// 青
+    pub blue: u16,
+}
+
+/// 距離センサー生値。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DistanceRawData {
+    /// 距離 mm
+    pub distance_mm: u16,
+    /// range status（下位5bit有効）
+    pub range_status: u8,
+}
+
 /// LED 表示データ。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LedDisplayData {
@@ -50,6 +72,14 @@ pub struct IoBoardMockState {
     pub last_timer: Option<TimerParams>,
     /// 64bit タイマー（先頭=時刻7）
     pub timestamp: [u8; 8],
+    /// RTC 生値 7バイト
+    pub rtc_raw: [u8; 7],
+    /// 温度生値
+    pub temp_raw: u16,
+    /// 光センサー生値
+    pub light_raw: LightRawData,
+    /// 距離センサー生値
+    pub distance_raw: DistanceRawData,
 }
 
 impl IoBoardMockState {
@@ -63,6 +93,18 @@ impl IoBoardMockState {
             last_beep: None,
             last_timer: None,
             timestamp: [0; 8],
+            rtc_raw: [0; 7],
+            temp_raw: 0,
+            light_raw: LightRawData {
+                clear: 0,
+                red: 0,
+                green: 0,
+                blue: 0,
+            },
+            distance_raw: DistanceRawData {
+                distance_mm: 0,
+                range_status: 0,
+            },
         }
     }
 
