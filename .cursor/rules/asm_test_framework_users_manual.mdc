@@ -9,12 +9,12 @@ alwaysApply: false
 
 実装の置き場:
 
-| 置き場 | 役割 |
-| :--- | :--- |
-| `retrocpu_test_framework/` | セッション・CLI・`test()` / `expect()` |
-| `retrocpu_test_framework/src/mn1613/` | MN1613 固有（HEX/CDB ロード、`call`） |
-| `retrocpu_emu/src/code_test/` | HEX/CDB ハーネス・`ioMock` |
-| `retrocpu_boot_monitor/mn1613/test/` | BIOS／モニタ結合テスト |
+| 置き場                                | 役割                                   |
+| :------------------------------------ | :------------------------------------- |
+| `retrocpu_test_framework/`            | セッション・CLI・`test()` / `expect()` |
+| `retrocpu_test_framework/src/mn1613/` | MN1613 固有（HEX/CDB ロード、`call`）  |
+| `retrocpu_emu/src/code_test/`         | HEX/CDB ハーネス・`ioMock`             |
+| `retrocpu_boot_monitor/mn1613/test/`  | BIOS／モニタ結合テスト                 |
 
 ---
 
@@ -43,11 +43,11 @@ alwaysApply: false
 
 3 系統あります。BIOS の回帰は結合テスト、下 2 つはハーネス／枠組み自身です。
 
-| 系統 | 入力 | 主用途 |
-| :--- | :--- | :--- |
-| BIOS／モニタ結合 | Makefile が出した `.ihx` + `.cdb` | `retrocpu_boot_monitor` の BIOS |
-| code_test ハーネス | 既リンクの HEX + CDB | `retrocpu_emu/src/code_test/`（部分モジュールなど） |
-| フレームワーク単体 | テスト内で `assembleToHexCdb` した一時 HEX/CDB | `retrocpu_test_framework/test/*.unit.ts` |
+| 系統               | 入力                                           | 主用途                                              |
+| :----------------- | :--------------------------------------------- | :-------------------------------------------------- |
+| BIOS／モニタ結合   | Makefile が出した `.ihx` + `.cdb`              | `retrocpu_boot_monitor` の BIOS                     |
+| code_test ハーネス | 既リンクの HEX + CDB                           | `retrocpu_emu/src/code_test/`（部分モジュールなど） |
+| フレームワーク単体 | テスト内で `assembleToHexCdb` した一時 HEX/CDB | `retrocpu_test_framework/test/*.unit.ts`            |
 
 エミュレータのデスクトップ実行（Electron）とは別です。こちらの CPU ログフックは **テスト実行時だけ** 有効で、通常実行では付けません。
 
@@ -128,12 +128,12 @@ test("例", async () => {
 
 `asm_rules.mdc` と同じです。テストの `call` もこれに合わせます。
 
-| 役割 | 置き場 |
-| :--- | :--- |
-| 第1〜第3引数 | `R0` / `R1` / `R2` |
-| 第4引数以降 | `stack: [...]`（先頭が先に PUSH） |
-| 戻り | `R0` / `R1` / `R2`（必要な分） |
-| 破壊 | BIOS は R0–R2 破壊可。R3–R4 は被試験側が守る |
+| 役割         | 置き場                                       |
+| :----------- | :------------------------------------------- |
+| 第1〜第3引数 | `R0` / `R1` / `R2`                           |
+| 第4引数以降  | `stack: [...]`（先頭が先に PUSH）            |
+| 戻り         | `R0` / `R1` / `R2`（必要な分）               |
+| 破壊         | BIOS は R0–R2 破壊可。R3–R4 は被試験側が守る |
 
 `call` の既定は `callMode: "bal"`。BALD 命令は実行せず、戻りアドレスだけ積んで入口へ `run` し、被試験の `RET` でスタブの `H` に戻します。`balr` は戻り＋CSBR を積む `RETL` 相当。BIOS／handshake の `g_*` は **`"bal"` のまま**（オプション省略）。
 
@@ -143,20 +143,20 @@ test("例", async () => {
 
 ### 3.4 設定（`JsonTestSettings`）
 
-| 項目 | 意味 |
-| :--- | :--- |
-| `name` / `cpu` | 表示用。`cpu` は当面 `mn1613` |
-| `hexFile` / `cdbFile` | 必須。`${MONITOR_HEX}` や `${FRAMEWORK_BUILD}` 可 |
-| `initLabel` | 必須。`runInit()` が HALT まで走るラベル。モニタは `"g_main"`。`null` なら `runInit` は何もしない |
-| `ioMock` | IO 差し替え。無ければ RD=`0xFFFF`、WT 無視 |
+| 項目                        | 意味                                                                                                    |
+| :-------------------------- | :------------------------------------------------------------------------------------------------------ |
+| `name` / `cpu`              | 表示用。`cpu` は当面 `mn1613`                                                                           |
+| `hexFile` / `cdbFile`       | 必須。`${MONITOR_HEX}` や `${FRAMEWORK_BUILD}` 可                                                       |
+| `initLabel`                 | 必須。`runInit()` が HALT まで走るラベル。モニタは `"g_main"`。`null` なら `runInit` は何もしない       |
+| `ioMock`                    | IO 差し替え。無ければ RD=`0xFFFF`、WT 無視                                                              |
 | `cpuLogFile` / `cpuLogMode` | テスト専用 CPU ログ。設定にパスが無いとファイルは出ない。モニタ結合は `withMn1613CpuLog` がパスを付ける |
 
 ### 3.5 ioMock
 
-| `type` | 役割 |
-| :--- | :--- |
-| `handshake` | 1階 IO ボード相当（ポート `0x20`–`0x24`）。配列内 1 件まで |
-| `port` | 指定ポートの RD 固定値またはキュー。WT はログ。同一ポートでは handshake より優先 |
+| `type`      | 役割                                                                             |
+| :---------- | :------------------------------------------------------------------------------- |
+| `handshake` | 1階 IO ボード相当（ポート `0x20`–`0x24`）。配列内 1 件まで                       |
+| `port`      | 指定ポートの RD 固定値またはキュー。WT はログ。同一ポートでは handshake より優先 |
 
 ハンドシェイク検証では `handshake` を明示します。モニタ結合の既定は `syncIrq2: false`（`IN_REQ` で IRQ2 を上げない）なので、IO→CPU は **`HSHK_IN_REQ === 1` になってから** `g_handshake_interrupt_handler` を `call` します。先に `call` すると `handshake ENA0 check failed` になります。`syncIrq2: true` のときだけ `IN_REQ` が INT2 に連動します。
 
@@ -164,11 +164,11 @@ test("例", async () => {
 
 通常のエミュ実行では使いません。テスト専用です。`cpuLogFile` が無いと **ログファイルは出ません**（`; @cp` は CDB には残る）。`withMn1613CpuLog` を使うモニタ結合は、省略時でも START/END だけファイルへ書きます。
 
-| `cpuLogMode` | 本文 |
-| :--- | :--- |
-| 省略 | ケース名の START / END のみ |
-| `checkpoint` | `; @cp` の命令だけ、実行前・実行後の 2 行 |
-| `instruction` | 全命令、実行後 1 行 |
+| `cpuLogMode`  | 本文                                      |
+| :------------ | :---------------------------------------- |
+| 省略          | ケース名の START / END のみ               |
+| `checkpoint`  | `; @cp` の命令だけ、実行前・実行後の 2 行 |
+| `instruction` | 全命令、実行後 1 行                       |
 
 `; @cp 名前` はアセンブララベルではなく、REL/CDB に `L:__CP$name$serial:addr` として載ります。通過回数は `reload()` でリセットされます。実行中は `session.setCpuLogMode(...)` で切り替えられます。
 
@@ -201,13 +201,13 @@ npm test
 
 ### 3.8 よくある失敗
 
-| 症状 | まず疑うこと |
-| :--- | :--- |
-| `CDB symbol not found` | `.global` 漏れ、リンク対象漏れ、HEX/CDB が古い |
-| `did not return to stub` | `RET` と `callMode` の不一致、無限ループ、サイクル不足 |
-| `handshake ENA0 check failed` | `IN_REQ===1` より先に `call` した |
-| `timeout` | `ioMock` 無し、送受信バイト数が仕様と違う |
-| `Intel HEX がありません` | `make ihx` 前、パスやプレースホルダ誤り |
+| 症状                          | まず疑うこと                                           |
+| :---------------------------- | :----------------------------------------------------- |
+| `CDB symbol not found`        | `.global` 漏れ、リンク対象漏れ、HEX/CDB が古い         |
+| `did not return to stub`      | `RET` と `callMode` の不一致、無限ループ、サイクル不足 |
+| `handshake ENA0 check failed` | `IN_REQ===1` より先に `call` した                      |
+| `timeout`                     | `ioMock` 無し、送受信バイト数が仕様と違う              |
+| `Intel HEX がありません`      | `make ihx` 前、パスやプレースホルダ誤り                |
 
 ---
 
@@ -217,16 +217,16 @@ npm test
 
 MN1613 は **16bit ワードマシン**です。取り違えると HEX も CDB もずれます。
 
-| もの | 単位 |
-| :--- | :--- |
-| IC / SP / CPU のメモリアクセス | **ワード**アドレス |
-| 物理メモリ | 1 ワード = 2 バイト、ビッグエンディアン |
-| Intel HEX のアドレス | **バイト** |
-| CDB のラベル末尾 | 当面バイト。`wordAddr = byteAddr / 2`（奇数はエラー） |
+| もの                           | 単位                                                  |
+| :----------------------------- | :---------------------------------------------------- |
+| IC / SP / CPU のメモリアクセス | **ワード**アドレス                                    |
+| 物理メモリ                     | 1 ワード = 2 バイト、ビッグエンディアン               |
+| Intel HEX のアドレス           | **バイト**                                            |
+| CDB のラベル末尾               | 当面バイト。`wordAddr = byteAddr / 2`（奇数はエラー） |
 
-| API | 単位 |
-| :--- | :--- |
-| `wordAddr("LABEL")` | CDB のバイトアドレス ÷ 2（奇数はエラー）。ゼロページの `.global` もこれで読む |
+| API                      | 単位                                                                                            |
+| :----------------------- | :---------------------------------------------------------------------------------------------- |
+| `wordAddr("LABEL")`      | CDB のバイトアドレス ÷ 2（奇数はエラー）。ゼロページの `.global` もこれで読む                   |
 | `readWord` / `writeWord` | **物理ワード 18bit**（`phys = (SBR<<14)+論理` の下位 18bit）。セグメント 0 のラベルは論理＝物理 |
 
 IO→CPU の比較器設定（コマンド `10h`。CPU→IO のモード設定 `10h` とは番号が独立）の addr32 は仕様どおり **バイト** です。SBR C の履歴（論理 `F000h` → 物理 `3F000h`）を直読みするときは物理ワードを渡します。
@@ -277,21 +277,27 @@ expect(r.registers.R[0]).toBe(1);
 s.expectRegisters({ R3: 0x3333, R4: 0x4444 });
 s.expectMemoryWords(s.wordAddr("GL_RND_SEED"), [1]);
 s.expectLabelWords("GL_RND_SEED", [1]);
-s.expectStackWork({ from: "preCallSp", offset: 1, words: [/* ... */] });
+s.expectStackWork({
+  from: "preCallSp",
+  offset: 1,
+  words: [
+    /* ... */
+  ],
+});
 ```
 
-| API | 内容 |
-| :--- | :--- |
-| `reload()` | M系列埋め → reset → HEX → スタブ `H` → ioMock |
-| `runInit()` | `initLabel` を HALT まで（`null` なら何もしない） |
-| `call(label, opts)` | 公開ラベル。既定 `"bal"`（BALD+RET 相当） |
-| `wordAddr` / `getSymbol` | CDB ラベル |
-| `readWord` / `writeWord` | 物理ワード 18bit |
-| `writeLabelWords` | ラベル位置へワード列を書く |
-| `getCheckpoints()` | CDB の `; @cp`（ラベル表とは別） |
-| `expectRegisters` / `expectMemoryWords` / `expectLabelWords` / `expectStackWork` | 断言 |
-| `requireHandshakeMock()` | 1階モック |
-| `setCpuLogMode` | ログ本文の切替 |
+| API                                                                              | 内容                                              |
+| :------------------------------------------------------------------------------- | :------------------------------------------------ |
+| `reload()`                                                                       | M系列埋め → reset → HEX → スタブ `H` → ioMock     |
+| `runInit()`                                                                      | `initLabel` を HALT まで（`null` なら何もしない） |
+| `call(label, opts)`                                                              | 公開ラベル。既定 `"bal"`（BALD+RET 相当）         |
+| `wordAddr` / `getSymbol`                                                         | CDB ラベル                                        |
+| `readWord` / `writeWord`                                                         | 物理ワード 18bit                                  |
+| `writeLabelWords`                                                                | ラベル位置へワード列を書く                        |
+| `getCheckpoints()`                                                               | CDB の `; @cp`（ラベル表とは別）                  |
+| `expectRegisters` / `expectMemoryWords` / `expectLabelWords` / `expectStackWork` | 断言                                              |
+| `requireHandshakeMock()`                                                         | 1階モック                                         |
+| `setCpuLogMode`                                                                  | ログ本文の切替                                    |
 
 `stack` は戻りアドレスより手前。配列の先頭が先に PUSH され、アドレスが高い側になります（`stack: [A]` なら callee から見て `SP+1`＝戻り、`SP+2`＝A）。`resetCpu: true` はレジスタだけ reset（メモリ／IO は維持）。
 
@@ -331,12 +337,138 @@ test("g_rnd_init(0) は種を 1 にする", async () => {
 
 ### 4.7 関連文書
 
-| 文書 | 内容 |
-| :--- | :--- |
-| `asm_test_framework.mdc` | 統合仕様（本マニュアルの正本） |
-| `asm_rules.mdc` | 呼び出し規約・`.area` / `.include`（`asm_test_framework.mdc` の `asm-rules.mdc` は本ファイルを指す） |
-| `boot_monitor.mdc` | BIOS 公開エントリ |
-| `HandShake.mdc` | 線とコマンド |
-| `MN1613_CPUボードメモリ_IOマップ.mdc` | メモリ／IO |
-| `asm_editor.mdc` | `; @cp` |
-| `MN1613.mdc` | 命令 |
+| 文書                                  | 内容                                                                                                 |
+| :------------------------------------ | :--------------------------------------------------------------------------------------------------- |
+| `asm_test_framework.mdc`              | 統合仕様（本マニュアルの正本）                                                                       |
+| `asm_rules.mdc`                       | 呼び出し規約・`.area` / `.include`（`asm_test_framework.mdc` の `asm-rules.mdc` は本ファイルを指す） |
+| `boot_monitor.mdc`                    | BIOS 公開エントリ                                                                                    |
+| `HandShake.mdc`                       | 線とコマンド                                                                                         |
+| `MN1613_CPUボードメモリ_IOマップ.mdc` | メモリ／IO                                                                                           |
+| `asm_editor.mdc`                      | `; @cp`                                                                                              |
+| `MN1613.mdc`                          | 命令                                                                                                 |
+
+---
+
+## 5. 使い方・Rust版（`retrocpu_test_framework_rs`）
+
+Rust版は `retrocpu_test_framework_ts` の移植で、MN1613 は **HEX/CDB を使った実行セッション**、TMS9995 は **成果物セッション（解析寄り）** を提供します。
+
+- 実装: `retrocpu_test_framework_rs/`
+- 公開入口: `src/lib.rs`
+- MN1613 実行セッション: `framework/mn1613/session.rs`
+- 設定から作る入口: `framework/mn1613/settings_session.rs`
+
+### 5.1 準備と前提
+
+```bash
+cd retrocpu_test_framework_rs
+cargo test -- --test-threads=1
+```
+
+- `assemble_and_link` / `assemble_to_hex_cdb` は `sdld` が必要です（PATH、または `SDCC_BIN_DIR` / `SDLD`）。
+- セッションが読むのは **`.ihx` と `.cdb` のみ** です（`.asm` は読みません）。
+- `create_mn1613_asm_session` は存在チェックで `.ihx` / `.cdb` が無いと失敗します。
+
+### 5.2 MN1613 セッション API（Rust）
+
+主な型と関数:
+
+- `create_mn1613_asm_session(Mn1613SessionOptions)`
+- `create_session_from_settings(&JsonTestSettings, Option<&Path>)`
+- `Mn1613AsmSession::reload()`
+- `Mn1613AsmSession::run_init()`
+- `Mn1613AsmSession::call(label, CallOptions)`
+- `Mn1613AsmSession::expect_registers(...)`
+- `Mn1613AsmSession::expect_memory_words(...)`
+- `Mn1613AsmSession::expect_label_words(...)`
+- `Mn1613AsmSession::expect_stack_work(...)`
+
+呼び出し規約（MN1613）は TS版と同じです。
+
+- 第1〜第3引数: `R0` / `R1` / `R2`
+- 第4引数以降: `stack: Vec<u16>`
+- 戻り値: `R0`〜`R2`
+
+`call_mode` は `CallMode::Bal`（既定）と `CallMode::Balr`。BIOS の通常呼び出しは既定 `Bal` のまま使います。
+
+### 5.3 `JsonTestSettings` から作る最小例
+
+```rust
+use std::path::Path;
+use retrocpu_test_framework_rs::json_value::JsonTestSettings;
+use retrocpu_test_framework_rs::{
+  create_session_from_settings, AsmCpuType, CallOptions, CallRegisters,
+  RegisterExpect,
+};
+
+fn run_sample(settings: JsonTestSettings, base_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+  let mut session = create_session_from_settings(&settings, Some(base_dir))?;
+  session.reload()?;
+  session.run_init()?;
+
+  session.call(
+    "g_example",
+    CallOptions {
+      registers: Some(CallRegisters {
+        r0: Some(1),
+        r1: Some(2),
+        ..Default::default()
+      }),
+      ..Default::default()
+    },
+  )?;
+
+  session.expect_registers(
+    &RegisterExpect {
+      r0: Some(3),
+      ..Default::default()
+    },
+    None,
+  )?;
+  Ok(())
+}
+
+#[allow(dead_code)]
+fn make_settings() -> JsonTestSettings {
+  JsonTestSettings {
+    name: "mn1613 sample".into(),
+    cpu: AsmCpuType::Mn1613,
+    hex_file: "${MONITOR_HEX}/mn1613_mon.ihx".into(),
+    cdb_file: "${MONITOR_HEX}/mn1613_mon.cdb".into(),
+    init_label: Some("g_main".into()),
+    io_mock: None,
+    cpu_log_file: None,
+    cpu_log_mode: None,
+    max_cycles: None,
+  }
+}
+```
+
+`create_session_from_settings` は現在 **MN1613 実行セッション専用** です。`cpu: Tms9995` を渡すとエラーになります。
+
+### 5.4 ハンドシェイクモック（Rust）
+
+`JsonTestSettings.io_mock` に handshake を入れると、`require_handshake_mock()` で 1階 IO モックを取得できます。
+
+```rust
+let mock = session.require_handshake_mock()?;
+mock.handle_one_request(&mut || {
+  // CPU を少し進める処理
+})?;
+```
+
+BIOS結合の基本は TS版と同じで、IO→CPU は `IN_REQ` が立ってから CPU 側ハンドラを進めます。
+
+### 5.5 CPUログ（Rust）
+
+- `cpu_log_file: Some(path)` で有効
+- `cpu_log_mode: None` は START/END のみ
+- `cpu_log_mode: Some(CpuLogMode::Checkpoint)` は `; @cp` の before/after
+- `cpu_log_mode: Some(CpuLogMode::Instruction)` は全命令 after
+
+テスト名の囲みは `begin_cpu_log_test(name)` / `end_cpu_log_test(name)` を使えます。
+
+### 5.6 現在の制約
+
+- `src/bin/cli.rs` は現状「CLI未実装」メッセージのみです。実運用はライブラリ API から行います。
+- TMS9995 は成果物セッション（CDB/メモリ/規約計画）が中心で、`call` / `run_init` 実行セッションは未実装です。
