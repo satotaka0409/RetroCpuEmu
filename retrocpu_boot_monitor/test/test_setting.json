@@ -1,0 +1,10 @@
+{
+  "mn1613": {
+    "ihx": "build/hex_rs/mn1613/mn1613_mon_rs.ihx",
+    "cdb": "build/hex_rs/mn1613/mn1613_mon_rs.cdb"
+  },
+  "tms9995": {
+    "ihx": "build/hex_rs/tms9995/tms9995_mon_rs.ihx",
+    "cdb": "build/hex_rs/tms9995/tms9995_mon_rs.cdb"
+  }
+}
