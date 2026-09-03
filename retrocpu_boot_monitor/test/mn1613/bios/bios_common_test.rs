@@ -1,9 +1,6 @@
-use std::path::PathBuf;
-
-use retrocpu_test_framework_rs::types::{AsmCpuType, CpuLogMode};
+use retrocpu_test_framework_rs::types::CpuLogMode;
 use retrocpu_test_framework_rs::{
-    create_session_from_settings, CallOptions, CallRegisters, FrameworkError, JsonTestSettings,
-    Mn1613AsmSession,
+    create_session_from_settings, CallOptions, CallRegisters, FrameworkError, Mn1613AsmSession,
 };
 
 const HEAP_START: u16 = 0x1800;
@@ -17,41 +14,8 @@ const CPY_SRC: u16 = 0x1800;
 const CPY_DST: u16 = 0x1900;
 const CPY_WORDS: [u16; 4] = [0x1111, 0x2222, 0x3333, 0x4444];
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("repo root")
-        .to_path_buf()
-}
-
-fn mn1613_rs_settings() -> JsonTestSettings {
-    let root = repo_root();
-    let hex = root
-        .join("retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.ihx")
-        .to_string_lossy()
-        .to_string();
-    let cdb = root
-        .join("retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.cdb")
-        .to_string_lossy()
-        .to_string();
-
-    JsonTestSettings {
-        name: "mn1613_mon_rs".to_string(),
-        cpu: AsmCpuType::Mn1613,
-        hex_file: hex,
-        cdb_file: cdb,
-        init_label: Some("g_main".to_string()),
-        io_mock: None,
-        cpu_log_file: None,
-        cpu_log_mode: None,
-        max_cycles: Some(2_000_000),
-    }
-}
-
 fn monitor_artifact_exists() -> bool {
-    let root = repo_root();
-    let hex = root.join("retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.ihx");
-    let cdb = root.join("retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.cdb");
+    let (hex, cdb) = super::mn1613_artifact_paths();
     if !hex.is_file() || !cdb.is_file() {
         eprintln!(
             "skip: missing monitor artifact: {} / {}",
@@ -70,7 +34,7 @@ where
     if !monitor_artifact_exists() {
         return Ok(());
     }
-    let mut session = create_session_from_settings(&mn1613_rs_settings(), None)?;
+    let mut session = create_session_from_settings(&super::mn1613_rs_settings(), None)?;
     session.reload()?;
     session.run_init()?;
     f(&mut session)

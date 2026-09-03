@@ -15,7 +15,7 @@ fn test_setting_json_path() -> PathBuf {
     repo_root().join("retrocpu_boot_monitor/test/test_setting.json")
 }
 
-fn load_artifact_paths(cpu_key: &str) -> (PathBuf, PathBuf) {
+fn load_monitor_paths(cpu_key: &str) -> (PathBuf, PathBuf, PathBuf) {
     let settings_path = test_setting_json_path();
     let json = std::fs::read_to_string(&settings_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", settings_path.display()));
@@ -32,15 +32,30 @@ fn load_artifact_paths(cpu_key: &str) -> (PathBuf, PathBuf) {
         .and_then(|v| v.get("cdb"))
         .and_then(|v| v.as_str())
         .unwrap_or_else(|| panic!("missing {}.cdb in {}", cpu_key, settings_path.display()));
+    let log_rel = root
+        .get(cpu_key)
+        .and_then(|v| v.get("log"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| panic!("missing {}.log in {}", cpu_key, settings_path.display()));
 
     let monitor_root = repo_root().join("retrocpu_boot_monitor");
-    (monitor_root.join(ihx_rel), monitor_root.join(cdb_rel))
+    (
+        monitor_root.join(ihx_rel),
+        monitor_root.join(cdb_rel),
+        monitor_root.join(log_rel),
+    )
+}
+
+fn load_artifact_paths(cpu_key: &str) -> (PathBuf, PathBuf) {
+    let (ihx, cdb, _) = load_monitor_paths(cpu_key);
+    (ihx, cdb)
 }
 
 fn tms9995_rs_settings() -> JsonTestSettings {
-    let (hex_path, cdb_path) = load_artifact_paths("tms9995");
+    let (hex_path, cdb_path, log_path) = load_monitor_paths("tms9995");
     let hex = hex_path.to_string_lossy().to_string();
     let cdb = cdb_path.to_string_lossy().to_string();
+    let log = log_path.to_string_lossy().to_string();
 
     JsonTestSettings {
         name: "tms9995_mon_rs".to_string(),
@@ -49,7 +64,7 @@ fn tms9995_rs_settings() -> JsonTestSettings {
         cdb_file: cdb,
         init_label: Some("g_main".to_string()),
         io_mock: None,
-        cpu_log_file: None,
+        cpu_log_file: Some(log),
         cpu_log_mode: Some(CpuLogMode::Checkpoint),
         max_cycles: None,
     }

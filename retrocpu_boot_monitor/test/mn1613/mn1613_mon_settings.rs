@@ -52,14 +52,12 @@ fn mn1613_mon_handshake_rs_settings() -> JsonTestSettings {
 #[test]
 fn mn1613_mon_settings_points_to_rs_artifacts() {
     let s = super::mn1613_rs_settings();
+    let (hex, cdb, log) = super::mn1613_monitor_paths();
     assert_eq!(s.name, "mn1613_mon_rs");
     assert_eq!(s.cpu, AsmCpuType::Mn1613);
-    assert!(s
-        .hex_file
-        .ends_with("/retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.ihx"));
-    assert!(s
-        .cdb_file
-        .ends_with("/retrocpu_boot_monitor/build/hex_rs/mn1613/mn1613_mon_rs.cdb"));
+    assert_eq!(PathBuf::from(&s.hex_file), hex);
+    assert_eq!(PathBuf::from(&s.cdb_file), cdb);
+    assert_eq!(PathBuf::from(s.cpu_log_file.expect("cpu_log_file")), log);
     assert_eq!(s.init_label.as_deref(), Some("g_main"));
 }
 

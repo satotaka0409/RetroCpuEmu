@@ -1,10 +1,12 @@
 {
   "mn1613": {
     "ihx": "build/hex_rs/mn1613/mn1613_mon_rs.ihx",
-    "cdb": "build/hex_rs/mn1613/mn1613_mon_rs.cdb"
+    "cdb": "build/hex_rs/mn1613/mn1613_mon_rs.cdb",
+    "log": "build/log/mn1613/mn1613_mon_rs.log"
   },
   "tms9995": {
     "ihx": "build/hex_rs/tms9995/tms9995_mon_rs.ihx",
-    "cdb": "build/hex_rs/tms9995/tms9995_mon_rs.cdb"
+    "cdb": "build/hex_rs/tms9995/tms9995_mon_rs.cdb",
+    "log": "build/log/tms9995/tms9995_mon_rs.log"
   }
 }
