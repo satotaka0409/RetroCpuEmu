@@ -21,16 +21,20 @@ use retrocpu_emu_rs::cpuboard::{
     MN1613_IO_PORT_HSHK_IN_CTRL as IO_PORT_HSHK_IN_CTRL,
 };
 
+pub use cpu_to_io::{
+    cpu_to_io_remaining_size, cpu_to_io_remaining_size_tms9995, dispatch_cpu_to_io,
+};
 pub use mock_state::{
     BeepParams, BreakNotifyInfo, IoBoardMockState, LedDisplayData, TimerParams,
 };
-pub use types::{CMD_MODE_SET, MODE_FREE, MODE_MONITOR, RESPONSE_OK};
+pub use types::{
+    BREAK_HISTORY_ENTRY_SIZE_TMS9995, CMD_MODE_SET, MODE_FREE, MODE_MONITOR, RESPONSE_OK,
+};
 
 use crate::error::FrameworkError;
 use crate::framework::mn1613::types::PortMockState;
 use crate::json_value::CodeTestIoMockEntry;
 
-use cpu_to_io::{cpu_to_io_remaining_size, dispatch_cpu_to_io};
 use io_control_sync::IoControlSync;
 use types::BREAK_HISTORY_ENTRY_SIZE_MN1613;
 

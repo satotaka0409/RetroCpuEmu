@@ -518,7 +518,7 @@ export function encodeTms9995Instruction(
     return [FMT6[op]! | field6, ...extras];
   }
 
-  // Format 1: src, dst
+  // Format 1: src, dst（TI / sdas。`MOV R2, R3` は R3←R2。スタック/メモリも同順）
   if (op in FMT1) {
     if (args.length !== 2)
       throw new Error(`Line ${lineNo}: ${op} requires src, dst`);

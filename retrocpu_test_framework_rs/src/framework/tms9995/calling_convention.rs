@@ -139,7 +139,12 @@ pub fn plan_tms9995_call(options: &Tms9995CallPlanOptions) -> Result<Tms9995Call
     }
 
     registers[10] = sp;
-    registers[11] = options.return_addr.unwrap_or(0);
+    let return_addr = options.return_addr.unwrap_or(0);
+    registers[11] = return_addr;
+    // TMS9995 handshake BIOS は R8 を戻りアドレスに使う（R8 が引数に使われないとき）。
+    if reg_arg_count <= 6 {
+        registers[8] = return_addr;
+    }
 
     arg_locations.sort_by_key(|loc| match loc {
         Tms9995ArgLocation::Register { arg_index, .. } => *arg_index,

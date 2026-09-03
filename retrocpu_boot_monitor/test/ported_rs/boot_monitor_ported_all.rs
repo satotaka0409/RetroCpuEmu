@@ -7,10 +7,6 @@ fn repo_root() -> PathBuf {
     mn1613_test_settings::repo_root()
 }
 
-fn load_artifact_paths(cpu_key: &str) -> (PathBuf, PathBuf) {
-    mn1613_test_settings::load_artifact_paths(cpu_key)
-}
-
 fn mn1613_artifact_paths() -> (PathBuf, PathBuf) {
     mn1613_test_settings::mn1613_artifact_paths()
 }
@@ -27,6 +23,10 @@ fn assert_source_exists(source_rel: &str) {
 
 fn mn1613_rs_settings() -> JsonTestSettings {
     mn1613_test_settings::mn1613_rs_settings()
+}
+
+fn mn1613_monitor_paths() -> (PathBuf, PathBuf, PathBuf) {
+    mn1613_test_settings::mn1613_monitor_paths()
 }
 
 fn tms9995_rs_settings() -> JsonTestSettings {
@@ -164,6 +164,8 @@ mod tms9995_breakpoint_gl_test;
 mod tms9995_breakpoint_hist_test;
 #[path = "../tms9995/breakpoint/breakpoint_steprun_test.rs"]
 mod tms9995_breakpoint_steprun_test;
+#[path = "../tms9995/handshake/support.rs"]
+mod tms9995_handshake_support;
 #[path = "../tms9995/handshake/handshake_address_break_test.rs"]
 mod tms9995_handshake_address_break_test;
 #[path = "../tms9995/handshake/handshake_beep_test.rs"]

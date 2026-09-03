@@ -20,8 +20,8 @@
 	.area	_CODE		(REL,CON)
 g_bios_beep_:
 	MOV	R11, R8
-	MOV	R2, R4
-	MOV	R3, R5
+	MOV	R4, R2
+	MOV	R5, R3
 
 	BL	g_hshk_initiate_send
 	CI	R2, #HSHK_OK

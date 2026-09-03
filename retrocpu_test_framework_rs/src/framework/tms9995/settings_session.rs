@@ -2,12 +2,21 @@ use std::path::Path;
 
 use crate::error::FrameworkError;
 use crate::json_suite::resolve_suite_path;
-use crate::json_value::JsonTestSettings;
+use crate::json_value::{CodeTestIoMockEntry, JsonTestSettings};
 use crate::types::AsmCpuType;
 
 use super::session::{
     create_tms9995_artifact_session, Tms9995ArtifactSession, Tms9995SessionOptions,
 };
+
+fn cru_handshake_from_settings(settings: &JsonTestSettings) -> bool {
+    match &settings.io_mock {
+        Some(entries) => entries
+            .iter()
+            .any(|e| matches!(e, CodeTestIoMockEntry::Handshake)),
+        None => true,
+    }
+}
 
 pub fn create_tms9995_session_from_settings(
     settings: &JsonTestSettings,
@@ -31,6 +40,12 @@ pub fn create_tms9995_session_from_settings(
         hex_file,
         cdb_file,
         memory_bytes: None,
+        init_label: settings.init_label.clone(),
+        max_cycles: settings.max_cycles,
+        stack_init: None,
+        workspace: None,
+        return_stub: None,
+        cru_handshake: cru_handshake_from_settings(settings),
     })
 }
 
@@ -52,8 +67,49 @@ mod tests {
             max_cycles: None,
         };
 
-        let err = create_tms9995_session_from_settings(&settings, None)
-            .expect_err("mn cpu must be rejected");
-        assert!(format!("{err}").contains("requires cpu Tms9995"));
+        match create_tms9995_session_from_settings(&settings, None) {
+            Err(err) => assert!(format!("{err}").contains("requires cpu Tms9995")),
+            Ok(_) => panic!("mn cpu must be rejected"),
+        }
+    }
+
+    #[test]
+    fn cru_handshake_follows_io_mock() {
+        assert!(cru_handshake_from_settings(&JsonTestSettings {
+            name: "t".to_string(),
+            cpu: AsmCpuType::Tms9995,
+            hex_file: "a.ihx".to_string(),
+            cdb_file: "a.cdb".to_string(),
+            init_label: None,
+            io_mock: None,
+            cpu_log_file: None,
+            cpu_log_mode: None,
+            max_cycles: None,
+        }));
+        assert!(!cru_handshake_from_settings(&JsonTestSettings {
+            name: "t".to_string(),
+            cpu: AsmCpuType::Tms9995,
+            hex_file: "a.ihx".to_string(),
+            cdb_file: "a.cdb".to_string(),
+            init_label: None,
+            io_mock: Some(vec![CodeTestIoMockEntry::PortRead {
+                port: 0x20,
+                value: 0,
+            }]),
+            cpu_log_file: None,
+            cpu_log_mode: None,
+            max_cycles: None,
+        }));
+        assert!(cru_handshake_from_settings(&JsonTestSettings {
+            name: "t".to_string(),
+            cpu: AsmCpuType::Tms9995,
+            hex_file: "a.ihx".to_string(),
+            cdb_file: "a.cdb".to_string(),
+            init_label: None,
+            io_mock: Some(vec![CodeTestIoMockEntry::Handshake]),
+            cpu_log_file: None,
+            cpu_log_mode: None,
+            max_cycles: None,
+        }));
     }
 }

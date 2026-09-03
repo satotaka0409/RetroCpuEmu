@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use retrocpu_test_framework_rs::{
     create_session_from_settings, CallOptions, CallRegisters, CodeTestIoMockEntry, FrameworkError,

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use retrocpu_test_framework_rs::{
     create_session_from_settings, CallOptions, CallRegisters, CodeTestIoMockEntry, FrameworkError,
@@ -35,21 +34,6 @@ where
     let ret = f(&mut s, Arc::clone(&mock));
     s.detach_io_mock();
     ret
-}
-
-fn wait_req1(mock: &IoBoardHandshakeMock, timeout: Duration) -> Result<(), FrameworkError> {
-    let start = Instant::now();
-    loop {
-        if mock.wires.lock().expect("wires lock").hshk_in_req == 1 {
-            return Ok(());
-        }
-        if start.elapsed() > timeout {
-            return Err(FrameworkError::invalid_argument(
-                "timeout waiting hshk_in_req",
-            ));
-        }
-        std::thread::yield_now();
-    }
 }
 
 fn break_set_frame(slot: u8, flags: u8, count: u8, addr: u32, data: u16) -> Vec<u8> {

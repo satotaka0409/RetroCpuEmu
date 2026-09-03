@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use retrocpu_test_framework_rs::{
     create_session_from_settings, CallOptions, CallRegisters, CodeTestIoMockEntry, FrameworkError,
@@ -94,61 +93,6 @@ fn call_handler(
         )?;
         Ok(())
     })
-}
-
-fn wait_wire<P>(
-    mock: &IoBoardHandshakeMock,
-    timeout: Duration,
-    pred: P,
-) -> Result<(), FrameworkError>
-where
-    P: Fn(u8) -> bool,
-{
-    let start = Instant::now();
-    loop {
-        let dack = mock.wires.lock().expect("wires lock").hshk_in_dack;
-        if pred(dack) {
-            return Ok(());
-        }
-        if start.elapsed() > timeout {
-            return Err(FrameworkError::invalid_argument("handshake feeder timeout"));
-        }
-        std::thread::yield_now();
-    }
-}
-
-fn feed_io_to_cpu_frame(mock: &IoBoardHandshakeMock, data: &[u8]) -> Result<(), FrameworkError> {
-    let timeout = Duration::from_millis(2000);
-    {
-        let mut w = mock.wires.lock().expect("wires lock");
-        w.hshk_in_req = 1;
-        w.hshk_in_dena = 0;
-        w.hshk_in_data = 0;
-    }
-
-    let mut i = 0usize;
-    while i < data.len() {
-        let b0 = data[i];
-        let b1 = if i + 1 < data.len() { data[i + 1] } else { 0 };
-
-        {
-            let mut w = mock.wires.lock().expect("wires lock");
-            w.hshk_in_data = b0;
-            w.hshk_in_dena = 1;
-        }
-        wait_wire(mock, timeout, |dack| dack != 0)?;
-
-        {
-            let mut w = mock.wires.lock().expect("wires lock");
-            w.hshk_in_data = b1;
-            w.hshk_in_dena = 0;
-        }
-        wait_wire(mock, timeout, |dack| dack == 0)?;
-        i += 2;
-    }
-
-    mock.wires.lock().expect("wires lock").hshk_in_req = 0;
-    Ok(())
 }
 
 #[test]

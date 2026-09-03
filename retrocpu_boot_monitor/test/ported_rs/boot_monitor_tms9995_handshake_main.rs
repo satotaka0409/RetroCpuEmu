@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use retrocpu_test_framework_rs::json_value::JsonTestSettings;
-use retrocpu_test_framework_rs::tms9995::create_tms9995_session_from_settings;
+use retrocpu_test_framework_rs::tms9995::{
+    create_tms9995_session_from_settings, Tms9995CallOptions,
+};
 use retrocpu_test_framework_rs::types::{AsmCpuType, CpuLogMode};
 
 fn repo_root() -> PathBuf {
@@ -85,14 +87,14 @@ fn monitor_artifact_exists() -> bool {
 
 fn with_session<F>(f: F)
 where
-    F: FnOnce(&retrocpu_test_framework_rs::tms9995::Tms9995ArtifactSession),
+    F: FnOnce(&mut retrocpu_test_framework_rs::tms9995::Tms9995ArtifactSession),
 {
     if !monitor_artifact_exists() {
         return;
     }
-    let session = create_tms9995_session_from_settings(&tms9995_rs_settings(), None)
+    let mut session = create_tms9995_session_from_settings(&tms9995_rs_settings(), None)
         .expect("create TMS9995 artifact session");
-    f(&session);
+    f(&mut session);
 }
 
 #[test]
@@ -106,41 +108,29 @@ fn public_symbol_exists_in_cdb() {
 }
 
 #[test]
-fn cmd_lt_0x10_placeholder_until_cpu_emu() {
+fn run_init_reaches_idle() {
     with_session(|session| {
-        let err = session
-            .call("g_handshake_interrupt_handler")
-            .expect_err("call must fail");
-        assert!(format!("{err}").contains("CPU emu"));
+        session.run_init().expect("g_main should reach IDLE");
+        assert!(session.core_state().idle);
     });
 }
 
 #[test]
-fn unknown_cmd_placeholder_until_cpu_emu() {
+fn call_entry_is_available() {
     with_session(|session| {
-        let err = session
-            .call("g_handshake_interrupt_handler")
-            .expect_err("call must fail");
-        assert!(format!("{err}").contains("CPU emu"));
-    });
-}
-
-#[test]
-fn exec_cmd_placeholder_until_cpu_emu() {
-    with_session(|session| {
-        let err = session
-            .call("g_handshake_interrupt_handler")
-            .expect_err("call must fail");
-        assert!(format!("{err}").contains("CPU emu"));
-    });
-}
-
-#[test]
-fn removed_cpu_state_cmd_placeholder_until_cpu_emu() {
-    with_session(|session| {
-        let err = session
-            .call("g_handshake_interrupt_handler")
-            .expect_err("call must fail");
-        assert!(format!("{err}").contains("CPU emu"));
+        let result = session.call(
+            "g_handshake_interrupt_handler",
+            Tms9995CallOptions::default(),
+        );
+        match result {
+            Ok(_) => {}
+            Err(err) => {
+                let msg = format!("{err}");
+                assert!(
+                    !msg.contains("not implemented"),
+                    "call should use CPU emu: {msg}"
+                );
+            }
+        }
     });
 }

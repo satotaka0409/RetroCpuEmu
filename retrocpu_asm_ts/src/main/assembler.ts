@@ -707,7 +707,7 @@ function pass2(
     for (let i = 0; i < ws.length; i++) {
       emitWord(words, pc + i * addrStep, ws[i], line, areas.current);
     }
-    if (!byteMode && ws.length >= 2) {
+    if (ws.length >= 2) {
       for (const arg of line.args) {
         const absRel = matchAbsAddrReloc(arg, symbolInfos);
         if (!absRel) continue;
@@ -715,10 +715,12 @@ function pass2(
         if (absRel.left.kind === "symbol") {
           last.value = 0;
         } else if (absRel.left.kind === "word") {
-          last.value = (last.value * 2) & 0xffff;
+          if (!byteMode) {
+            last.value = (last.value * 2) & 0xffff;
+          }
         }
         relocs.push({
-          byteAddr: (pc + addrStep) * 2,
+          byteAddr: byteMode ? last.address : last.address * 2,
           left: absRel.left,
           right: absRel.right,
           area: canonicalAreaName(areas.current),

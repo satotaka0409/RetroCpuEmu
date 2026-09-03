@@ -171,6 +171,47 @@ describe("TMS9995 REL バイトアドレス", () => {
     assert.match(rel, /T 01 00 02 00 00 01/);
     assert.match(rel, /A _CODE size 0104/);
   });
+
+  test("クロスエリア B / MOV は R レコード付きプレースホルダ", () => {
+    const r = assemble(
+      `
+        .area _BIOS
+        .org 0x0110
+        g_main: B target
+        .area _CODE
+        .org 0
+        target: IDLE
+        .area _WORK
+        .org 0
+        .globl GL_SEED
+        GL_SEED: .blkw 1
+        .area _CODE
+        .org 0x100
+        use: MOV R2, GL_SEED
+      `,
+      "tms9995",
+    );
+    assert.equal(r.relocs.length, 2);
+    assert.deepEqual(r.relocs[0], {
+      byteAddr: 0x112,
+      left: { kind: "word", value: 0, area: "_CODE" },
+      right: { kind: "const", value: 0 },
+      area: "_BIOS",
+    });
+    assert.deepEqual(r.relocs[1], {
+      byteAddr: 0x102,
+      left: { kind: "symbol", name: "GL_SEED" },
+      right: { kind: "const", value: 0 },
+      area: "_CODE",
+    });
+    assert.equal(r.words.find((w) => w.address === 0x112)?.value, 0);
+    assert.equal(r.words.find((w) => w.address === 0x102)?.value, 0);
+    const rel = writeRel(r, "TMS9995");
+    assert.match(rel, /T 01 10 04 60 00 00/);
+    assert.match(rel, /R 00 00 00 00 00 04 00 01/);
+    assert.match(rel, /T 01 00 C8 02 00 00/);
+    assert.match(rel, /R 00 00 00 01 02 04 00 01/);
+  });
 });
 
 /**

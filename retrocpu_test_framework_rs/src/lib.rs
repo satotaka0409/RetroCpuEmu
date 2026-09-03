@@ -36,8 +36,9 @@ pub use framework::mn1613::{
     Mn1613DisassemblerOptions, Mn1613LabelPair, Mn1613LabelTable,
 };
 pub use framework::tms9995::{
-    decode_tms9995, format_decoded as format_decoded_tms9995, Tms9995Disassembler,
-    Tms9995DisassemblerOptions, Tms9995LabelPair, Tms9995LabelTable,
+    decode_tms9995, format_decoded as format_decoded_tms9995, Tms9995CruIoBoardMock,
+    Tms9995CruIoControlSync, Tms9995Disassembler, Tms9995DisassemblerOptions,
+    Tms9995LabelPair, Tms9995LabelTable,
 };
 pub use handshake_mock::{
     is_io_to_cpu_request_asserted, is_io_to_cpu_request_asserted_ports,

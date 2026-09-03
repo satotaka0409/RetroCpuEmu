@@ -254,6 +254,13 @@ impl Tms9995CruHandshakeMock {
         self.cpu_read_signal(IRQ_INT2_CAUSE)
     }
 
+    /// ビット線とデータバイトを初期化する。
+    pub fn reset(&mut self) {
+        self.bits.clear();
+        self.out_data_byte = 0;
+        self.in_data_byte = 0;
+    }
+
     /// 現在状態のスナップショット。
     pub fn snapshot(&self) -> Tms9995CruHandshakeSnapshot {
         let mut bits = HashMap::new();

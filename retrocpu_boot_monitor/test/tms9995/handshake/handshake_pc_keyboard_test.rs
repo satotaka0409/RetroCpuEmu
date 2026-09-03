@@ -1,29 +1,69 @@
-// Ported from test/tms9995/handshake/handshake_pc_keyboard_test.ts.
-// Native Rust tests: CDB/artifact symbol validation only (no TS runtime).
+use retrocpu_test_framework_rs::FrameworkError;
 
-const SYMBOLS: &[&str] = &[];
+use super::tms9995_handshake_support::{
+    call_cpu_to_io, call_regs, expect_ok_r2, with_handshake_case,
+};
+
+const SAMPLE_ASCII: u8 = 0x41;
+const SAMPLE_KEYCODE: u8 = 0x1e;
 
 #[test]
-fn ported_case_01_cdb() {
-    super::assert_tms9995_symbols_have_code("test/tms9995/handshake/handshake_pc_keyboard_test.ts", SYMBOLS);
+fn ported_case_01_cdb() -> Result<(), FrameworkError> {
+    with_handshake_case(&super::tms9995_rs_settings(), |case| {
+        let _ = case.session.require_byte_addr("g_bios_pc_key_get_")?;
+        Ok(())
+    })
 }
 
 #[test]
-fn ported_case_02_ascii_0_ok() {
-    super::assert_tms9995_symbols_have_code("test/tms9995/handshake/handshake_pc_keyboard_test.ts", SYMBOLS);
+fn ported_case_02_no_input_returns_zero() -> Result<(), FrameworkError> {
+    with_handshake_case(&super::tms9995_rs_settings(), |case| {
+        let opts = call_regs(&case.session, &[None; 16]);
+        call_cpu_to_io(case, "g_bios_pc_key_get_", opts)?;
+        case.session.expect_registers(&[
+            None, None, Some(0), Some(0), Some(0), None, Some(0x6666), Some(0x7777), None,
+            Some(0x9999), None, None, None, None, None, None,
+        ])
+    })
 }
 
 #[test]
-fn ported_case_03_ascii_r1_r2() {
-    super::assert_tms9995_symbols_have_code("test/tms9995/handshake/handshake_pc_keyboard_test.ts", SYMBOLS);
+fn ported_case_03_injected_key_in_r3_r4() -> Result<(), FrameworkError> {
+    with_handshake_case(&super::tms9995_rs_settings(), |case| {
+        case.io.state.lock().expect("state lock").pc_key =
+            (SAMPLE_ASCII, SAMPLE_KEYCODE);
+        let opts = call_regs(&case.session, &[None; 16]);
+        call_cpu_to_io(case, "g_bios_pc_key_get_", opts)?;
+        case.session.expect_registers(&[
+            None,
+            None,
+            Some(0),
+            Some(SAMPLE_ASCII as u16),
+            Some(SAMPLE_KEYCODE as u16),
+            None,
+            Some(0x6666),
+            Some(0x7777),
+            None,
+            Some(0x9999),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ])
+    })
 }
 
 #[test]
-fn ported_case_04_case_04() {
-    super::assert_tms9995_symbols_have_code("test/tms9995/handshake/handshake_pc_keyboard_test.ts", SYMBOLS);
-}
-
-#[test]
-fn ported_case_05_r3_r4() {
-    super::assert_tms9995_symbols_have_code("test/tms9995/handshake/handshake_pc_keyboard_test.ts", SYMBOLS);
+fn ported_case_04_pc_key_preserves_r6_r7_r9() -> Result<(), FrameworkError> {
+    with_handshake_case(&super::tms9995_rs_settings(), |case| {
+        case.io.state.lock().expect("state lock").pc_key = (SAMPLE_ASCII, SAMPLE_KEYCODE);
+        let opts = call_regs(&case.session, &[None; 16]);
+        call_cpu_to_io(case, "g_bios_pc_key_get_", opts)?;
+        case.session.expect_registers(&[
+            None, None, Some(0), None, None, None, Some(0x6666), Some(0x7777), None,
+            Some(0x9999), None, None, None, None, None, None,
+        ])
+    })
 }

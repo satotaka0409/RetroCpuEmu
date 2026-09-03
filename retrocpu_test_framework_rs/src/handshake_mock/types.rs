@@ -38,8 +38,12 @@ pub const MODE_FREE: u8 = 1;
 pub const BREAK_NOTIFY_HEADER_SIZE: usize = 11;
 /// 履歴 1 エントリ長（MN1613）
 pub const BREAK_HISTORY_ENTRY_SIZE_MN1613: usize = 66;
+/// 履歴 1 エントリ長（TMS9995）
+pub const BREAK_HISTORY_ENTRY_SIZE_TMS9995: usize = 78;
 /// ステップ/未定義通知フレーム長（MN1613）
 pub const CPU_STATE_NOTIFY_FRAME_SIZE_MN1613: usize = 60;
+/// ステップ/未定義通知フレーム長（TMS9995）
+pub const CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995: usize = 70;
 /// 履歴件数上限
 pub const BREAK_HISTORY_MAX_COUNT: u8 = 4;
 /// 比較器スロット数

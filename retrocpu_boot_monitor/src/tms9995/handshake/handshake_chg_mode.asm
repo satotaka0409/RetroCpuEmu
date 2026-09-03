@@ -19,7 +19,7 @@
 	.area	_CODE		(REL,CON)
 g_bios_mode_set_:
 	MOV	R11, R8
-	MOV	R2, R4
+	MOV	R4, R2
 	ANDI	R4, #0x00ff
 
 	BL	g_hshk_initiate_send

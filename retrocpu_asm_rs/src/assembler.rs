@@ -13,7 +13,8 @@ use crate::mn1613::mn1613_encoder::{
 };
 use crate::parser::parse_source;
 use crate::reloc::{
-    apply_mn1613_abs_reloc_to_last_word, apply_mn1613_page0_reloc_to_last_word, build_symbol_infos,
+    apply_mn1613_abs_reloc_to_last_word, apply_mn1613_page0_reloc_to_last_word,
+    apply_tms9995_abs_reloc_to_last_word, build_symbol_infos,
     collect_globl_names, eval_word_arg,
 };
 use crate::tms9995::tms9995_encoder::{
@@ -497,6 +498,8 @@ pub fn assemble(
                         line.text.trim()
                     ))
                 })?;
+            let encoded_len = encoded.len();
+            let word_start = words.len();
             for w in encoded {
                 if !area_noload(&area_ctx) {
                     words.push(EmittedWord {
@@ -509,6 +512,15 @@ pub fn assemble(
                 }
                 let cur = area_pc(&area_ctx);
                 set_area_pc(&mut area_ctx, cur.wrapping_add(2));
+            }
+            if encoded_len >= 2 {
+                apply_tms9995_abs_reloc_to_last_word(
+                    line,
+                    &symbol_infos,
+                    &mut words[word_start..],
+                    &mut relocs,
+                    &area_ctx.current,
+                );
             }
         }
     }

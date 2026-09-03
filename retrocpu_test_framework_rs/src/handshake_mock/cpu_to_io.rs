@@ -24,6 +24,19 @@ pub fn cpu_to_io_remaining_size(frame: &[u8], entry_size: usize) -> usize {
     total.saturating_sub(frame.len())
 }
 
+/// TMS9995 向け残余バイト数（UNDEF/STEP は 70B）。
+pub fn cpu_to_io_remaining_size_tms9995(frame: &[u8], entry_size: usize) -> usize {
+    if frame.is_empty() {
+        return 0;
+    }
+    let cmd = frame[0];
+    if cmd == CMD_UNDEF_NOTIFY || cmd == CMD_STEP_NOTIFY {
+        let total = CPU_STATE_NOTIFY_FRAME_SIZE_TMS9995;
+        return total.saturating_sub(frame.len());
+    }
+    cpu_to_io_remaining_size(frame, entry_size)
+}
+
 /// CPU→IO フレームを処理し、IO→CPU 応答バイト列を返す。
 pub fn dispatch_cpu_to_io(state: &mut IoBoardMockState, frame: &[u8]) -> Vec<u8> {
     if frame.is_empty() {

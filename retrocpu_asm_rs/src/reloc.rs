@@ -276,6 +276,35 @@ fn is_ident_char(ch: char) -> bool {
 	ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '$')
 }
 
+/// TMS9995 命令の追加ワード（末尾）に絶対アドレスリロケーションを適用する。
+pub fn apply_tms9995_abs_reloc_to_last_word(
+	line: &ParsedLine,
+	symbol_infos: &SymbolInfoTable,
+	words: &mut [crate::types::EmittedWord],
+	relocs: &mut Vec<WordDiffReloc>,
+	current_area: &str,
+) {
+	for arg in &line.args {
+		let Some((left, right)) = match_abs_addr_reloc(arg, symbol_infos) else {
+			continue;
+		};
+		let Some(last) = words.last_mut() else {
+			return;
+		};
+		if matches!(left, RelocOperand::Symbol { .. }) {
+			last.value = 0;
+		}
+		relocs.push(WordDiffReloc {
+			byte_addr: last.address,
+			left,
+			right,
+			area: Some(current_area.to_string()),
+			width: None,
+		});
+		return;
+	}
+}
+
 /// MN1613 2 語命令の第 2 語に絶対アドレスリロケーションを適用する。
 pub fn apply_mn1613_abs_reloc_to_last_word(
 	line: &ParsedLine,
